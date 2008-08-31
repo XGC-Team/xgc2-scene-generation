@@ -125,7 +125,7 @@ build_ros_package_deb \
 build_ros_package_deb \
   "${env_pkg}" \
   "cluttered_environment" \
-  "libxgc2-math-dev (>= 0.5.6-6~focal), ${msgs_pkg} (>= 1.1.4-9), ros-noetic-roscpp, ros-noetic-rospy, ros-noetic-geometry-msgs, ros-noetic-std-msgs, ros-noetic-visualization-msgs, ros-noetic-tf2, ros-noetic-tf2-geometry-msgs, ros-noetic-tf2-ros, python3-yaml" \
+  "libxgc2-math-dev (>= 0.5.6-6~focal), ${msgs_pkg} (>= 1.1.4-10), ros-noetic-roscpp, ros-noetic-rospy, ros-noetic-geometry-msgs, ros-noetic-std-msgs, ros-noetic-visualization-msgs, ros-noetic-tf2, ros-noetic-tf2-geometry-msgs, ros-noetic-tf2-ros, python3-yaml" \
   "XGC2 cluttered simulation environment manager"
 
 build_ros_package_deb \
@@ -140,7 +140,7 @@ mkdir -p "${meta_root}"
 write_control \
   "${meta_root}" \
   "${meta_pkg}" \
-  "${msgs_pkg} (>= 1.1.4-9), ${env_pkg} (>= 1.1.4-9), ${mockamap_pkg} (>= 1.1.4-9)" \
+  "${msgs_pkg} (>= 1.1.4-10), ${env_pkg} (>= 1.1.4-10), ${mockamap_pkg} (>= 1.1.4-10)" \
   "XGC2 scene generation package set"
 fakeroot dpkg-deb --build "${meta_root}" "${OUTPUT_DIR}/${meta_pkg}_${VERSION}_${ARCH}.deb" >/dev/null
 
