@@ -1,0 +1,48 @@
+<?xml version="1.0"?>
+<launch>
+    <!-- Arguments -->
+    <arg name="config_file" default="$(find cluttered_environment)/config/scenario_default.yaml"
+         doc="Path to scenario configuration YAML file"/>
+
+    <arg name="h_polytope_library" default="$(find cluttered_environment)/config/h_polytope_library.yaml"
+         doc="Path to H-polytope template library YAML file"/>
+
+    <arg name="v_polytope_library" default="$(find cluttered_environment)/config/v_polytope_library.yaml"
+         doc="Path to V-polytope template library YAML file"/>
+
+    <arg name="obstacle_groups_file" default=""
+         doc="Optional YAML file containing reusable obstacle_groups"/>
+
+    <arg name="rviz" default="false"
+         doc="Launch RViz for visualization"/>
+
+    <!-- Cluttered Environment Node -->
+    <node pkg="cluttered_environment"
+          type="cluttered_environment_node"
+          name="cluttered_environment_node"
+          output="screen">
+
+        <!-- Load scenario configuration into parameter server -->
+        <rosparam command="load" file="$(arg config_file)"/>
+
+        <!-- Load reusable obstacle groups into parameter server -->
+        <rosparam if="$(eval arg('obstacle_groups_file') != '')"
+                  command="load"
+                  file="$(arg obstacle_groups_file)"/>
+
+        <!-- Load H-polytope library into parameter server -->
+        <rosparam command="load" file="$(arg h_polytope_library)"/>
+
+        <!-- Load V-polytope library into parameter server -->
+        <rosparam command="load" file="$(arg v_polytope_library)" ns="v_templates"/>
+
+    </node>
+
+    <!-- RViz (optional) -->
+    <node if="$(arg rviz)"
+          pkg="rviz"
+          type="rviz"
+          name="rviz"
+          args="-d $(find cluttered_environment)/config/scenario.rviz"
+          required="false"/>
+</launch>

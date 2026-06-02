@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>convex_geometry</name>
+  <version>0.1.0</version>
+  <description>Common convex geometry data structures, support functions, and collision queries.</description>
+
+  <maintainer email="lxk@todo.todo">lxk</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <depend>geometry_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>eigen</depend>
+
+  <build_depend>message_generation</build_depend>
+  <exec_depend>message_runtime</exec_depend>
+
+  <export>
+  </export>
+</package>

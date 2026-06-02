@@ -1,0 +1,58 @@
+# H-Polytope Library
+# Reusable H-representation templates for convex polytopes
+
+templates:
+
+  # ========================================
+  # Cube Series
+  # ========================================
+
+  cube_1m:
+    description: "1m cube"
+    epsilon: 1.0e-6
+    vertices_count: 8
+    h_matrix:
+      - [ 1.0,  0.0,  0.0, -0.5]   # x <= 0.5
+      - [-1.0,  0.0,  0.0, -0.5]   # x >= -0.5
+      - [ 0.0,  1.0,  0.0, -0.5]   # y <= 0.5
+      - [ 0.0, -1.0,  0.0, -0.5]   # y >= -0.5
+      - [ 0.0,  0.0,  1.0, -0.5]   # z <= 0.5
+      - [ 0.0,  0.0, -1.0, -0.5]   # z >= -0.5
+
+  cube_2m:
+    description: "2m cube"
+    epsilon: 1.0e-6
+    vertices_count: 8
+    h_matrix:
+      - [ 1.0,  0.0,  0.0, -1.0]
+      - [-1.0,  0.0,  0.0, -1.0]
+      - [ 0.0,  1.0,  0.0, -1.0]
+      - [ 0.0, -1.0,  0.0, -1.0]
+      - [ 0.0,  0.0,  1.0, -1.0]
+      - [ 0.0,  0.0, -1.0, -1.0]
+
+  # ========================================
+  # Pyramid Series
+  # ========================================
+
+  pyramid_2m:
+    description: "Pyramid: 2x2m base at z=0, apex at z=2m"
+    epsilon: 1.0e-6
+    vertices_count: 5
+    h_matrix:
+      - [ 0.0,  0.0, -1.0,  0.0]   # z >= 0 (bottom base)
+      - [ 1.0,  0.0,  0.5, -1.0]   # x + 0.5*z <= 1 (right face)
+      - [-1.0,  0.0,  0.5, -1.0]   # -x + 0.5*z <= 1 (left face)
+      - [ 0.0,  1.0,  0.5, -1.0]   # y + 0.5*z <= 1 (front face)
+      - [ 0.0, -1.0,  0.5, -1.0]   # -y + 0.5*z <= 1 (back face)
+
+  pyramid_3m:
+    description: "Pyramid: 3x3m base at z=0, apex at z=3m"
+    epsilon: 1.0e-6
+    vertices_count: 5
+    h_matrix:
+      - [ 0.0,  0.0, -1.0,  0.0]       # z >= 0 (bottom base)
+      - [ 1.0,  0.0,  0.5, -1.5]       # x + 0.5*z <= 1.5 (right face)
+      - [-1.0,  0.0,  0.5, -1.5]       # -x + 0.5*z <= 1.5 (left face)
+      - [ 0.0,  1.0,  0.5, -1.5]       # y + 0.5*z <= 1.5 (front face)
+      - [ 0.0, -1.0,  0.5, -1.5]       # -y + 0.5*z <= 1.5 (back face)

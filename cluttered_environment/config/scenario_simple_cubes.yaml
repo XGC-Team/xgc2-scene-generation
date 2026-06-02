@@ -1,0 +1,44 @@
+# Simple Scenario with Two Static Cube Obstacles
+# For formation testing with minimal obstacles
+# Total obstacles: 2 (2 static cubes)
+
+global:
+  world_frame_id: "map"
+  publish_rate: 20.0
+  tf_publish_rate: 50.0
+  resolution: 50
+
+obstacles:
+  # ========== Obstacle 0: Static Cube 1 ==========
+  - id: 0
+    name: "static_cube_1"
+    type: "cube"
+    motion_type: "static"
+    frame:
+      id: "obstacle_0"
+    geometry:
+      scale: [0.6, 0.6, 1.2]  # 1m x 1m x 1m cube
+    pose:
+      position: [0.0, 0.0, 0.6]  # 位于编队路径左侧
+      orientation: [0.0, 0.0, 0.0, 1.0]
+    visualization:
+      color: [1.0, 0.3, 0.3, 0.8]  # Red
+    velocity_obstacle:
+      enabled: false
+
+  # ========== Obstacle 1: Static Cube 2 ==========
+  - id: 1
+    name: "static_cube_2"
+    type: "cube"
+    motion_type: "static"
+    frame:
+      id: "obstacle_1"
+    geometry:
+      scale: [0.6, 0.6, 1.8]  # 1m x 1m x 1m cube
+    pose:
+      position: [2.8, 1.9, 0.9]  # 位于编队路径右侧
+      orientation: [0.0, 0.0, 0.0, 1.0]
+    visualization:
+      color: [0.3, 1.0, 0.3, 0.8]  # Green
+    velocity_obstacle:
+      enabled: false

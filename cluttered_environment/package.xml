@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>cluttered_environment</name>
+  <version>0.1.0</version>
+  <description>
+    Cluttered environment generator for simulation with static and dynamic convex obstacles.
+    Supports sphere, cylinder, cube, and H-polytope representations with velocity obstacles.
+  </description>
+
+  <maintainer email="user@todo.todo">User</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <!-- ROS dependencies -->
+  <depend>convex_geometry</depend>
+  <depend>roscpp</depend>
+  <depend>rospy</depend>
+  <depend>std_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>visualization_msgs</depend>
+  <depend>tf2</depend>
+  <depend>tf2_ros</depend>
+
+  <!-- Third-party dependencies -->
+  <depend>eigen</depend>
+
+  <export>
+  </export>
+</package>

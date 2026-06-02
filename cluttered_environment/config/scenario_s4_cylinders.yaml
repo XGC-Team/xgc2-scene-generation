@@ -1,0 +1,154 @@
+# Scenario 4: staggered ground cylinders for studying omega_1.
+# Obstacles stay inside the same workspace bounds as formation_generator s4/s2:
+# x in [-5, 20], y in [-7, 7], z up to 4.
+
+global:
+  world_frame_id: "map"
+  publish_rate: 20.0
+  tf_publish_rate: 50.0
+  resolution: 72
+
+obstacles:
+  - id: 0
+    name: "s4_cylinder_0"
+    type: "cylinder"
+    motion_type: "static"
+    frame:
+      id: "obstacle_0"
+    geometry:
+      scale: [0.55, 0.55, 1.20]
+    pose:
+      position: [3.20, 0.00, 0.60]
+      orientation: [0.0, 0.0, 0.0, 1.0]
+    visualization:
+      color: [0.89, 0.33, 0.28, 0.90]
+    velocity_obstacle:
+      enabled: false
+
+  - id: 1
+    name: "s4_cylinder_1"
+    type: "cylinder"
+    motion_type: "static"
+    frame:
+      id: "obstacle_1"
+    geometry:
+      scale: [0.78, 0.78, 2.40]
+    pose:
+      position: [5.20, 2.80, 1.20]
+      orientation: [0.0, 0.0, 0.0, 1.0]
+    visualization:
+      color: [0.96, 0.71, 0.24, 0.90]
+    velocity_obstacle:
+      enabled: false
+
+  - id: 2
+    name: "s4_cylinder_2"
+    type: "cylinder"
+    motion_type: "static"
+    frame:
+      id: "obstacle_2"
+    geometry:
+      scale: [0.62, 0.62, 1.60]
+    pose:
+      position: [6.10, -2.70, 0.80]
+      orientation: [0.0, 0.0, 0.0, 1.0]
+    visualization:
+      color: [0.31, 0.69, 0.88, 0.90]
+    velocity_obstacle:
+      enabled: false
+
+  - id: 3
+    name: "s4_cylinder_3"
+    type: "cylinder"
+    motion_type: "static"
+    frame:
+      id: "obstacle_3"
+    geometry:
+      scale: [0.95, 0.95, 3.00]
+    pose:
+      position: [8.50, 0.90, 1.50]
+      orientation: [0.0, 0.0, 0.0, 1.0]
+    visualization:
+      color: [0.54, 0.37, 0.80, 0.90]
+    velocity_obstacle:
+      enabled: false
+
+  - id: 4
+    name: "s4_cylinder_4"
+    type: "cylinder"
+    motion_type: "static"
+    frame:
+      id: "obstacle_4"
+    geometry:
+      scale: [0.48, 0.48, 1.10]
+    pose:
+      position: [9.80, -3.10, 0.55]
+      orientation: [0.0, 0.0, 0.0, 1.0]
+    visualization:
+      color: [0.20, 0.72, 0.54, 0.90]
+    velocity_obstacle:
+      enabled: false
+
+  - id: 5
+    name: "s4_cylinder_5"
+    type: "cylinder"
+    motion_type: "static"
+    frame:
+      id: "obstacle_5"
+    geometry:
+      scale: [0.72, 0.72, 2.20]
+    pose:
+      position: [12.20, 2.70, 1.10]
+      orientation: [0.0, 0.0, 0.0, 1.0]
+    visualization:
+      color: [0.22, 0.56, 0.88, 0.90]
+    velocity_obstacle:
+      enabled: false
+
+  - id: 6
+    name: "s4_cylinder_6"
+    type: "cylinder"
+    motion_type: "static"
+    frame:
+      id: "obstacle_6"
+    geometry:
+      scale: [0.88, 0.88, 2.70]
+    pose:
+      position: [13.40, -0.40, 1.35]
+      orientation: [0.0, 0.0, 0.0, 1.0]
+    visualization:
+      color: [0.86, 0.40, 0.66, 0.90]
+    velocity_obstacle:
+      enabled: false
+
+  - id: 7
+    name: "s4_cylinder_7"
+    type: "cylinder"
+    motion_type: "static"
+    frame:
+      id: "obstacle_7"
+    geometry:
+      scale: [0.58, 0.58, 1.80]
+    pose:
+      position: [15.80, -2.50, 0.90]
+      orientation: [0.0, 0.0, 0.0, 1.0]
+    visualization:
+      color: [0.36, 0.74, 0.32, 0.90]
+    velocity_obstacle:
+      enabled: false
+
+  - id: 8
+    name: "s4_cylinder_8"
+    type: "cylinder"
+    motion_type: "static"
+    frame:
+      id: "obstacle_8"
+    geometry:
+      scale: [0.50, 0.50, 1.40]
+    pose:
+      position: [17.10, 2.00, 0.70]
+      orientation: [0.0, 0.0, 0.0, 1.0]
+    visualization:
+      color: [0.92, 0.54, 0.24, 0.90]
+    velocity_obstacle:
+      enabled: false

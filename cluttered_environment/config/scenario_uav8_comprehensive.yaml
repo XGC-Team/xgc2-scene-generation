@@ -1,0 +1,470 @@
+# 8-UAV comprehensive ground-obstacle scenario.
+# 15 gray opaque cylinders are placed in the first south corridor.
+# 12 gray opaque cubes implement the second east navigation corridor.
+# 10 gray opaque floating hallway-style obstacles implement the third north corridor.
+# 10 gray opaque cube frame groups implement the fourth west corridor
+# in scenario_uav8_comprehensive_groups.yaml.
+# The south corridor is the 20x10 side cell x=[-10,10], y=[-20,-10].
+# The east corridor is the 10x20 side cell x=[10,20], y=[-10,10].
+# The north corridor is the 20x10 side cell x=[-10,10], y=[10,20].
+# The west corridor is the 10x20 side cell x=[-20,-10], y=[-10,10].
+# The four 10x10 corners and 20x20 center are empty.
+global:
+  world_frame_id: "map"
+  publish_rate: 20.0
+  tf_publish_rate: 50.0
+  resolution: 80
+
+obstacles:
+  # South strip: first corridor with only high/low cylinders.
+  - id: 1
+    name: "south_cylinder_high_column_01"
+    type: "cylinder"
+    motion_type: "static"
+    frame: {id: "obstacle_1"}
+    geometry: {scale: [0.75, 0.75, 3.00]}
+    pose:
+      position: [-8.60, -18.30, 1.50]
+      orientation: [0.0, 0.0, 0.0, 1.0]
+    visualization: {color: [0.50, 0.50, 0.50, 1.00]}
+    velocity_obstacle: {enabled: false}
+
+  - id: 2
+    name: "south_cylinder_short_bollard_02"
+    type: "cylinder"
+    motion_type: "static"
+    frame: {id: "obstacle_2"}
+    geometry: {scale: [0.45, 0.45, 1.20]}
+    pose:
+      position: [-7.20, -14.70, 0.60]
+      orientation: [0.0, 0.0, 0.0, 1.0]
+    visualization: {color: [0.50, 0.50, 0.50, 1.00]}
+    velocity_obstacle: {enabled: false}
+
+  - id: 3
+    name: "south_cylinder_mid_column_03"
+    type: "cylinder"
+    motion_type: "static"
+    frame: {id: "obstacle_3"}
+    geometry: {scale: [0.65, 0.65, 3.00]}
+    pose:
+      position: [-5.40, -11.10, 1.50]
+      orientation: [0.0, 0.0, 0.0, 1.0]
+    visualization: {color: [0.50, 0.50, 0.50, 1.00]}
+    velocity_obstacle: {enabled: false}
+
+  - id: 4
+    name: "south_cylinder_low_post_04"
+    type: "cylinder"
+    motion_type: "static"
+    frame: {id: "obstacle_4"}
+    geometry: {scale: [0.50, 0.50, 1.60]}
+    pose:
+      position: [-3.20, -17.10, 0.80]
+      orientation: [0.0, 0.0, 0.0, 1.0]
+    visualization: {color: [0.50, 0.50, 0.50, 1.00]}
+    velocity_obstacle: {enabled: false}
+
+  - id: 5
+    name: "south_cylinder_tower_column_05"
+    type: "cylinder"
+    motion_type: "static"
+    frame: {id: "obstacle_5"}
+    geometry: {scale: [0.85, 0.85, 3.00]}
+    pose:
+      position: [-1.10, -13.20, 1.50]
+      orientation: [0.0, 0.0, 0.0, 1.0]
+    visualization: {color: [0.50, 0.50, 0.50, 1.00]}
+    velocity_obstacle: {enabled: false}
+
+  - id: 6
+    name: "south_cylinder_short_marker_06"
+    type: "cylinder"
+    motion_type: "static"
+    frame: {id: "obstacle_6"}
+    geometry: {scale: [0.40, 0.40, 1.00]}
+    pose:
+      position: [1.00, -18.60, 0.50]
+      orientation: [0.0, 0.0, 0.0, 1.0]
+    visualization: {color: [0.50, 0.50, 0.50, 1.00]}
+    velocity_obstacle: {enabled: false}
+
+  - id: 7
+    name: "south_cylinder_mid_column_07"
+    type: "cylinder"
+    motion_type: "static"
+    frame: {id: "obstacle_7"}
+    geometry: {scale: [0.60, 0.60, 2.60]}
+    pose:
+      position: [2.80, -11.00, 1.30]
+      orientation: [0.0, 0.0, 0.0, 1.0]
+    visualization: {color: [0.50, 0.50, 0.50, 1.00]}
+    velocity_obstacle: {enabled: false}
+
+  - id: 8
+    name: "south_cylinder_high_column_08"
+    type: "cylinder"
+    motion_type: "static"
+    frame: {id: "obstacle_8"}
+    geometry: {scale: [0.70, 0.70, 3.00]}
+    pose:
+      position: [4.60, -15.60, 1.50]
+      orientation: [0.0, 0.0, 0.0, 1.0]
+    visualization: {color: [0.50, 0.50, 0.50, 1.00]}
+    velocity_obstacle: {enabled: false}
+
+  - id: 9
+    name: "south_cylinder_low_bollard_09"
+    type: "cylinder"
+    motion_type: "static"
+    frame: {id: "obstacle_9"}
+    geometry: {scale: [0.45, 0.45, 1.40]}
+    pose:
+      position: [6.60, -12.60, 0.70]
+      orientation: [0.0, 0.0, 0.0, 1.0]
+    visualization: {color: [0.50, 0.50, 0.50, 1.00]}
+    velocity_obstacle: {enabled: false}
+
+  - id: 10
+    name: "south_cylinder_mid_column_10"
+    type: "cylinder"
+    motion_type: "static"
+    frame: {id: "obstacle_10"}
+    geometry: {scale: [0.60, 0.60, 2.30]}
+    pose:
+      position: [8.40, -17.40, 1.15]
+      orientation: [0.0, 0.0, 0.0, 1.0]
+    visualization: {color: [0.50, 0.50, 0.50, 1.00]}
+    velocity_obstacle: {enabled: false}
+
+  - id: 11
+    name: "south_cylinder_overlapped_pair_11"
+    type: "cylinder"
+    motion_type: "static"
+    frame: {id: "obstacle_11"}
+    geometry: {scale: [0.55, 0.55, 1.90]}
+    pose:
+      position: [-7.95, -18.05, 0.95]
+      orientation: [0.0, 0.0, 0.0, 1.0]
+    visualization: {color: [0.50, 0.50, 0.50, 1.00]}
+    velocity_obstacle: {enabled: false}
+
+  - id: 12
+    name: "south_cylinder_outer_low_post_12"
+    type: "cylinder"
+    motion_type: "static"
+    frame: {id: "obstacle_12"}
+    geometry: {scale: [0.50, 0.50, 1.80]}
+    pose:
+      position: [-5.30, -18.55, 0.90]
+      orientation: [0.0, 0.0, 0.0, 1.0]
+    visualization: {color: [0.50, 0.50, 0.50, 1.00]}
+    velocity_obstacle: {enabled: false}
+
+  - id: 13
+    name: "south_cylinder_center_short_post_13"
+    type: "cylinder"
+    motion_type: "static"
+    frame: {id: "obstacle_13"}
+    geometry: {scale: [0.55, 0.55, 1.60]}
+    pose:
+      position: [1.00, -14.70, 0.80]
+      orientation: [0.0, 0.0, 0.0, 1.0]
+    visualization: {color: [0.50, 0.50, 0.50, 1.00]}
+    velocity_obstacle: {enabled: false}
+
+  - id: 14
+    name: "south_cylinder_outer_marker_14"
+    type: "cylinder"
+    motion_type: "static"
+    frame: {id: "obstacle_14"}
+    geometry: {scale: [0.45, 0.45, 1.50]}
+    pose:
+      position: [5.80, -18.70, 0.75]
+      orientation: [0.0, 0.0, 0.0, 1.0]
+    visualization: {color: [0.50, 0.50, 0.50, 1.00]}
+    velocity_obstacle: {enabled: false}
+
+  - id: 15
+    name: "south_cylinder_inner_high_column_15"
+    type: "cylinder"
+    motion_type: "static"
+    frame: {id: "obstacle_15"}
+    geometry: {scale: [0.65, 0.65, 2.70]}
+    pose:
+      position: [8.60, -10.95, 1.35]
+      orientation: [0.0, 0.0, 0.0, 1.0]
+    visualization: {color: [0.50, 0.50, 0.50, 1.00]}
+    velocity_obstacle: {enabled: false}
+
+  # East strip: cube navigation corridor inspired by uav8_navigation wall-gap layout.
+  - id: 16
+    name: "east_navigation_lower_left_wall_16"
+    type: "cube"
+    motion_type: "static"
+    frame: {id: "obstacle_16"}
+    geometry: {scale: [4.80, 0.60, 3.60]}
+    pose:
+      position: [12.60, -4.00, 1.80]
+      orientation: [0.0, 0.0, 0.0, 1.0]
+    visualization: {color: [0.50, 0.50, 0.50, 1.00]}
+    velocity_obstacle: {enabled: false}
+
+  - id: 17
+    name: "east_navigation_lower_right_wall_17"
+    type: "cube"
+    motion_type: "static"
+    frame: {id: "obstacle_17"}
+    geometry: {scale: [2.60, 0.60, 3.60]}
+    pose:
+      position: [18.40, -4.00, 1.80]
+      orientation: [0.0, 0.0, 0.0, 1.0]
+    visualization: {color: [0.50, 0.50, 0.50, 1.00]}
+    velocity_obstacle: {enabled: false}
+
+  - id: 18
+    name: "east_navigation_upper_left_wall_18"
+    type: "cube"
+    motion_type: "static"
+    frame: {id: "obstacle_18"}
+    geometry: {scale: [2.50, 0.60, 3.60]}
+    pose:
+      position: [11.50, 4.00, 1.80]
+      orientation: [0.0, 0.0, 0.0, 1.0]
+    visualization: {color: [0.50, 0.50, 0.50, 1.00]}
+    velocity_obstacle: {enabled: false}
+
+  - id: 19
+    name: "east_navigation_upper_right_wall_19"
+    type: "cube"
+    motion_type: "static"
+    frame: {id: "obstacle_19"}
+    geometry: {scale: [4.80, 0.60, 3.60]}
+    pose:
+      position: [17.30, 4.00, 1.80]
+      orientation: [0.0, 0.0, 0.0, 1.0]
+    visualization: {color: [0.50, 0.50, 0.50, 1.00]}
+    velocity_obstacle: {enabled: false}
+
+  - id: 20
+    name: "east_navigation_lower_rotated_cube_20"
+    type: "cube"
+    motion_type: "static"
+    frame: {id: "obstacle_20"}
+    geometry: {scale: [0.70, 0.70, 1.40]}
+    pose:
+      position: [11.20, -8.20, 0.70]
+      orientation: [0.0, 0.0, 0.258819, 0.965926]
+    visualization: {color: [0.50, 0.50, 0.50, 1.00]}
+    velocity_obstacle: {enabled: false}
+
+  - id: 21
+    name: "east_navigation_lower_side_cube_21"
+    type: "cube"
+    motion_type: "static"
+    frame: {id: "obstacle_21"}
+    geometry: {scale: [0.80, 0.80, 1.60]}
+    pose:
+      position: [18.60, -7.00, 0.80]
+      orientation: [0.0, 0.0, -0.173648, 0.984808]
+    visualization: {color: [0.50, 0.50, 0.50, 1.00]}
+    velocity_obstacle: {enabled: false}
+
+  - id: 22
+    name: "east_navigation_mid_left_cube_22"
+    type: "cube"
+    motion_type: "static"
+    frame: {id: "obstacle_22"}
+    geometry: {scale: [0.60, 0.60, 1.20]}
+    pose:
+      position: [12.20, 0.50, 0.60]
+      orientation: [0.0, 0.0, -0.382683, 0.923880]
+    visualization: {color: [0.50, 0.50, 0.50, 1.00]}
+    velocity_obstacle: {enabled: false}
+
+  - id: 23
+    name: "east_navigation_mid_right_cube_23"
+    type: "cube"
+    motion_type: "static"
+    frame: {id: "obstacle_23"}
+    geometry: {scale: [0.80, 0.80, 1.70]}
+    pose:
+      position: [17.80, 0.90, 0.85]
+      orientation: [0.0, 0.0, 0.216440, 0.976296]
+    visualization: {color: [0.50, 0.50, 0.50, 1.00]}
+    velocity_obstacle: {enabled: false}
+
+  - id: 24
+    name: "east_navigation_upper_left_marker_24"
+    type: "cube"
+    motion_type: "static"
+    frame: {id: "obstacle_24"}
+    geometry: {scale: [0.60, 0.60, 1.20]}
+    pose:
+      position: [10.80, 7.50, 0.60]
+      orientation: [0.0, 0.0, 0.342020, 0.939693]
+    visualization: {color: [0.50, 0.50, 0.50, 1.00]}
+    velocity_obstacle: {enabled: false}
+
+  - id: 25
+    name: "east_navigation_upper_right_marker_25"
+    type: "cube"
+    motion_type: "static"
+    frame: {id: "obstacle_25"}
+    geometry: {scale: [0.70, 0.70, 1.40]}
+    pose:
+      position: [19.00, 7.20, 0.70]
+      orientation: [0.0, 0.0, -0.300706, 0.953717]
+    visualization: {color: [0.50, 0.50, 0.50, 1.00]}
+    velocity_obstacle: {enabled: false}
+
+  - id: 26
+    name: "east_navigation_lower_slit_lintel_26"
+    type: "cube"
+    motion_type: "static"
+    frame: {id: "obstacle_26"}
+    geometry: {scale: [9.50, 0.70, 0.60]}
+    pose:
+      position: [14.95, -4.00, 3.90]
+      orientation: [0.0, 0.0, 0.0, 1.0]
+    visualization: {color: [0.50, 0.50, 0.50, 1.00]}
+    velocity_obstacle: {enabled: false}
+
+  - id: 27
+    name: "east_navigation_upper_slit_lintel_27"
+    type: "cube"
+    motion_type: "static"
+    frame: {id: "obstacle_27"}
+    geometry: {scale: [9.45, 0.70, 0.60]}
+    pose:
+      position: [14.975, 4.00, 3.90]
+      orientation: [0.0, 0.0, 0.0, 1.0]
+    visualization: {color: [0.50, 0.50, 0.50, 1.00]}
+    velocity_obstacle: {enabled: false}
+
+  # North strip: floating hallway-style convex bodies inspired by uav8_hallway.
+  - id: 28
+    name: "north_hallway_floating_capsule_28"
+    type: "capsule"
+    motion_type: "static"
+    frame: {id: "obstacle_28"}
+    geometry: {scale: [0.70, 0.70, 2.80]}
+    pose:
+      position: [7.70, 11.80, 2.60]
+      orientation: [0.0, 0.707107, 0.0, 0.707107]
+    visualization: {color: [0.50, 0.50, 0.50, 1.00]}
+    velocity_obstacle: {enabled: false}
+
+  - id: 29
+    name: "north_hallway_high_sphere_29"
+    type: "sphere"
+    motion_type: "static"
+    frame: {id: "obstacle_29"}
+    geometry: {scale: [1.40, 1.40, 1.40]}
+    pose:
+      position: [5.20, 18.10, 3.10]
+      orientation: [0.0, 0.0, 0.0, 1.0]
+    visualization: {color: [0.50, 0.50, 0.50, 1.00]}
+    velocity_obstacle: {enabled: false}
+
+  - id: 30
+    name: "north_hallway_floating_cone_30"
+    type: "v_polytope"
+    motion_type: "static"
+    frame: {id: "obstacle_30"}
+    geometry:
+      v_polytope_type: "cone_128"
+      scale: [1.40, 1.40, 1.40]
+    pose:
+      position: [2.40, 12.00, 2.20]
+      orientation: [0.000000, 0.216443, -0.125002, 0.968260]
+    visualization: {color: [0.50, 0.50, 0.50, 1.00]}
+    velocity_obstacle: {enabled: false}
+
+  - id: 31
+    name: "north_hallway_tilted_block_31"
+    type: "cube"
+    motion_type: "static"
+    frame: {id: "obstacle_31"}
+    geometry: {scale: [1.40, 1.40, 1.40]}
+    pose:
+      position: [0.00, 17.60, 2.80]
+      orientation: [0.0, 0.0, -0.258819, 0.965926]
+    visualization: {color: [0.50, 0.50, 0.50, 1.00]}
+    velocity_obstacle: {enabled: false}
+
+  - id: 32
+    name: "north_hallway_cross_capsule_32"
+    type: "capsule"
+    motion_type: "static"
+    frame: {id: "obstacle_32"}
+    geometry: {scale: [0.70, 0.70, 2.80]}
+    pose:
+      position: [-2.80, 11.70, 2.10]
+      orientation: [0.0, 0.707107, 0.0, 0.707107]
+    visualization: {color: [0.50, 0.50, 0.50, 1.00]}
+    velocity_obstacle: {enabled: false}
+
+  - id: 33
+    name: "north_hallway_icosahedron_33"
+    type: "v_polytope"
+    motion_type: "static"
+    frame: {id: "obstacle_33"}
+    geometry:
+      v_polytope_type: "icosahedron_1"
+      scale: [1.40, 1.40, 1.40]
+    pose:
+      position: [-5.80, 18.40, 3.20]
+      orientation: [0.0, 0.0, 0.342020, 0.939693]
+    visualization: {color: [0.50, 0.50, 0.50, 1.00]}
+    velocity_obstacle: {enabled: false}
+
+  - id: 34
+    name: "north_hallway_side_sphere_34"
+    type: "sphere"
+    motion_type: "static"
+    frame: {id: "obstacle_34"}
+    geometry: {scale: [1.40, 1.40, 1.40]}
+    pose:
+      position: [-8.40, 13.20, 2.50]
+      orientation: [0.0, 0.0, 0.0, 1.0]
+    visualization: {color: [0.50, 0.50, 0.50, 1.00]}
+    velocity_obstacle: {enabled: false}
+
+  - id: 35
+    name: "north_hallway_mid_floating_cube_35"
+    type: "cube"
+    motion_type: "static"
+    frame: {id: "obstacle_35"}
+    geometry: {scale: [1.40, 1.40, 1.40]}
+    pose:
+      position: [-5.60, 14.80, 1.90]
+      orientation: [0.0, 0.0, 0.258819, 0.965926]
+    visualization: {color: [0.50, 0.50, 0.50, 1.00]}
+    velocity_obstacle: {enabled: false}
+
+  - id: 36
+    name: "north_hallway_octahedron_36"
+    type: "v_polytope"
+    motion_type: "static"
+    frame: {id: "obstacle_36"}
+    geometry:
+      v_polytope_type: "octahedron_1"
+      scale: [1.40, 1.40, 1.40]
+    pose:
+      position: [-2.70, 18.20, 1.70]
+      orientation: [0.0, 0.0, -0.382683, 0.923880]
+    visualization: {color: [0.50, 0.50, 0.50, 1.00]}
+    velocity_obstacle: {enabled: false}
+
+  - id: 37
+    name: "north_hallway_high_cross_capsule_37"
+    type: "capsule"
+    motion_type: "static"
+    frame: {id: "obstacle_37"}
+    geometry: {scale: [0.70, 0.70, 2.80]}
+    pose:
+      position: [3.00, 15.00, 3.40]
+      orientation: [0.707107, 0.0, 0.0, 0.707107]
+    visualization: {color: [0.50, 0.50, 0.50, 1.00]}
+    velocity_obstacle: {enabled: false}
