@@ -57,6 +57,7 @@ docker run --rm \
       fakeroot \
       file \
       git \
+      libeigen3-dev \
       python3-yaml \
       rsync \
       ros-noetic-geometry-msgs \

@@ -119,7 +119,7 @@ meta_pkg="ros-noetic-xgc2-convex-geometry"
 build_ros_package_deb \
   "${core_pkg}" \
   "convex_geometry" \
-  "ros-noetic-message-runtime, ros-noetic-geometry-msgs, ros-noetic-std-msgs" \
+  "libeigen3-dev, ros-noetic-message-runtime, ros-noetic-geometry-msgs, ros-noetic-std-msgs" \
   "XGC2 convex geometry messages and header-only collision helpers"
 
 build_ros_package_deb \
