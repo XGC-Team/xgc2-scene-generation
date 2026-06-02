@@ -3,12 +3,12 @@
  * @brief Polytope obstacle implementations
  */
 
-#ifndef CLUTTERED_ENVIRONMENT_SCENE_OBSTACLES_POLYTOPE_OBSTACLES_H
-#define CLUTTERED_ENVIRONMENT_SCENE_OBSTACLES_POLYTOPE_OBSTACLES_H
+#ifndef CONVEX_GEOMETRY_ENVIRONMENT_SCENE_OBSTACLES_POLYTOPE_OBSTACLES_H
+#define CONVEX_GEOMETRY_ENVIRONMENT_SCENE_OBSTACLES_POLYTOPE_OBSTACLES_H
 
-#include "cluttered_environment/scene/obstacles/obstacle_base.h"
+#include "convex_geometry_environment/scene/obstacles/obstacle_base.h"
 
-namespace cluttered_environment {
+namespace convex_geometry_environment {
 
 class HPolytopeObstacle : public ObstacleBase {
 public:
@@ -59,6 +59,6 @@ private:
     double epsilon_;
 };
 
-}  // namespace cluttered_environment
+}  // namespace convex_geometry_environment
 
-#endif  // CLUTTERED_ENVIRONMENT_SCENE_OBSTACLES_POLYTOPE_OBSTACLES_H
+#endif  // CONVEX_GEOMETRY_ENVIRONMENT_SCENE_OBSTACLES_POLYTOPE_OBSTACLES_H

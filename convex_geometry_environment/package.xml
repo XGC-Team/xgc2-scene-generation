@@ -1,9 +1,9 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>cluttered_environment</name>
+  <name>convex_geometry_environment</name>
   <version>0.1.0</version>
   <description>
-    Cluttered environment generator for simulation with static and dynamic convex obstacles.
+    Convex geometry environment generator for simulation with static and dynamic convex obstacles.
     Supports sphere, cylinder, cube, and H-polytope representations with velocity obstacles.
   </description>
 

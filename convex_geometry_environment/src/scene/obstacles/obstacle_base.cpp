@@ -3,14 +3,14 @@
  * @brief Implementation of ObstacleBase class
  */
 
-#include "cluttered_environment/scene/obstacles/obstacle_base.h"
+#include "convex_geometry_environment/scene/obstacles/obstacle_base.h"
 
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
 #include <cmath>
 
-namespace cluttered_environment {
+namespace convex_geometry_environment {
 
 ObstacleBase::ObstacleBase(ros::NodeHandle& nh,
                            const ObstacleConfig& config,
@@ -250,4 +250,4 @@ visualization_msgs::Marker ObstacleBase::createVelocityMarker() {
     return arrow_marker;
 }
 
-}  // namespace cluttered_environment
+}  // namespace convex_geometry_environment

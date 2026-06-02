@@ -1,9 +1,9 @@
 /**
  * @file scenario_manager.cpp
- * @brief Cluttered environment loading, obstacle registration, and publishing
+ * @brief Convex geometry environment loading, obstacle registration, and publishing
  */
 
-#include "cluttered_environment/scenario_manager.h"
+#include "convex_geometry_environment/scenario_manager.h"
 
 #include <visualization_msgs/MarkerArray.h>
 
@@ -18,9 +18,9 @@
 #include "convex_geometry/GeometryTemplate.h"
 #include "convex_geometry/ConvexBodyInstance.h"
 #include "convex_geometry/ConvexBodyArray.h"
-#include "cluttered_environment/scene/obstacles/obstacle_factory.h"
+#include "convex_geometry_environment/scene/obstacles/obstacle_factory.h"
 
-namespace cluttered_environment {
+namespace convex_geometry_environment {
 
 namespace {
 
@@ -170,7 +170,7 @@ void ScenarioManager::printSummary() const {
 
 void ScenarioManager::initializeMarkerPublishing() {
     marker_array_pub_ = nh_.advertise<visualization_msgs::MarkerArray>(
-        "/cluttered_environment/markers", 10);
+        "/convex_geometry_environment/markers", 10);
 
     if (publish_rate_ > 0) {
         marker_timer_ = nh_.createTimer(
@@ -725,4 +725,4 @@ void ScenarioManager::publishDynamicBodyInstances(const ros::TimerEvent&) {
     dynamic_body_instances_pub_.publish(array);
 }
 
-}  // namespace cluttered_environment
+}  // namespace convex_geometry_environment

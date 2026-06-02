@@ -1,4 +1,4 @@
-# Cluttered Environment Generator / 杂乱环境生成器
+# Convex Geometry Environment Generator / 凸几何环境生成器
 
 ROS package for generating simulation scenarios with static and dynamic convex obstacles.
 
@@ -34,7 +34,7 @@ ROS package for generating simulation scenarios with static and dynamic convex o
 cd ~/catkin_ws/src/ros_ws
 # (Copy this package here / 将此包复制到这里)
 cd ~/catkin_ws
-catkin build cluttered_environment
+catkin build convex_geometry_environment
 source devel/setup.bash
 ```
 
@@ -42,17 +42,17 @@ source devel/setup.bash
 
 ### 1. Launch with default scenario / 使用默认场景启动
 ```bash
-roslaunch cluttered_environment scenario.launch
+roslaunch convex_geometry_environment scenario.launch
 ```
 
 ### 2. Launch with custom scenario / 使用自定义场景启动
 ```bash
-roslaunch cluttered_environment scenario.launch config_file:=/path/to/your/scenario.yaml
+roslaunch convex_geometry_environment scenario.launch config_file:=/path/to/your/scenario.yaml
 ```
 
 ### 3. Launch simple test scenario / 启动简单测试场景
 ```bash
-roslaunch cluttered_environment scenario_simple.launch
+roslaunch convex_geometry_environment scenario_simple.launch
 ```
 
 ## Configuration / 配置说明
@@ -207,7 +207,7 @@ Make sure the package is built:
 确保包已构建：
 
 ```bash
-catkin build cluttered_environment
+catkin build convex_geometry_environment
 ```
 
 ## Future Work / 未来工作

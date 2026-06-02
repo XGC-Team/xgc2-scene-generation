@@ -3,12 +3,12 @@
  * @brief Primitive obstacle implementations
  */
 
-#ifndef CLUTTERED_ENVIRONMENT_SCENE_OBSTACLES_PRIMITIVE_OBSTACLES_H
-#define CLUTTERED_ENVIRONMENT_SCENE_OBSTACLES_PRIMITIVE_OBSTACLES_H
+#ifndef CONVEX_GEOMETRY_ENVIRONMENT_SCENE_OBSTACLES_PRIMITIVE_OBSTACLES_H
+#define CONVEX_GEOMETRY_ENVIRONMENT_SCENE_OBSTACLES_PRIMITIVE_OBSTACLES_H
 
-#include "cluttered_environment/scene/obstacles/obstacle_base.h"
+#include "convex_geometry_environment/scene/obstacles/obstacle_base.h"
 
-namespace cluttered_environment {
+namespace convex_geometry_environment {
 
 class SphereObstacle : public ObstacleBase {
 public:
@@ -89,6 +89,6 @@ private:
     Eigen::Vector3d size_;
 };
 
-}  // namespace cluttered_environment
+}  // namespace convex_geometry_environment
 
-#endif  // CLUTTERED_ENVIRONMENT_SCENE_OBSTACLES_PRIMITIVE_OBSTACLES_H
+#endif  // CONVEX_GEOMETRY_ENVIRONMENT_SCENE_OBSTACLES_PRIMITIVE_OBSTACLES_H

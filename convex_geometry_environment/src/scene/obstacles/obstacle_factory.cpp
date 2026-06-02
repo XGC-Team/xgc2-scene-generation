@@ -3,12 +3,12 @@
  * @brief Implementation of obstacle factory
  */
 
-#include "cluttered_environment/scene/obstacles/obstacle_factory.h"
+#include "convex_geometry_environment/scene/obstacles/obstacle_factory.h"
 
-#include "cluttered_environment/scene/obstacles/polytope_obstacles.h"
-#include "cluttered_environment/scene/obstacles/primitive_obstacles.h"
+#include "convex_geometry_environment/scene/obstacles/polytope_obstacles.h"
+#include "convex_geometry_environment/scene/obstacles/primitive_obstacles.h"
 
-namespace cluttered_environment {
+namespace convex_geometry_environment {
 
 ObstaclePtr ObstacleFactory::createObstacle(ros::NodeHandle& nh,
                                             const ObstacleConfig& config,
@@ -49,4 +49,4 @@ ObstaclePtr ObstacleFactory::createObstacle(ros::NodeHandle& nh,
     }
 }
 
-}  // namespace cluttered_environment
+}  // namespace convex_geometry_environment

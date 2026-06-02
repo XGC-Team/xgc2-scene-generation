@@ -3,8 +3,8 @@
  * @brief Base class for all obstacle types
  */
 
-#ifndef CLUTTERED_ENVIRONMENT_SCENE_OBSTACLES_OBSTACLE_BASE_H
-#define CLUTTERED_ENVIRONMENT_SCENE_OBSTACLES_OBSTACLE_BASE_H
+#ifndef CONVEX_GEOMETRY_ENVIRONMENT_SCENE_OBSTACLES_OBSTACLE_BASE_H
+#define CONVEX_GEOMETRY_ENVIRONMENT_SCENE_OBSTACLES_OBSTACLE_BASE_H
 
 #include <ros/ros.h>
 #include <geometry_msgs/TransformStamped.h>
@@ -23,7 +23,7 @@
 #include "convex_geometry/ConvexBodyInstance.h"
 #include "convex_geometry/occupied_sets/convex_body.h"
 
-namespace cluttered_environment {
+namespace convex_geometry_environment {
 
 struct ObstacleConfig {
     int id;
@@ -148,6 +148,6 @@ protected:
 
 using ObstaclePtr = std::shared_ptr<ObstacleBase>;
 
-}  // namespace cluttered_environment
+}  // namespace convex_geometry_environment
 
-#endif  // CLUTTERED_ENVIRONMENT_SCENE_OBSTACLES_OBSTACLE_BASE_H
+#endif  // CONVEX_GEOMETRY_ENVIRONMENT_SCENE_OBSTACLES_OBSTACLE_BASE_H

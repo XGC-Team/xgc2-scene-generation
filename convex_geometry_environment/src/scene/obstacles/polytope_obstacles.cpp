@@ -3,7 +3,7 @@
  * @brief Implementation of polytope obstacle types
  */
 
-#include "cluttered_environment/scene/obstacles/polytope_obstacles.h"
+#include "convex_geometry_environment/scene/obstacles/polytope_obstacles.h"
 
 #include "convex_geometry/geometry/geo_utils.hpp"
 #include "convex_geometry/occupied_sets/point_set.h"
@@ -12,7 +12,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace cluttered_environment {
+namespace convex_geometry_environment {
 
 namespace {
 
@@ -440,4 +440,4 @@ std::string VPolytopeObstacle::getType() const {
     return "v_polytope:inline:" + std::to_string(config_.id);
 }
 
-}  // namespace cluttered_environment
+}  // namespace convex_geometry_environment

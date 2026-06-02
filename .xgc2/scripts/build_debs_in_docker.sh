@@ -75,7 +75,7 @@ docker run --rm \
     rm -rf /workspace/work/src /workspace/work/build /workspace/work/devel /workspace/work/install-root
     mkdir -p /workspace/work/src
     rsync -a --delete /workspace/convex-geometry/convex_geometry/ /workspace/work/src/convex_geometry/
-    rsync -a --delete /workspace/convex-geometry/cluttered_environment/ /workspace/work/src/cluttered_environment/
+    rsync -a --delete /workspace/convex-geometry/convex_geometry_environment/ /workspace/work/src/convex_geometry_environment/
 
     cd /workspace/work
     source /opt/ros/noetic/setup.bash
@@ -99,9 +99,9 @@ docker run --rm \
       --output-dir /workspace/out
 
     if [[ "${INSTALL_CHECK}" == "true" ]]; then
-      apt-get install -y /workspace/out/ros-noetic-xgc2-convex-geometry-core_*.deb
-      apt-get install -y /workspace/out/ros-noetic-xgc2-cluttered-environment_*.deb
-      apt-get install -y /workspace/out/ros-noetic-xgc2-convex-geometry_*.deb
+      apt-get install -y \
+        /workspace/out/ros-noetic-xgc2-convex-geometry-core_*.deb \
+        /workspace/out/ros-noetic-xgc2-convex-geometry-environment_*.deb
       /workspace/convex-geometry/.xgc2/scripts/check_installed_packages.sh
     fi
   '

@@ -1,10 +1,10 @@
 /**
  * @file scenario_manager.h
- * @brief Scenario manager for cluttered-environment loading and publishing
+ * @brief Scenario manager for convex-geometry-environment loading and publishing
  */
 
-#ifndef CLUTTERED_ENVIRONMENT_SCENARIO_MANAGER_H
-#define CLUTTERED_ENVIRONMENT_SCENARIO_MANAGER_H
+#ifndef CONVEX_GEOMETRY_ENVIRONMENT_SCENARIO_MANAGER_H
+#define CONVEX_GEOMETRY_ENVIRONMENT_SCENARIO_MANAGER_H
 
 #include <ros/ros.h>
 #include <XmlRpcValue.h>
@@ -16,9 +16,9 @@
 
 #include "convex_geometry/GeometryLibrary.h"
 #include "convex_geometry/ConvexBodyArray.h"
-#include "cluttered_environment/scene/obstacles/obstacle_base.h"
+#include "convex_geometry_environment/scene/obstacles/obstacle_base.h"
 
-namespace cluttered_environment {
+namespace convex_geometry_environment {
 
 class ScenarioManager {
 public:
@@ -75,6 +75,6 @@ private:
     std::vector<ObstaclePtr> obstacles_;
 };
 
-}  // namespace cluttered_environment
+}  // namespace convex_geometry_environment
 
-#endif  // CLUTTERED_ENVIRONMENT_SCENARIO_MANAGER_H
+#endif  // CONVEX_GEOMETRY_ENVIRONMENT_SCENARIO_MANAGER_H

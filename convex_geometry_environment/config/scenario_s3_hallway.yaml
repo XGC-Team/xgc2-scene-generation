@@ -1,4 +1,4 @@
-# S3 cluttered hallway objects inspired by the reference figure.
+# S3 convex geometry hallway objects inspired by the reference figure.
 # All obstacles are static convex bodies registered through the obstacle
 # geometry library and used by MPC/GJK, not visualization-only markers.
 

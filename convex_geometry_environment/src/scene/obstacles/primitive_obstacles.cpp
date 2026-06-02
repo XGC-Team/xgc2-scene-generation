@@ -3,7 +3,7 @@
  * @brief Implementation of primitive obstacle types
  */
 
-#include "cluttered_environment/scene/obstacles/primitive_obstacles.h"
+#include "convex_geometry_environment/scene/obstacles/primitive_obstacles.h"
 
 #include "convex_geometry/occupied_sets/box_set.h"
 #include "convex_geometry/occupied_sets/capsule_set.h"
@@ -13,7 +13,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace cluttered_environment {
+namespace convex_geometry_environment {
 
 namespace {
 
@@ -375,4 +375,4 @@ visualization_msgs::Marker CubeObstacle::createMarkerMessage() {
     return marker;
 }
 
-}  // namespace cluttered_environment
+}  // namespace convex_geometry_environment

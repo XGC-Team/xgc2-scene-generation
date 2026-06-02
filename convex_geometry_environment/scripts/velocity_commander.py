@@ -5,7 +5,7 @@ Velocity Commander for Dynamic Obstacles
 Publishes constant velocity commands for dynamic obstacles
 
 Reads initial velocities directly from scenario configuration on parameter server:
-  - /cluttered_environment_node/obstacles (array)
+  - /convex_geometry_environment_node/obstacles (array)
 """
 
 import rospy
@@ -19,7 +19,7 @@ class ObstacleVelocityCommander:
         rospy.init_node('velocity_commander', anonymous=False)
 
         # Read obstacle array from parameter server (loaded by scenario.launch)
-        obstacles = rospy.get_param('/cluttered_environment_node/obstacles', [])
+        obstacles = rospy.get_param('/convex_geometry_environment_node/obstacles', [])
 
         # Find dynamic obstacles with IDs 20 and 21
         self.obstacle_configs = {}

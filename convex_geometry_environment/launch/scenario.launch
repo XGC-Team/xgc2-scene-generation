@@ -1,13 +1,13 @@
 <?xml version="1.0"?>
 <launch>
     <!-- Arguments -->
-    <arg name="config_file" default="$(find cluttered_environment)/config/scenario_default.yaml"
+    <arg name="config_file" default="$(find convex_geometry_environment)/config/scenario_default.yaml"
          doc="Path to scenario configuration YAML file"/>
 
-    <arg name="h_polytope_library" default="$(find cluttered_environment)/config/h_polytope_library.yaml"
+    <arg name="h_polytope_library" default="$(find convex_geometry_environment)/config/h_polytope_library.yaml"
          doc="Path to H-polytope template library YAML file"/>
 
-    <arg name="v_polytope_library" default="$(find cluttered_environment)/config/v_polytope_library.yaml"
+    <arg name="v_polytope_library" default="$(find convex_geometry_environment)/config/v_polytope_library.yaml"
          doc="Path to V-polytope template library YAML file"/>
 
     <arg name="obstacle_groups_file" default=""
@@ -16,10 +16,10 @@
     <arg name="rviz" default="false"
          doc="Launch RViz for visualization"/>
 
-    <!-- Cluttered Environment Node -->
-    <node pkg="cluttered_environment"
-          type="cluttered_environment_node"
-          name="cluttered_environment_node"
+    <!-- Convex Geometry Environment Node -->
+    <node pkg="convex_geometry_environment"
+          type="convex_geometry_environment_node"
+          name="convex_geometry_environment_node"
           output="screen">
 
         <!-- Load scenario configuration into parameter server -->
@@ -43,6 +43,6 @@
           pkg="rviz"
           type="rviz"
           name="rviz"
-          args="-d $(find cluttered_environment)/config/scenario.rviz"
+          args="-d $(find convex_geometry_environment)/config/scenario.rviz"
           required="false"/>
 </launch>

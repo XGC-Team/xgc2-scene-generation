@@ -99,22 +99,8 @@ build_ros_package_deb() {
   fakeroot dpkg-deb --build "${pkg_root}" "${OUTPUT_DIR}/${package}_${VERSION}_${ARCH}.deb" >/dev/null
 }
 
-build_meta_deb() {
-  local package="$1"
-  local depends="$2"
-  local description="$3"
-
-  local pkg_root="${BUILD_DIR}/${package}"
-  rm -rf "${pkg_root}"
-  mkdir -p "${pkg_root}"
-
-  write_control "${pkg_root}" "${package}" "${depends}" "${description}"
-  fakeroot dpkg-deb --build "${pkg_root}" "${OUTPUT_DIR}/${package}_${VERSION}_${ARCH}.deb" >/dev/null
-}
-
 core_pkg="ros-noetic-xgc2-convex-geometry-core"
-env_pkg="ros-noetic-xgc2-cluttered-environment"
-meta_pkg="ros-noetic-xgc2-convex-geometry"
+env_pkg="ros-noetic-xgc2-convex-geometry-environment"
 
 build_ros_package_deb \
   "${core_pkg}" \
@@ -124,13 +110,8 @@ build_ros_package_deb \
 
 build_ros_package_deb \
   "${env_pkg}" \
-  "cluttered_environment" \
+  "convex_geometry_environment" \
   "${core_pkg} (= ${VERSION}), ros-noetic-roscpp, ros-noetic-rospy, ros-noetic-geometry-msgs, ros-noetic-std-msgs, ros-noetic-visualization-msgs, ros-noetic-tf2, ros-noetic-tf2-geometry-msgs, ros-noetic-tf2-ros, python3-yaml" \
-  "XGC2 cluttered simulation environment manager"
-
-build_meta_deb \
-  "${meta_pkg}" \
-  "${core_pkg} (= ${VERSION}), ${env_pkg} (= ${VERSION})" \
-  "XGC2 convex geometry and cluttered environment aggregate package"
+  "XGC2 convex geometry simulation environment manager"
 
 find "${OUTPUT_DIR}" -maxdepth 1 -type f -name '*.deb' -print | sort

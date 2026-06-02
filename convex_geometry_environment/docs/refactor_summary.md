@@ -1,15 +1,15 @@
-# Cluttered Environment And Convex Geometry Refactor Summary
+# Convex Geometry Environment And Convex Geometry Refactor Summary
 
 ## Conclusion
 
-`cluttered_environment` is now a scene package, not the owner of generic convex geometry data structures. Shared convex body descriptions, occupied sets, convex geometry helpers, and GJK separation queries live in the dedicated `convex_geometry` package.
+`convex_geometry_environment` is now a scene package, not the owner of generic convex geometry data structures. Shared convex body descriptions, occupied sets, convex geometry helpers, and GJK separation queries live in the dedicated `convex_geometry` package.
 
-This keeps scene loading and RViz obstacle visualization in `cluttered_environment`, while `formation_generator` and future UAV/UGV planners consume the same geometry package directly.
+This keeps scene loading and RViz obstacle visualization in `convex_geometry_environment`, while `formation_generator` and future UAV/UGV planners consume the same geometry package directly.
 
 ## Main Results
 
 1. Package responsibilities are separated.
-   - `cluttered_environment`: scene configuration, obstacle runtime objects, marker publication, and body-instance publication.
+   - `convex_geometry_environment`: scene configuration, obstacle runtime objects, marker publication, and body-instance publication.
    - `convex_geometry`: reusable convex body messages, occupied-set abstractions, geometry helpers, and collision/separation query algorithms.
    - `formation_generator`: DMPC scheduling and optimization logic that consumes `convex_geometry`.
 
@@ -22,7 +22,7 @@ This keeps scene loading and RViz obstacle visualization in `cluttered_environme
    - `convex_geometry/msg/ConvexBodyInstance.msg`
    - `convex_geometry/msg/ConvexBodyArray.msg`
 
-3. The scene obstacle runtime remains local to `cluttered_environment`.
+3. The scene obstacle runtime remains local to `convex_geometry_environment`.
    - `scene/obstacles/obstacle_base.*`
    - `scene/obstacles/obstacle_factory.*`
    - `scene/obstacles/primitive_obstacles.*`
@@ -39,8 +39,8 @@ This keeps scene loading and RViz obstacle visualization in `cluttered_environme
      - `/convex_geometry/dynamic_body_instances`
 
 5. Obsolete duplicate ownership was removed.
-   - `cluttered_environment` no longer defines generic occupied-set headers or geometry helper headers.
-   - `cluttered_environment` no longer owns geometry/body message definitions.
+   - `convex_geometry_environment` no longer defines generic occupied-set headers or geometry helper headers.
+   - `convex_geometry_environment` no longer owns geometry/body message definitions.
    - `formation_generator` no longer owns GJK collision query headers.
    - Legacy obstacle-instance message definitions were removed in favor of `ConvexBodyInstance`/`ConvexBodyArray`.
 
@@ -55,8 +55,8 @@ convex_geometry/
 ├── msg/
 └── CMakeLists.txt
 
-cluttered_environment/
-├── include/cluttered_environment/
+convex_geometry_environment/
+├── include/convex_geometry_environment/
 │   ├── scene/obstacles/
 │   └── scenario_manager.h
 ├── src/
@@ -74,6 +74,6 @@ The current unified geometry split should be verified with:
 
 ```bash
 catkin_make --pkg convex_geometry
-catkin_make --pkg cluttered_environment
+catkin_make --pkg convex_geometry_environment
 catkin_make --pkg formation_generator
 ```
