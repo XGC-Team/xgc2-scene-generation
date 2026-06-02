@@ -125,7 +125,7 @@ build_ros_package_deb \
 build_ros_package_deb \
   "${env_pkg}" \
   "cluttered_environment" \
-  "${core_pkg} (= ${VERSION}), ros-noetic-roscpp, ros-noetic-rospy, ros-noetic-geometry-msgs, ros-noetic-std-msgs, ros-noetic-visualization-msgs, ros-noetic-tf2, ros-noetic-tf2-ros, python3-yaml" \
+  "${core_pkg} (= ${VERSION}), ros-noetic-roscpp, ros-noetic-rospy, ros-noetic-geometry-msgs, ros-noetic-std-msgs, ros-noetic-visualization-msgs, ros-noetic-tf2, ros-noetic-tf2-geometry-msgs, ros-noetic-tf2-ros, python3-yaml" \
   "XGC2 cluttered simulation environment manager"
 
 build_meta_deb \

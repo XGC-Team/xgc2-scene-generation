@@ -68,6 +68,7 @@ docker run --rm \
       ros-noetic-rospack \
       ros-noetic-std-msgs \
       ros-noetic-tf2 \
+      ros-noetic-tf2-geometry-msgs \
       ros-noetic-tf2-ros \
       ros-noetic-visualization-msgs
 

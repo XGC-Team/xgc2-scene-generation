@@ -10,6 +10,7 @@ find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
   visualization_msgs
   tf2
+  tf2_geometry_msgs
   tf2_ros
 )
 
@@ -26,6 +27,7 @@ catkin_package(
     geometry_msgs
     visualization_msgs
     tf2
+    tf2_geometry_msgs
     tf2_ros
   DEPENDS
     EIGEN3
