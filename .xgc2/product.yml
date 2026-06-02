@@ -18,6 +18,9 @@ apt:
     - ros-noetic-xgc2-convex-geometry
     - ros-noetic-xgc2-convex-geometry-core
     - ros-noetic-xgc2-cluttered-environment
+  depends:
+    - ros-noetic-xgc2-convex-geometry-core
+    - ros-noetic-xgc2-cluttered-environment
 
 usage:
   install: |
