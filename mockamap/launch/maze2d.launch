@@ -1,6 +1,7 @@
 <launch>
   <node pkg="mockamap" type="mockamap_node" name="mockamap_node" output="screen">
   <param name="seed" type="int" value="510"/>
+  <param name="frame_id" type="string" value="map"/>
   <param name="update_freq" type="double" value="1.0"/>
 
   <!--  box edge length, unit meter-->
