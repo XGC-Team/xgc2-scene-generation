@@ -12,6 +12,8 @@ required_files=(
   "xgc2_geometry_msgs/CMakeLists.txt"
   "cluttered_environment/package.xml"
   "cluttered_environment/CMakeLists.txt"
+  "mockamap/package.xml"
+  "mockamap/CMakeLists.txt"
   ".xgc2/scripts/package_debs.sh"
   ".xgc2/scripts/check_installed_packages.sh"
 )
@@ -25,14 +27,21 @@ done
 
 grep -q '<name>xgc2_geometry_msgs</name>' xgc2_geometry_msgs/package.xml
 grep -q '<name>cluttered_environment</name>' cluttered_environment/package.xml
+grep -q '<name>mockamap</name>' mockamap/package.xml
 grep -q '^project(xgc2_geometry_msgs)' xgc2_geometry_msgs/CMakeLists.txt
 grep -q '^project(cluttered_environment)' cluttered_environment/CMakeLists.txt
+grep -q '^project(mockamap)' mockamap/CMakeLists.txt
 grep -q 'find_package(xgc2_geometry REQUIRED CONFIG)' cluttered_environment/CMakeLists.txt
+grep -q 'pcl_ros' mockamap/CMakeLists.txt
+grep -q 'xgc2-scene-generation' .xgc2/product.yml
 grep -q 'xgc2_geometry_msgs' .xgc2/product.yml
 grep -q 'cluttered_environment' .xgc2/product.yml
+grep -q 'mockamap' .xgc2/product.yml
 grep -q 'libxgc2-geometry-dev' .xgc2/product.yml
+grep -q 'ros-noetic-xgc2-scene-generation' .xgc2/scripts/package_debs.sh
 grep -q 'ros-noetic-xgc2-geometry-msgs' .xgc2/scripts/package_debs.sh
 grep -q 'ros-noetic-xgc2-cluttered-environment' .xgc2/scripts/package_debs.sh
+grep -q 'ros-noetic-xgc2-mockamap' .xgc2/scripts/package_debs.sh
 grep -q 'libxgc2-geometry-dev' .xgc2/scripts/check_installed_packages.sh
 
 if find . \

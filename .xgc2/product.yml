@@ -1,33 +1,39 @@
 schema: xgc2.product.v1
-id: xgc2-cluttered-environment
-name: XGC2 Cluttered Environment
+id: xgc2-scene-generation
+name: XGC2 Scene Generation
 kind: ros1-apt
-summary: ROS messages and simulation environment tools backed by the pure C++ XGC2 geometry library.
+summary: ROS1 scene-generation tools for convex obstacle scenarios and procedural point-cloud maps.
 
 ros:
   distro: noetic
   packages:
     - xgc2_geometry_msgs
     - cluttered_environment
+    - mockamap
 
 apt:
   distribution: focal
   install:
-    - ros-noetic-xgc2-cluttered-environment
+    - ros-noetic-xgc2-scene-generation
   packages:
+    - ros-noetic-xgc2-scene-generation
     - ros-noetic-xgc2-geometry-msgs
     - ros-noetic-xgc2-cluttered-environment
+    - ros-noetic-xgc2-mockamap
   depends:
     - libxgc2-geometry-dev
     - ros-noetic-xgc2-geometry-msgs
+    - ros-noetic-xgc2-cluttered-environment
+    - ros-noetic-xgc2-mockamap
 
 usage:
   install: |
     sudo apt update
-    sudo apt install ros-noetic-xgc2-cluttered-environment
+    sudo apt install ros-noetic-xgc2-scene-generation
   smoke_test: |
     rospack find xgc2_geometry_msgs
     rospack find cluttered_environment
+    rospack find mockamap
 
 ownership:
   paths:
@@ -36,3 +42,6 @@ ownership:
     - /opt/ros/noetic/share/cluttered_environment
     - /opt/ros/noetic/include/cluttered_environment
     - /opt/ros/noetic/lib/cluttered_environment
+    - /opt/ros/noetic/share/mockamap
+    - /opt/ros/noetic/include/mockamap
+    - /opt/ros/noetic/lib/mockamap

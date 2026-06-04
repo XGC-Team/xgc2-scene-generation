@@ -42,6 +42,7 @@ rm -rf "${WORK_DIR}/src" "${WORK_DIR}/build" "${WORK_DIR}/devel"
 mkdir -p "${WORK_DIR}/src"
 rsync -a --delete "${REPO_ROOT}/xgc2_geometry_msgs/" "${WORK_DIR}/src/xgc2_geometry_msgs/"
 rsync -a --delete "${REPO_ROOT}/cluttered_environment/" "${WORK_DIR}/src/cluttered_environment/"
+rsync -a --delete "${REPO_ROOT}/mockamap/" "${WORK_DIR}/src/mockamap/"
 
 (
   cd "${WORK_DIR}"

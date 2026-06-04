@@ -1,6 +1,6 @@
 /**
  * @file scenario_manager.h
- * @brief Scenario manager for convex-geometry-environment loading and publishing
+ * @brief Scenario manager for scene-generation loading and publishing
  */
 
 #ifndef CLUTTERED_ENVIRONMENT_SCENARIO_MANAGER_H

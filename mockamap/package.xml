@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>mockamap</name>
+  <version>0.1.0</version>
+  <description>Procedural point-cloud map generator for ROS1 simulation and planner demos.</description>
+
+  <maintainer email="lxk@example.com">lxk</maintainer>
+  <author>William.Wu</author>
+  <license>GPLv3</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <depend>pcl_conversions</depend>
+  <depend>pcl_ros</depend>
+  <depend>roscpp</depend>
+  <depend>sensor_msgs</depend>
+
+  <exec_depend>rviz</exec_depend>
+</package>

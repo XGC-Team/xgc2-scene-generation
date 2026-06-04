@@ -40,7 +40,7 @@ docker pull "${DOCKER_IMAGE}"
 docker run --rm \
   -e DEBIAN_FRONTEND=noninteractive \
   -e INSTALL_CHECK="${INSTALL_CHECK}" \
-  -v "${REPO_ROOT}:/workspace/cluttered-environment:ro" \
+  -v "${REPO_ROOT}:/workspace/scene-generation:ro" \
   -v "${WORK_DIR}:/workspace/work" \
   -v "${OUTPUT_DIR}:/workspace/out" \
   "${DOCKER_IMAGE}" \
@@ -64,8 +64,12 @@ docker run --rm \
       ros-noetic-geometry-msgs \
       ros-noetic-message-generation \
       ros-noetic-message-runtime \
+      ros-noetic-pcl-conversions \
+      ros-noetic-pcl-ros \
       ros-noetic-roscpp \
       ros-noetic-rospy \
+      ros-noetic-rviz \
+      ros-noetic-sensor-msgs \
       ros-noetic-rospack \
       ros-noetic-std-msgs \
       ros-noetic-tf2 \
@@ -84,8 +88,9 @@ docker run --rm \
 
     rm -rf /workspace/work/src /workspace/work/build /workspace/work/devel /workspace/work/install-root
     mkdir -p /workspace/work/src
-    rsync -a --delete /workspace/cluttered-environment/xgc2_geometry_msgs/ /workspace/work/src/xgc2_geometry_msgs/
-    rsync -a --delete /workspace/cluttered-environment/cluttered_environment/ /workspace/work/src/cluttered_environment/
+    rsync -a --delete /workspace/scene-generation/xgc2_geometry_msgs/ /workspace/work/src/xgc2_geometry_msgs/
+    rsync -a --delete /workspace/scene-generation/cluttered_environment/ /workspace/work/src/cluttered_environment/
+    rsync -a --delete /workspace/scene-generation/mockamap/ /workspace/work/src/mockamap/
 
     cd /workspace/work
     source /opt/ros/noetic/setup.bash
@@ -103,15 +108,17 @@ docker run --rm \
       -DCMAKE_CXX_FLAGS_RELEASE="-O3 -DNDEBUG" \
       -DCMAKE_C_FLAGS_RELEASE="-O3 -DNDEBUG"
 
-    /workspace/cluttered-environment/.xgc2/scripts/package_debs.sh \
+    /workspace/scene-generation/.xgc2/scripts/package_debs.sh \
       --install-root /workspace/work/install-root \
       --output-dir /workspace/out
 
     if [[ "${INSTALL_CHECK}" == "true" ]]; then
       apt-get install -y \
+        /workspace/out/ros-noetic-xgc2-scene-generation_*.deb \
         /workspace/out/ros-noetic-xgc2-geometry-msgs_*.deb \
-        /workspace/out/ros-noetic-xgc2-cluttered-environment_*.deb
-      /workspace/cluttered-environment/.xgc2/scripts/check_installed_packages.sh
+        /workspace/out/ros-noetic-xgc2-cluttered-environment_*.deb \
+        /workspace/out/ros-noetic-xgc2-mockamap_*.deb
+      /workspace/scene-generation/.xgc2/scripts/check_installed_packages.sh
     fi
   '
 

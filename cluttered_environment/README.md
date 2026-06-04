@@ -1,4 +1,4 @@
-# Convex Geometry Environment Generator / 凸几何环境生成器
+# Cluttered Scene Environment Generator / 复杂场景生成器
 
 ROS package for generating simulation scenarios with static and dynamic convex obstacles.
 

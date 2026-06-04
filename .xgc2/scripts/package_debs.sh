@@ -101,6 +101,8 @@ build_ros_package_deb() {
 
 msgs_pkg="ros-noetic-xgc2-geometry-msgs"
 env_pkg="ros-noetic-xgc2-cluttered-environment"
+mockamap_pkg="ros-noetic-xgc2-mockamap"
+meta_pkg="ros-noetic-xgc2-scene-generation"
 
 build_ros_package_deb \
   "${msgs_pkg}" \
@@ -113,5 +115,21 @@ build_ros_package_deb \
   "cluttered_environment" \
   "libxgc2-geometry-dev (>= 0.1.0-1), ${msgs_pkg} (= ${VERSION}), ros-noetic-roscpp, ros-noetic-rospy, ros-noetic-geometry-msgs, ros-noetic-std-msgs, ros-noetic-visualization-msgs, ros-noetic-tf2, ros-noetic-tf2-geometry-msgs, ros-noetic-tf2-ros, python3-yaml" \
   "XGC2 cluttered simulation environment manager"
+
+build_ros_package_deb \
+  "${mockamap_pkg}" \
+  "mockamap" \
+  "ros-noetic-roscpp, ros-noetic-sensor-msgs, ros-noetic-pcl-ros, ros-noetic-pcl-conversions, ros-noetic-rviz" \
+  "XGC2 procedural point-cloud map generator"
+
+meta_root="${BUILD_DIR}/${meta_pkg}"
+rm -rf "${meta_root}"
+mkdir -p "${meta_root}"
+write_control \
+  "${meta_root}" \
+  "${meta_pkg}" \
+  "${msgs_pkg} (= ${VERSION}), ${env_pkg} (= ${VERSION}), ${mockamap_pkg} (= ${VERSION})" \
+  "XGC2 scene generation package set"
+fakeroot dpkg-deb --build "${meta_root}" "${OUTPUT_DIR}/${meta_pkg}_${VERSION}_${ARCH}.deb" >/dev/null
 
 find "${OUTPUT_DIR}" -maxdepth 1 -type f -name '*.deb' -print | sort
