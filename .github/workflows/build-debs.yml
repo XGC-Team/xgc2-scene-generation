@@ -7,7 +7,118 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  cpp-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run C++ static quality gate
+        run: |
+          mkdir -p "$RUNNER_TEMP/cpp-quality"
+          docker run --rm \
+            -e DEBIAN_FRONTEND=noninteractive \
+            -e CPP_QUALITY_WORK_DIR=/workspace/work \
+            -v "$GITHUB_WORKSPACE:/workspace/repo:ro" \
+            -v "$RUNNER_TEMP/cpp-quality:/workspace/work" \
+            ros:noetic-ros-base-focal \
+            bash -lc '
+              set -euo pipefail
+              apt-get update
+              apt-get install -y --no-install-recommends \
+                build-essential \
+                ca-certificates \
+                clang-format \
+                clang-tidy \
+                cmake \
+                curl \
+                git \
+                libeigen3-dev \
+                rsync \
+                ros-noetic-geometry-msgs \
+                ros-noetic-message-generation \
+                ros-noetic-message-runtime \
+                ros-noetic-roscpp \
+                ros-noetic-rospy \
+                ros-noetic-std-msgs \
+                ros-noetic-tf2 \
+                ros-noetic-tf2-geometry-msgs \
+                ros-noetic-tf2-ros \
+                ros-noetic-visualization-msgs
+
+              install -m 0755 -d /etc/apt/keyrings
+              curl -fsSL https://xgc2.apt.xiaokang.ink/xgc2-archive-keyring.gpg \
+                -o /etc/apt/keyrings/xgc2-archive-keyring.gpg
+              chmod 0644 /etc/apt/keyrings/xgc2-archive-keyring.gpg
+              echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/xgc2-archive-keyring.gpg] https://xgc2.apt.xiaokang.ink focal main" \
+                > /etc/apt/sources.list.d/xgc2.list
+              apt-get update
+              apt-get install -y --no-install-recommends libxgc2-geometry-dev
+
+              /workspace/repo/.xgc2/scripts/check_cpp_quality.sh --work-dir /workspace/work
+            '
+
+  package-compliance:
+    runs-on: ubuntu-latest
+    needs: cpp-quality
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check package metadata and packaging consistency
+        run: .xgc2/scripts/check_package_compliance.sh
+
+  ros-tests:
+    runs-on: ubuntu-latest
+    needs: cpp-quality
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and run ROS package tests
+        run: |
+          mkdir -p "$RUNNER_TEMP/package-tests"
+          docker run --rm \
+            -e DEBIAN_FRONTEND=noninteractive \
+            -e ROS_PACKAGE_CHECK_WORK_DIR=/workspace/work \
+            -v "$GITHUB_WORKSPACE:/workspace/repo:ro" \
+            -v "$RUNNER_TEMP/package-tests:/workspace/work" \
+            ros:noetic-ros-base-focal \
+            bash -lc '
+              set -euo pipefail
+              apt-get update
+              apt-get install -y --no-install-recommends \
+                build-essential \
+                ca-certificates \
+                cmake \
+                curl \
+                git \
+                libeigen3-dev \
+                rsync \
+                ros-noetic-geometry-msgs \
+                ros-noetic-message-generation \
+                ros-noetic-message-runtime \
+                ros-noetic-roscpp \
+                ros-noetic-rospy \
+                ros-noetic-std-msgs \
+                ros-noetic-tf2 \
+                ros-noetic-tf2-geometry-msgs \
+                ros-noetic-tf2-ros \
+                ros-noetic-visualization-msgs
+
+              install -m 0755 -d /etc/apt/keyrings
+              curl -fsSL https://xgc2.apt.xiaokang.ink/xgc2-archive-keyring.gpg \
+                -o /etc/apt/keyrings/xgc2-archive-keyring.gpg
+              chmod 0644 /etc/apt/keyrings/xgc2-archive-keyring.gpg
+              echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/xgc2-archive-keyring.gpg] https://xgc2.apt.xiaokang.ink focal main" \
+                > /etc/apt/sources.list.d/xgc2.list
+              apt-get update
+              apt-get install -y --no-install-recommends libxgc2-geometry-dev
+
+              /workspace/repo/.xgc2/scripts/check_ros_packages.sh --work-dir /workspace/work
+            '
+
+  deb-build:
+    needs:
+      - package-compliance
+      - ros-tests
     strategy:
       fail-fast: false
       matrix:
@@ -17,11 +128,6 @@ jobs:
           - arch: arm64
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
-    env:
-      APT_REPO_HOST: ${{ secrets.APT_REPO_HOST }}
-      APT_REPO_PORT: ${{ secrets.APT_REPO_PORT }}
-      APT_REPO_SSH_KEY: ${{ secrets.APT_REPO_SSH_KEY }}
-      APT_REPO_KNOWN_HOSTS: ${{ secrets.APT_REPO_KNOWN_HOSTS }}
 
     steps:
       - uses: actions/checkout@v4
@@ -29,14 +135,32 @@ jobs:
       - name: Build and install-check deb packages in Docker
         run: |
           .xgc2/scripts/build_debs_in_docker.sh \
-            --work-dir "$RUNNER_TEMP/convex-geometry-${{ matrix.arch }}" \
+            --work-dir "$RUNNER_TEMP/cluttered-environment-${{ matrix.arch }}" \
             --output-dir "$GITHUB_WORKSPACE/debs"
 
       - name: Upload deb artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: xgc2-convex-geometry-debs-${{ matrix.arch }}
+          name: xgc2-cluttered-environment-debs-${{ matrix.arch }}
           path: debs/*.deb
+
+  publish-apt:
+    runs-on: ubuntu-latest
+    needs: deb-build
+    env:
+      APT_REPO_HOST: ${{ secrets.APT_REPO_HOST }}
+      APT_REPO_PORT: ${{ secrets.APT_REPO_PORT }}
+      APT_REPO_SSH_KEY: ${{ secrets.APT_REPO_SSH_KEY }}
+      APT_REPO_KNOWN_HOSTS: ${{ secrets.APT_REPO_KNOWN_HOSTS }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download deb artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: xgc2-cluttered-environment-debs-*
+          path: debs
+          merge-multiple: true
 
       - name: Publish to self-hosted APT repository
         if: ${{ env.APT_REPO_HOST != '' && env.APT_REPO_PORT != '' && env.APT_REPO_SSH_KEY != '' && env.APT_REPO_KNOWN_HOSTS != '' }}

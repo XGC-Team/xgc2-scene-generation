@@ -40,7 +40,7 @@ docker pull "${DOCKER_IMAGE}"
 docker run --rm \
   -e DEBIAN_FRONTEND=noninteractive \
   -e INSTALL_CHECK="${INSTALL_CHECK}" \
-  -v "${REPO_ROOT}:/workspace/convex-geometry:ro" \
+  -v "${REPO_ROOT}:/workspace/cluttered-environment:ro" \
   -v "${WORK_DIR}:/workspace/work" \
   -v "${OUTPUT_DIR}:/workspace/out" \
   "${DOCKER_IMAGE}" \
@@ -53,6 +53,7 @@ docker run --rm \
       build-essential \
       ca-certificates \
       cmake \
+      curl \
       dpkg-dev \
       fakeroot \
       file \
@@ -72,20 +73,28 @@ docker run --rm \
       ros-noetic-tf2-ros \
       ros-noetic-visualization-msgs
 
+    install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL https://xgc2.apt.xiaokang.ink/xgc2-archive-keyring.gpg \
+      -o /etc/apt/keyrings/xgc2-archive-keyring.gpg
+    chmod 0644 /etc/apt/keyrings/xgc2-archive-keyring.gpg
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/xgc2-archive-keyring.gpg] https://xgc2.apt.xiaokang.ink focal main" \
+      > /etc/apt/sources.list.d/xgc2.list
+    apt-get update
+    apt-get install -y --no-install-recommends libxgc2-geometry-dev
+
     rm -rf /workspace/work/src /workspace/work/build /workspace/work/devel /workspace/work/install-root
     mkdir -p /workspace/work/src
-    rsync -a --delete /workspace/convex-geometry/convex_geometry/ /workspace/work/src/convex_geometry/
-    rsync -a --delete /workspace/convex-geometry/convex_geometry_environment/ /workspace/work/src/convex_geometry_environment/
+    rsync -a --delete /workspace/cluttered-environment/xgc2_geometry_msgs/ /workspace/work/src/xgc2_geometry_msgs/
+    rsync -a --delete /workspace/cluttered-environment/cluttered_environment/ /workspace/work/src/cluttered_environment/
 
     cd /workspace/work
     source /opt/ros/noetic/setup.bash
 
-    catkin_make run_tests_convex_geometry \
+    catkin_make \
       -DCMAKE_INSTALL_PREFIX=/opt/ros/noetic \
       -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_CXX_FLAGS_RELEASE="-O3 -DNDEBUG" \
       -DCMAKE_C_FLAGS_RELEASE="-O3 -DNDEBUG"
-    catkin_test_results
 
     DESTDIR=/workspace/work/install-root catkin_make install \
       -DCMAKE_INSTALL_PREFIX=/opt/ros/noetic \
@@ -94,15 +103,15 @@ docker run --rm \
       -DCMAKE_CXX_FLAGS_RELEASE="-O3 -DNDEBUG" \
       -DCMAKE_C_FLAGS_RELEASE="-O3 -DNDEBUG"
 
-    /workspace/convex-geometry/.xgc2/scripts/package_debs.sh \
+    /workspace/cluttered-environment/.xgc2/scripts/package_debs.sh \
       --install-root /workspace/work/install-root \
       --output-dir /workspace/out
 
     if [[ "${INSTALL_CHECK}" == "true" ]]; then
       apt-get install -y \
-        /workspace/out/ros-noetic-xgc2-convex-geometry-core_*.deb \
-        /workspace/out/ros-noetic-xgc2-convex-geometry-environment_*.deb
-      /workspace/convex-geometry/.xgc2/scripts/check_installed_packages.sh
+        /workspace/out/ros-noetic-xgc2-geometry-msgs_*.deb \
+        /workspace/out/ros-noetic-xgc2-cluttered-environment_*.deb
+      /workspace/cluttered-environment/.xgc2/scripts/check_installed_packages.sh
     fi
   '
 

@@ -99,19 +99,19 @@ build_ros_package_deb() {
   fakeroot dpkg-deb --build "${pkg_root}" "${OUTPUT_DIR}/${package}_${VERSION}_${ARCH}.deb" >/dev/null
 }
 
-core_pkg="ros-noetic-xgc2-convex-geometry-core"
-env_pkg="ros-noetic-xgc2-convex-geometry-environment"
+msgs_pkg="ros-noetic-xgc2-geometry-msgs"
+env_pkg="ros-noetic-xgc2-cluttered-environment"
 
 build_ros_package_deb \
-  "${core_pkg}" \
-  "convex_geometry" \
-  "libeigen3-dev, ros-noetic-message-runtime, ros-noetic-geometry-msgs, ros-noetic-std-msgs" \
-  "XGC2 convex geometry messages and header-only collision helpers"
+  "${msgs_pkg}" \
+  "xgc2_geometry_msgs" \
+  "ros-noetic-message-runtime, ros-noetic-geometry-msgs, ros-noetic-std-msgs" \
+  "XGC2 convex geometry template and obstacle instance messages"
 
 build_ros_package_deb \
   "${env_pkg}" \
-  "convex_geometry_environment" \
-  "${core_pkg} (= ${VERSION}), ros-noetic-roscpp, ros-noetic-rospy, ros-noetic-geometry-msgs, ros-noetic-std-msgs, ros-noetic-visualization-msgs, ros-noetic-tf2, ros-noetic-tf2-geometry-msgs, ros-noetic-tf2-ros, python3-yaml" \
-  "XGC2 convex geometry simulation environment manager"
+  "cluttered_environment" \
+  "libxgc2-geometry-dev (>= 0.1.0-1), ${msgs_pkg} (= ${VERSION}), ros-noetic-roscpp, ros-noetic-rospy, ros-noetic-geometry-msgs, ros-noetic-std-msgs, ros-noetic-visualization-msgs, ros-noetic-tf2, ros-noetic-tf2-geometry-msgs, ros-noetic-tf2-ros, python3-yaml" \
+  "XGC2 cluttered simulation environment manager"
 
 find "${OUTPUT_DIR}" -maxdepth 1 -type f -name '*.deb' -print | sort

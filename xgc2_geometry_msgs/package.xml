@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>xgc2_geometry_msgs</name>
+  <version>0.1.0</version>
+  <description>ROS messages for XGC2 convex geometry templates and obstacle instances.</description>
+
+  <maintainer email="lxk@todo.todo">lxk</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <depend>geometry_msgs</depend>
+  <depend>std_msgs</depend>
+
+  <build_depend>message_generation</build_depend>
+  <exec_depend>message_runtime</exec_depend>
+</package>

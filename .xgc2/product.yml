@@ -1,37 +1,38 @@
 schema: xgc2.product.v1
-id: xgc2-convex-geometry
-name: XGC2 Convex Geometry
+id: xgc2-cluttered-environment
+name: XGC2 Cluttered Environment
 kind: ros1-apt
-summary: Convex geometry messages and simulation environment tools for XGC2 ROS1.
+summary: ROS messages and simulation environment tools backed by the pure C++ XGC2 geometry library.
 
 ros:
   distro: noetic
   packages:
-    - convex_geometry
-    - convex_geometry_environment
+    - xgc2_geometry_msgs
+    - cluttered_environment
 
 apt:
   distribution: focal
   install:
-    - ros-noetic-xgc2-convex-geometry-environment
+    - ros-noetic-xgc2-cluttered-environment
   packages:
-    - ros-noetic-xgc2-convex-geometry-core
-    - ros-noetic-xgc2-convex-geometry-environment
+    - ros-noetic-xgc2-geometry-msgs
+    - ros-noetic-xgc2-cluttered-environment
   depends:
-    - ros-noetic-xgc2-convex-geometry-core
+    - libxgc2-geometry-dev
+    - ros-noetic-xgc2-geometry-msgs
 
 usage:
   install: |
     sudo apt update
-    sudo apt install ros-noetic-xgc2-convex-geometry-environment
+    sudo apt install ros-noetic-xgc2-cluttered-environment
   smoke_test: |
-    rospack find convex_geometry
-    rospack find convex_geometry_environment
+    rospack find xgc2_geometry_msgs
+    rospack find cluttered_environment
 
 ownership:
   paths:
-    - /opt/ros/noetic/share/convex_geometry
-    - /opt/ros/noetic/include/convex_geometry
-    - /opt/ros/noetic/share/convex_geometry_environment
-    - /opt/ros/noetic/include/convex_geometry_environment
-    - /opt/ros/noetic/lib/convex_geometry_environment
+    - /opt/ros/noetic/share/xgc2_geometry_msgs
+    - /opt/ros/noetic/include/xgc2_geometry_msgs
+    - /opt/ros/noetic/share/cluttered_environment
+    - /opt/ros/noetic/include/cluttered_environment
+    - /opt/ros/noetic/lib/cluttered_environment
