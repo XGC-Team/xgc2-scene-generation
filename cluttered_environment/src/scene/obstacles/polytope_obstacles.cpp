@@ -5,9 +5,9 @@
 
 #include "cluttered_environment/scene/obstacles/polytope_obstacles.h"
 
-#include "xgc2_geometry/geometry/geo_utils.hpp"
-#include "xgc2_geometry/geometry/quickhull.hpp"
-#include "xgc2_geometry/occupied_sets/point_set.h"
+#include "geometry/geo_utils.hpp"
+#include "geometry/quickhull.hpp"
+#include "geometry/occupied_sets/point_set.h"
 
 #include <algorithm>
 #include <cmath>
@@ -45,13 +45,13 @@ std::vector<Eigen::Vector3d> makeRotatedOffsets(const std::vector<Eigen::Vector3
     return offsets;
 }
 
-xgc2_geometry::ConvexBody makeBodyMetadata(const ObstacleConfig& config,
+xgc2_math::ConvexBody makeBodyMetadata(const ObstacleConfig& config,
                                            const std::string& geometry_type,
                                            const Eigen::Vector3d& position,
                                            const Eigen::Quaterniond& orientation,
                                            const Eigen::Vector3d& scale,
                                            const Eigen::Vector3d& velocity) {
-    xgc2_geometry::ConvexBody body;
+    xgc2_math::ConvexBody body;
     body.id = config.id;
     body.name = config.name;
     body.geometry_type = geometry_type;
@@ -210,14 +210,14 @@ HPolytopeObstacle::buildGeometryTemplate(int /*resolution*/) const {
     return tmpl;
 }
 
-xgc2_geometry::ConvexBody HPolytopeObstacle::buildOccupiedBody() const {
-    xgc2_geometry::ConvexBody body = makeBodyMetadata(config_,
+xgc2_math::ConvexBody HPolytopeObstacle::buildOccupiedBody() const {
+    xgc2_math::ConvexBody body = makeBodyMetadata(config_,
                                                       getType(),
                                                       currentPositionVector(),
                                                       currentOrientationQuaternion(),
                                                       config_.scale,
                                                       currentVelocityVector());
-    body.shape = std::make_shared<xgc2_geometry::SupportPointSet>(
+    body.shape = std::make_shared<xgc2_math::SupportPointSet>(
         body.position, makeRotatedOffsets(support_vertices_unit_, body.scale, body.orientation));
     return body;
 }
@@ -363,14 +363,14 @@ VPolytopeObstacle::buildGeometryTemplate(int /*resolution*/) const {
     return tmpl;
 }
 
-xgc2_geometry::ConvexBody VPolytopeObstacle::buildOccupiedBody() const {
-    xgc2_geometry::ConvexBody body = makeBodyMetadata(config_,
+xgc2_math::ConvexBody VPolytopeObstacle::buildOccupiedBody() const {
+    xgc2_math::ConvexBody body = makeBodyMetadata(config_,
                                                       getType(),
                                                       currentPositionVector(),
                                                       currentOrientationQuaternion(),
                                                       config_.scale,
                                                       currentVelocityVector());
-    body.shape = std::make_shared<xgc2_geometry::SupportPointSet>(
+    body.shape = std::make_shared<xgc2_math::SupportPointSet>(
         body.position, makeRotatedOffsets(vertices_original_, body.scale, body.orientation));
     return body;
 }

@@ -21,7 +21,7 @@ public:
 protected:
     void generateGeometry() override;
     xgc2_geometry_msgs::GeometryTemplate buildGeometryTemplate(int resolution) const override;
-    xgc2_geometry::ConvexBody buildOccupiedBody() const override;
+    xgc2_math::ConvexBody buildOccupiedBody() const override;
     visualization_msgs::Marker createMarkerMessage() override;
     std::vector<visualization_msgs::Marker> getMarkers() override;
     std::string getType() const override;
@@ -46,7 +46,7 @@ public:
 protected:
     void generateGeometry() override;
     xgc2_geometry_msgs::GeometryTemplate buildGeometryTemplate(int resolution) const override;
-    xgc2_geometry::ConvexBody buildOccupiedBody() const override;
+    xgc2_math::ConvexBody buildOccupiedBody() const override;
     visualization_msgs::Marker createMarkerMessage() override;
     std::vector<visualization_msgs::Marker> getMarkers() override;
     std::string getType() const override;

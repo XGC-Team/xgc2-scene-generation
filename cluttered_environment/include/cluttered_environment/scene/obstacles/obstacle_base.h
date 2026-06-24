@@ -19,7 +19,7 @@
 #include <string>
 #include <vector>
 
-#include "xgc2_geometry/occupied_sets/convex_body.h"
+#include "geometry/occupied_sets/convex_body.h"
 #include "xgc2_geometry_msgs/ConvexBodyInstance.h"
 #include "xgc2_geometry_msgs/GeometryTemplate.h"
 
@@ -75,7 +75,7 @@ public:
 
     const std::vector<Eigen::Vector3d>& getVerticesLocal() const { return vertices_local_; }
 
-    const xgc2_geometry::ConvexBody& occupiedBody() const { return occupied_body_; }
+    const xgc2_math::ConvexBody& occupiedBody() const { return occupied_body_; }
 
     virtual xgc2_geometry_msgs::GeometryTemplate buildGeometryTemplate(int resolution) const = 0;
     xgc2_geometry_msgs::ConvexBodyInstance buildConvexBodyInstance(bool is_static) const;
@@ -83,7 +83,7 @@ public:
 
 protected:
     virtual void generateGeometry() = 0;
-    virtual xgc2_geometry::ConvexBody buildOccupiedBody() const = 0;
+    virtual xgc2_math::ConvexBody buildOccupiedBody() const = 0;
 
     void publishTF();
     void velocityCallback(const geometry_msgs::Twist::ConstPtr& msg);
@@ -116,7 +116,7 @@ protected:
     ros::Timer velocity_update_timer_;
 
     // Canonical occupied-set representation used by external consumers.
-    xgc2_geometry::ConvexBody occupied_body_;
+    xgc2_math::ConvexBody occupied_body_;
 
     // Visualization data (in local coordinate frame). These are RViz-side caches only.
     std::vector<Eigen::Vector3d> vertices_local_;

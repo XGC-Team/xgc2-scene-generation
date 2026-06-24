@@ -16,7 +16,7 @@ find_package(catkin REQUIRED COMPONENTS
 
 ## Find system libraries
 find_package(Eigen3 REQUIRED)
-find_package(xgc2_geometry REQUIRED CONFIG)
+find_package(xgc2_math REQUIRED CONFIG)
 
 ## Catkin package
 catkin_package(
@@ -59,7 +59,7 @@ add_dependencies(${PROJECT_NAME}_node
 target_link_libraries(${PROJECT_NAME}_node
   ${catkin_LIBRARIES}
   ${EIGEN3_LIBRARIES}
-  xgc2_geometry::geometry
+  xgc2_math::geometry
 )
 
 if(CATKIN_ENABLE_TESTING)
@@ -75,7 +75,7 @@ if(CATKIN_ENABLE_TESTING)
     target_link_libraries(${PROJECT_NAME}_smoke_test
       ${catkin_LIBRARIES}
       ${EIGEN3_LIBRARIES}
-      xgc2_geometry::geometry
+      xgc2_math::geometry
     )
   endif()
 endif()

@@ -84,7 +84,7 @@ docker run --rm \
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/xgc2-archive-keyring.gpg] https://xgc2.apt.xiaokang.ink focal main" \
       > /etc/apt/sources.list.d/xgc2.list
     apt-get update
-    apt-get install -y --no-install-recommends libxgc2-geometry-dev
+    apt-get install -y --no-install-recommends libxgc2-math-dev
 
     rm -rf /workspace/work/src /workspace/work/build /workspace/work/devel /workspace/work/install-root
     mkdir -p /workspace/work/src

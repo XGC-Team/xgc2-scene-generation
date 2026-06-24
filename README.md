@@ -7,7 +7,7 @@ This repository contains:
 - `xgc2_geometry_msgs`: convex body template and obstacle instance messages.
 - `cluttered_environment`: scenario manager and configuration assets for static and dynamic convex obstacles.
 - `mockamap`: procedural point-cloud map generator for voxel-map based planner demos.
-- `libxgc2-geometry-dev`: pure C++ convex-set, convex-hull, and GJK implementation installed from the XGC2 common apt package.
+- `libxgc2-math-dev`: pure C++ convex-set, convex-hull, and GJK implementation installed from the XGC2 common apt package.
 
 ## Install
 

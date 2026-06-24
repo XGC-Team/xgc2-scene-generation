@@ -58,7 +58,7 @@ jobs:
               echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/xgc2-archive-keyring.gpg] https://xgc2.apt.xiaokang.ink focal main" \
                 > /etc/apt/sources.list.d/xgc2.list
               apt-get update
-              apt-get install -y --no-install-recommends libxgc2-geometry-dev
+              apt-get install -y --no-install-recommends libxgc2-math-dev
 
               /workspace/repo/.xgc2/scripts/check_cpp_quality.sh --work-dir /workspace/work
             '
@@ -120,7 +120,7 @@ jobs:
               echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/xgc2-archive-keyring.gpg] https://xgc2.apt.xiaokang.ink focal main" \
                 > /etc/apt/sources.list.d/xgc2.list
               apt-get update
-              apt-get install -y --no-install-recommends libxgc2-geometry-dev
+              apt-get install -y --no-install-recommends libxgc2-math-dev
 
               /workspace/repo/.xgc2/scripts/check_ros_packages.sh --work-dir /workspace/work
             '

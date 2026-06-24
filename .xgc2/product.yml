@@ -21,7 +21,7 @@ apt:
     - ros-noetic-xgc2-cluttered-environment
     - ros-noetic-xgc2-mockamap
   depends:
-    - libxgc2-geometry-dev
+    - libxgc2-math-dev
     - ros-noetic-xgc2-geometry-msgs
     - ros-noetic-xgc2-cluttered-environment
     - ros-noetic-xgc2-mockamap

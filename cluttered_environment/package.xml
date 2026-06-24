@@ -25,7 +25,7 @@
 
   <!-- Third-party dependencies -->
   <depend>eigen</depend>
-  <depend>libxgc2-geometry-dev</depend>
+  <depend>libxgc2-math-dev</depend>
 
   <export>
   </export>

@@ -4,7 +4,7 @@
 
 The geometry stack is split by semantic responsibility:
 
-- `libxgc2-geometry-dev`: pure C++ convex sets, convex hull helpers, and GJK queries.
+- `libxgc2-math-dev`: pure C++ convex sets, convex hull helpers, and GJK queries.
 - `xgc2_geometry_msgs`: ROS message definitions for geometry templates and obstacle instances.
 - `cluttered_environment`: ROS scene loading, marker publishing, TF publishing, and obstacle-instance publishing.
 
