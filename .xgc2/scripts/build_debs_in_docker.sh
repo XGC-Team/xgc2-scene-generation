@@ -8,7 +8,16 @@ DOCKER_IMAGE="${DOCKER_IMAGE:-ros:noetic-ros-base-focal}"
 WORK_DIR="${WORK_DIR:-${REPO_ROOT}/.work/docker}"
 OUTPUT_DIR="${OUTPUT_DIR:-${REPO_ROOT}/debs}"
 INSTALL_CHECK="${INSTALL_CHECK:-true}"
-PACKAGE_VERSION="${PACKAGE_VERSION:-1.1.4-1}"
+
+product_version() {
+  awk -F': *' '/^version:[[:space:]]*/ {print $2; exit}' "${REPO_ROOT}/.xgc2/product.yml"
+}
+
+PACKAGE_VERSION="${PACKAGE_VERSION:-$(product_version)}"
+if [[ -z "${PACKAGE_VERSION}" ]]; then
+  echo "package version is missing; set PACKAGE_VERSION or .xgc2/product.yml version" >&2
+  exit 1
+fi
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
