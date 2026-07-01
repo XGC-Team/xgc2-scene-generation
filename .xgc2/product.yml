@@ -1,48 +1,50 @@
 schema: xgc2.product.v1
 id: xgc2-scene-generation
 name: XGC2 Scene Generation
-version: 1.1.4-1
+version: 1.1.4-2
 kind: ros1-apt
-summary: ROS1 scene-generation tools for convex obstacle scenarios and procedural point-cloud maps.
-
+summary: ROS1 scene-generation tools for convex obstacle scenarios and procedural
+  point-cloud maps.
 ros:
   distro: noetic
   packages:
-    - xgc2_geometry_msgs
-    - cluttered_environment
-    - mockamap
-
+  - xgc2_geometry_msgs
+  - cluttered_environment
+  - mockamap
 apt:
   distribution: focal
   install:
-    - ros-noetic-xgc2-scene-generation
+  - ros-noetic-xgc2-scene-generation
   packages:
-    - ros-noetic-xgc2-scene-generation
-    - ros-noetic-xgc2-geometry-msgs
-    - ros-noetic-xgc2-cluttered-environment
-    - ros-noetic-xgc2-mockamap
+  - ros-noetic-xgc2-scene-generation
+  - ros-noetic-xgc2-geometry-msgs
+  - ros-noetic-xgc2-cluttered-environment
+  - ros-noetic-xgc2-mockamap
   depends:
-    - libxgc2-math-dev (>= 0.5.5-1)
-    - ros-noetic-xgc2-geometry-msgs (>= 1.1.4-1)
-    - ros-noetic-xgc2-cluttered-environment (>= 1.1.4-1)
-    - ros-noetic-xgc2-mockamap (>= 1.1.4-1)
-
+  - libxgc2-math-dev (>= 0.5.5-2)
+  - ros-noetic-xgc2-geometry-msgs (>= 1.1.4-2)
+  - ros-noetic-xgc2-cluttered-environment (>= 1.1.4-2)
+  - ros-noetic-xgc2-mockamap (>= 1.1.4-2)
 usage:
-  install: |
-    sudo apt update
+  install: 'sudo apt update
+
     sudo apt install ros-noetic-xgc2-scene-generation
-  smoke_test: |
-    rospack find xgc2_geometry_msgs
+
+    '
+  smoke_test: 'rospack find xgc2_geometry_msgs
+
     rospack find cluttered_environment
+
     rospack find mockamap
 
+    '
 ownership:
   paths:
-    - /opt/ros/noetic/share/xgc2_geometry_msgs
-    - /opt/ros/noetic/include/xgc2_geometry_msgs
-    - /opt/ros/noetic/share/cluttered_environment
-    - /opt/ros/noetic/include/cluttered_environment
-    - /opt/ros/noetic/lib/cluttered_environment
-    - /opt/ros/noetic/share/mockamap
-    - /opt/ros/noetic/include/mockamap
-    - /opt/ros/noetic/lib/mockamap
+  - /opt/ros/noetic/share/xgc2_geometry_msgs
+  - /opt/ros/noetic/include/xgc2_geometry_msgs
+  - /opt/ros/noetic/share/cluttered_environment
+  - /opt/ros/noetic/include/cluttered_environment
+  - /opt/ros/noetic/lib/cluttered_environment
+  - /opt/ros/noetic/share/mockamap
+  - /opt/ros/noetic/include/mockamap
+  - /opt/ros/noetic/lib/mockamap
