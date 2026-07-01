@@ -4,7 +4,7 @@ set -euo pipefail
 INSTALL_ROOT=""
 OUTPUT_DIR=""
 ROS_DISTRO="${ROS_DISTRO:-noetic}"
-VERSION="${PACKAGE_VERSION:-1.0.4-1}"
+VERSION="${PACKAGE_VERSION:-1.1.4-1}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -113,7 +113,7 @@ build_ros_package_deb \
 build_ros_package_deb \
   "${env_pkg}" \
   "cluttered_environment" \
-  "libxgc2-math-dev (>= 0.4.0-1), ${msgs_pkg} (= ${VERSION}), ros-noetic-roscpp, ros-noetic-rospy, ros-noetic-geometry-msgs, ros-noetic-std-msgs, ros-noetic-visualization-msgs, ros-noetic-tf2, ros-noetic-tf2-geometry-msgs, ros-noetic-tf2-ros, python3-yaml" \
+  "libxgc2-math-dev (>= 0.5.5-1), ${msgs_pkg} (= ${VERSION}), ros-noetic-roscpp, ros-noetic-rospy, ros-noetic-geometry-msgs, ros-noetic-std-msgs, ros-noetic-visualization-msgs, ros-noetic-tf2, ros-noetic-tf2-geometry-msgs, ros-noetic-tf2-ros, python3-yaml" \
   "XGC2 cluttered simulation environment manager"
 
 build_ros_package_deb \
