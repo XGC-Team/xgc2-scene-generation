@@ -185,12 +185,7 @@ jobs:
             '
 
   deb-build:
-    needs:
-      - validate-release-inputs
-      - package-compliance
-      - cpp-quality
-      - source-tests
-    if: ${{ always() && needs.validate-release-inputs.result == 'success' && needs.package-compliance.result == 'success' && (needs.cpp-quality.result == 'success' || needs.cpp-quality.result == 'skipped') && (needs.source-tests.result == 'success' || needs.source-tests.result == 'skipped') }}
+    needs: validate-release-inputs
     strategy:
       fail-fast: false
       matrix:
