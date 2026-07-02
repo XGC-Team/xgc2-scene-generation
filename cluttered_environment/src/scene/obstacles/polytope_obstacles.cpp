@@ -5,9 +5,9 @@
 
 #include "cluttered_environment/scene/obstacles/polytope_obstacles.h"
 
-#include "geometry/geo_utils.hpp"
-#include "geometry/quickhull.hpp"
+#include "xgc2_math/geometry/geo_utils.hpp"
 #include "xgc2_math/geometry/occupied_sets/point_set.h"
+#include "xgc2_math/geometry/quickhull.hpp"
 
 #include <algorithm>
 #include <cmath>
