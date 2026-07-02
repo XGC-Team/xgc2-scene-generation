@@ -7,7 +7,7 @@
 
 #include "geometry/geo_utils.hpp"
 #include "geometry/quickhull.hpp"
-#include "geometry/occupied_sets/point_set.h"
+#include "xgc2_math/geometry/occupied_sets/point_set.h"
 
 #include <algorithm>
 #include <cmath>
@@ -46,11 +46,11 @@ std::vector<Eigen::Vector3d> makeRotatedOffsets(const std::vector<Eigen::Vector3
 }
 
 xgc2_math::ConvexBody makeBodyMetadata(const ObstacleConfig& config,
-                                           const std::string& geometry_type,
-                                           const Eigen::Vector3d& position,
-                                           const Eigen::Quaterniond& orientation,
-                                           const Eigen::Vector3d& scale,
-                                           const Eigen::Vector3d& velocity) {
+                                       const std::string& geometry_type,
+                                       const Eigen::Vector3d& position,
+                                       const Eigen::Quaterniond& orientation,
+                                       const Eigen::Vector3d& scale,
+                                       const Eigen::Vector3d& velocity) {
     xgc2_math::ConvexBody body;
     body.id = config.id;
     body.name = config.name;
@@ -212,11 +212,11 @@ HPolytopeObstacle::buildGeometryTemplate(int /*resolution*/) const {
 
 xgc2_math::ConvexBody HPolytopeObstacle::buildOccupiedBody() const {
     xgc2_math::ConvexBody body = makeBodyMetadata(config_,
-                                                      getType(),
-                                                      currentPositionVector(),
-                                                      currentOrientationQuaternion(),
-                                                      config_.scale,
-                                                      currentVelocityVector());
+                                                  getType(),
+                                                  currentPositionVector(),
+                                                  currentOrientationQuaternion(),
+                                                  config_.scale,
+                                                  currentVelocityVector());
     body.shape = std::make_shared<xgc2_math::SupportPointSet>(
         body.position, makeRotatedOffsets(support_vertices_unit_, body.scale, body.orientation));
     return body;
@@ -365,11 +365,11 @@ VPolytopeObstacle::buildGeometryTemplate(int /*resolution*/) const {
 
 xgc2_math::ConvexBody VPolytopeObstacle::buildOccupiedBody() const {
     xgc2_math::ConvexBody body = makeBodyMetadata(config_,
-                                                      getType(),
-                                                      currentPositionVector(),
-                                                      currentOrientationQuaternion(),
-                                                      config_.scale,
-                                                      currentVelocityVector());
+                                                  getType(),
+                                                  currentPositionVector(),
+                                                  currentOrientationQuaternion(),
+                                                  config_.scale,
+                                                  currentVelocityVector());
     body.shape = std::make_shared<xgc2_math::SupportPointSet>(
         body.position, makeRotatedOffsets(vertices_original_, body.scale, body.orientation));
     return body;

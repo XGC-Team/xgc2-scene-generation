@@ -5,10 +5,10 @@
 
 #include "cluttered_environment/scene/obstacles/primitive_obstacles.h"
 
-#include "geometry/occupied_sets/box_set.h"
-#include "geometry/occupied_sets/capsule_set.h"
-#include "geometry/occupied_sets/cylinder_set.h"
-#include "geometry/occupied_sets/sphere_set.h"
+#include "xgc2_math/geometry/occupied_sets/box_set.h"
+#include "xgc2_math/geometry/occupied_sets/capsule_set.h"
+#include "xgc2_math/geometry/occupied_sets/cylinder_set.h"
+#include "xgc2_math/geometry/occupied_sets/sphere_set.h"
 
 #include <algorithm>
 #include <cmath>
@@ -26,11 +26,11 @@ geometry_msgs::Point toGeometryPoint(const Eigen::Vector3d& point) {
 }
 
 xgc2_math::ConvexBody makeBodyMetadata(const ObstacleConfig& config,
-                                           const std::string& geometry_type,
-                                           const Eigen::Vector3d& position,
-                                           const Eigen::Quaterniond& orientation,
-                                           const Eigen::Vector3d& scale,
-                                           const Eigen::Vector3d& velocity) {
+                                       const std::string& geometry_type,
+                                       const Eigen::Vector3d& position,
+                                       const Eigen::Quaterniond& orientation,
+                                       const Eigen::Vector3d& scale,
+                                       const Eigen::Vector3d& velocity) {
     xgc2_math::ConvexBody body;
     body.id = config.id;
     body.name = config.name;
@@ -70,11 +70,11 @@ SphereObstacle::buildGeometryTemplate(int /*resolution*/) const {
 
 xgc2_math::ConvexBody SphereObstacle::buildOccupiedBody() const {
     xgc2_math::ConvexBody body = makeBodyMetadata(config_,
-                                                      getType(),
-                                                      currentPositionVector(),
-                                                      currentOrientationQuaternion(),
-                                                      config_.scale,
-                                                      currentVelocityVector());
+                                                  getType(),
+                                                  currentPositionVector(),
+                                                  currentOrientationQuaternion(),
+                                                  config_.scale,
+                                                  currentVelocityVector());
     body.shape = std::make_shared<xgc2_math::SphereSet>(body.position, body.scale.x());
     return body;
 }
@@ -143,11 +143,11 @@ xgc2_geometry_msgs::GeometryTemplate CylinderObstacle::buildGeometryTemplate(int
 
 xgc2_math::ConvexBody CylinderObstacle::buildOccupiedBody() const {
     xgc2_math::ConvexBody body = makeBodyMetadata(config_,
-                                                      getType(),
-                                                      currentPositionVector(),
-                                                      currentOrientationQuaternion(),
-                                                      config_.scale,
-                                                      currentVelocityVector());
+                                                  getType(),
+                                                  currentPositionVector(),
+                                                  currentOrientationQuaternion(),
+                                                  config_.scale,
+                                                  currentVelocityVector());
     body.shape = std::make_shared<xgc2_math::CylinderSet>(
         body.position, body.scale.x(), body.scale.z(), body.orientation);
     return body;
@@ -204,11 +204,11 @@ CapsuleObstacle::buildGeometryTemplate(int /*resolution*/) const {
 
 xgc2_math::ConvexBody CapsuleObstacle::buildOccupiedBody() const {
     xgc2_math::ConvexBody body = makeBodyMetadata(config_,
-                                                      getType(),
-                                                      currentPositionVector(),
-                                                      currentOrientationQuaternion(),
-                                                      config_.scale,
-                                                      currentVelocityVector());
+                                                  getType(),
+                                                  currentPositionVector(),
+                                                  currentOrientationQuaternion(),
+                                                  config_.scale,
+                                                  currentVelocityVector());
     body.shape = std::make_shared<xgc2_math::CapsuleSet>(
         body.position, body.scale.x(), body.scale.z(), body.orientation);
     return body;
@@ -334,13 +334,12 @@ xgc2_geometry_msgs::GeometryTemplate CubeObstacle::buildGeometryTemplate(int /*r
 
 xgc2_math::ConvexBody CubeObstacle::buildOccupiedBody() const {
     xgc2_math::ConvexBody body = makeBodyMetadata(config_,
-                                                      getType(),
-                                                      currentPositionVector(),
-                                                      currentOrientationQuaternion(),
-                                                      config_.scale,
-                                                      currentVelocityVector());
-    body.shape =
-        std::make_shared<xgc2_math::BoxSet>(body.position, body.scale, body.orientation);
+                                                  getType(),
+                                                  currentPositionVector(),
+                                                  currentOrientationQuaternion(),
+                                                  config_.scale,
+                                                  currentVelocityVector());
+    body.shape = std::make_shared<xgc2_math::BoxSet>(body.position, body.scale, body.orientation);
     return body;
 }
 

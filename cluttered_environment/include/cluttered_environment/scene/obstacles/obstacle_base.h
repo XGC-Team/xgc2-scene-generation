@@ -19,9 +19,9 @@
 #include <string>
 #include <vector>
 
-#include "geometry/occupied_sets/convex_body.h"
 #include "xgc2_geometry_msgs/ConvexBodyInstance.h"
 #include "xgc2_geometry_msgs/GeometryTemplate.h"
+#include "xgc2_math/geometry/occupied_sets/convex_body.h"
 
 namespace cluttered_environment {
 
