@@ -125,7 +125,7 @@ build_ros_package_deb \
 build_ros_package_deb \
   "${env_pkg}" \
   "cluttered_environment" \
-  "libxgc2-math-dev (>= 0.5.5-1), ${msgs_pkg} (= ${VERSION}), ros-noetic-roscpp, ros-noetic-rospy, ros-noetic-geometry-msgs, ros-noetic-std-msgs, ros-noetic-visualization-msgs, ros-noetic-tf2, ros-noetic-tf2-geometry-msgs, ros-noetic-tf2-ros, python3-yaml" \
+  "libxgc2-math-dev (>= 0.5.6-5~focal), ${msgs_pkg} (= ${VERSION}), ros-noetic-roscpp, ros-noetic-rospy, ros-noetic-geometry-msgs, ros-noetic-std-msgs, ros-noetic-visualization-msgs, ros-noetic-tf2, ros-noetic-tf2-geometry-msgs, ros-noetic-tf2-ros, python3-yaml" \
   "XGC2 cluttered simulation environment manager"
 
 build_ros_package_deb \
