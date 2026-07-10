@@ -1,7 +1,7 @@
 schema: xgc2.product.v1
 id: xgc2-scene-generation
 name: XGC2 Scene Generation
-version: 1.1.4-8
+version: 1.1.4-9
 kind: ros1-apt
 summary: ROS1 scene-generation tools for convex obstacle scenarios and procedural
   point-cloud maps.
@@ -21,10 +21,10 @@ apt:
   - ros-noetic-xgc2-cluttered-environment
   - ros-noetic-xgc2-mockamap
   depends:
-  - libxgc2-math-dev (>= 0.5.6-5~focal)
-  - ros-noetic-xgc2-geometry-msgs (>= 1.1.4-8)
-  - ros-noetic-xgc2-cluttered-environment (>= 1.1.4-8)
-  - ros-noetic-xgc2-mockamap (>= 1.1.4-8)
+  - libxgc2-math-dev (>= 0.5.6-6~focal)
+  - ros-noetic-xgc2-geometry-msgs (>= 1.1.4-9)
+  - ros-noetic-xgc2-cluttered-environment (>= 1.1.4-9)
+  - ros-noetic-xgc2-mockamap (>= 1.1.4-9)
 usage:
   install: 'sudo apt update
 

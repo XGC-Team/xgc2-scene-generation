@@ -37,12 +37,16 @@ grep -q 'xgc2-scene-generation' .xgc2/product.yml
 grep -q 'xgc2_geometry_msgs' .xgc2/product.yml
 grep -q 'cluttered_environment' .xgc2/product.yml
 grep -q 'mockamap' .xgc2/product.yml
-grep -q 'libxgc2-math-dev' .xgc2/product.yml
+grep -q 'libxgc2-math-dev (>= 0.5.6-6~focal)' .xgc2/product.yml
 grep -q 'ros-noetic-xgc2-scene-generation' .xgc2/scripts/package_debs.sh
-grep -q 'ros-noetic-xgc2-geometry-msgs' .xgc2/scripts/package_debs.sh
-grep -q 'ros-noetic-xgc2-cluttered-environment' .xgc2/scripts/package_debs.sh
-grep -q 'ros-noetic-xgc2-mockamap' .xgc2/scripts/package_debs.sh
-grep -q 'libxgc2-math-dev' .xgc2/scripts/check_installed_packages.sh
+grep -Fq 'msgs_pkg="ros-noetic-xgc2-geometry-msgs"' .xgc2/scripts/package_debs.sh
+grep -Fq 'env_pkg="ros-noetic-xgc2-cluttered-environment"' .xgc2/scripts/package_debs.sh
+grep -Fq 'mockamap_pkg="ros-noetic-xgc2-mockamap"' .xgc2/scripts/package_debs.sh
+grep -Fq '${msgs_pkg} (>= 1.1.4-9)' .xgc2/scripts/package_debs.sh
+grep -Fq '${env_pkg} (>= 1.1.4-9)' .xgc2/scripts/package_debs.sh
+grep -Fq '${mockamap_pkg} (>= 1.1.4-9)' .xgc2/scripts/package_debs.sh
+grep -Fq "dpkg --compare-versions" .xgc2/scripts/check_installed_packages.sh
+grep -Fq "0.5.6-6~focal" .xgc2/scripts/check_installed_packages.sh
 
 if find . \
   \( -path './.git' -o -path './.work' -o -path './build' -o -path './devel' -o -path './install' -o -path './vendored' \) -prune \

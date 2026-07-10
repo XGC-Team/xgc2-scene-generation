@@ -9,6 +9,8 @@ dpkg -s ros-noetic-xgc2-cluttered-environment >/dev/null
 dpkg -s ros-noetic-xgc2-geometry-msgs >/dev/null
 dpkg -s ros-noetic-xgc2-mockamap >/dev/null
 dpkg -s libxgc2-math-dev >/dev/null
+math_version="$(dpkg-query -W -f='${Version}' libxgc2-math-dev)"
+dpkg --compare-versions "${math_version}" ge '0.5.6-6~focal'
 
 test "$(rospack find xgc2_geometry_msgs)" = "/opt/ros/${ROS_DISTRO}/share/xgc2_geometry_msgs"
 test "$(rospack find cluttered_environment)" = "/opt/ros/${ROS_DISTRO}/share/cluttered_environment"
