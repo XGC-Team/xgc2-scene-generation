@@ -48,6 +48,7 @@ mkdir -p "${WORK_DIR}" "${OUTPUT_DIR}"
 
 docker pull "${DOCKER_IMAGE}"
 docker run --rm \
+  -e XGC2_APT_OVERLAY_URL="${XGC2_APT_OVERLAY_URL:-}" \
   -e DEBIAN_FRONTEND=noninteractive \
   -e INSTALL_CHECK="${INSTALL_CHECK}" \
   -e PACKAGE_VERSION="${PACKAGE_VERSION}" \
@@ -94,6 +95,12 @@ docker run --rm \
     chmod 0644 /etc/apt/keyrings/xgc2-archive-keyring.gpg
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/xgc2-archive-keyring.gpg] https://xgc2.apt.xiaokang.ink focal main" \
       > /etc/apt/sources.list.d/xgc2.list
+
+      if [[ -n "${XGC2_APT_OVERLAY_URL:-}" ]]; then
+        sed "s#https://xgc2.apt.xiaokang.ink#${XGC2_APT_OVERLAY_URL%/}#g; s#${XGC2_APT_BASE_URL:-https://xgc2.apt.xiaokang.ink}#${XGC2_APT_OVERLAY_URL%/}#g" \
+          /etc/apt/sources.list.d/xgc2.list \
+          > /etc/apt/sources.list.d/00-xgc2-release-train.list
+      fi
     apt-get update
     apt-get install -y --no-install-recommends libxgc2-math-dev
 
