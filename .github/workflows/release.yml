@@ -236,7 +236,7 @@ jobs:
           python3 .xgc2/scripts/xgc2_artifact_manifest.py verify-build \
             --artifact-dir trusted \
             --deb-output-dir debs \
-            --manifest-output-dir build-manifests \
+            --manifest-output-dir .ci/build-manifests \
             --product xgc2-scene-generation \
             --product-version "${{ inputs.expected_version }}" \
             --distribution focal \
@@ -247,6 +247,7 @@ jobs:
       - name: Build and install-check deb packages in Docker
         if: ${{ inputs.trusted_ci_run_id == '' }}
         run: |
+          install -d "$GITHUB_WORKSPACE/.ci/build-manifests"
           .xgc2/scripts/build_debs_in_docker.sh \
             --work-dir "$RUNNER_TEMP/scene-generation-${{ matrix.arch }}" \
             --output-dir "$GITHUB_WORKSPACE/debs"
@@ -256,7 +257,7 @@ jobs:
         run: |
           python3 .xgc2/scripts/xgc2_artifact_manifest.py build \
             --deb-dir debs \
-            --output-dir build-manifests \
+            --output-dir .ci/build-manifests \
             --product xgc2-scene-generation \
             --product-version "${{ inputs.expected_version }}" \
             --distribution focal \
@@ -272,7 +273,7 @@ jobs:
           name: xgc2-scene-generation-release-debs-${{ matrix.arch }}
           path: |
             debs/*.deb
-            build-manifests/*.json
+            .ci/build-manifests/*.json
           retention-days: 14
           include-hidden-files: true
 
