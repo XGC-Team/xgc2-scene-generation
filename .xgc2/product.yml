@@ -48,3 +48,6 @@ ownership:
   - /opt/ros/noetic/share/mockamap
   - /opt/ros/noetic/include/mockamap
   - /opt/ros/noetic/lib/mockamap
+release:
+  dependency_policy:
+    libxgc2-math-dev: rebuild
