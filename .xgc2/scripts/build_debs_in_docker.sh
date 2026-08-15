@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
-DOCKER_IMAGE="${DOCKER_IMAGE:-ros:noetic-ros-base-focal}"
+DOCKER_IMAGE="${DOCKER_IMAGE:-ghcr.io/xgc-team/xgc2-images/xgc2-build-focal-full-noetic:1.0.0}"
 WORK_DIR="${WORK_DIR:-${REPO_ROOT}/.work/docker}"
 OUTPUT_DIR="${OUTPUT_DIR:-${REPO_ROOT}/debs}"
 INSTALL_CHECK="${INSTALL_CHECK:-true}"
@@ -60,35 +60,7 @@ docker run --rm \
     set -euo pipefail
 
     export DEBIAN_FRONTEND=noninteractive
-    apt-get update
-    apt-get install -y --no-install-recommends \
-      build-essential \
-      ca-certificates \
-      cmake \
-      curl \
-      dpkg-dev \
-      fakeroot \
-      file \
-      git \
-      libeigen3-dev \
-      python3-yaml \
-      rsync \
-      ros-noetic-geometry-msgs \
-      ros-noetic-message-generation \
-      ros-noetic-message-runtime \
-      ros-noetic-pcl-conversions \
-      ros-noetic-pcl-ros \
-      ros-noetic-roscpp \
-      ros-noetic-rospy \
-      ros-noetic-rviz \
-      ros-noetic-sensor-msgs \
-      ros-noetic-rospack \
-      ros-noetic-std-msgs \
-      ros-noetic-tf2 \
-      ros-noetic-tf2-geometry-msgs \
-      ros-noetic-tf2-ros \
-      ros-noetic-visualization-msgs
-
+    
     install -m 0755 -d /etc/apt/keyrings
     curl -fsSL https://xgc2.apt.xiaokang.ink/xgc2-archive-keyring.gpg \
       -o /etc/apt/keyrings/xgc2-archive-keyring.gpg

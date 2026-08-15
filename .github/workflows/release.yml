@@ -139,35 +139,10 @@ jobs:
             -e CPP_QUALITY_WORK_DIR=/workspace/work \
             -v "$GITHUB_WORKSPACE:/workspace/repo:ro" \
             -v "$RUNNER_TEMP/cpp-quality:/workspace/work" \
-            ros:noetic-ros-base-focal \
+            ghcr.io/xgc-team/xgc2-images/xgc2-build-focal-ros-noetic:1.0.0 \
             bash -lc '
               set -euo pipefail
-              apt-get update
-              apt-get install -y --no-install-recommends \
-                build-essential \
-                ca-certificates \
-                clang-format \
-                clang-tidy \
-                cmake \
-                curl \
-                git \
-                libeigen3-dev \
-                rsync \
-                ros-noetic-geometry-msgs \
-                ros-noetic-message-generation \
-                ros-noetic-message-runtime \
-                ros-noetic-pcl-conversions \
-                ros-noetic-pcl-ros \
-                ros-noetic-roscpp \
-                ros-noetic-rospy \
-                ros-noetic-rviz \
-                ros-noetic-sensor-msgs \
-                ros-noetic-std-msgs \
-                ros-noetic-tf2 \
-                ros-noetic-tf2-geometry-msgs \
-                ros-noetic-tf2-ros \
-                ros-noetic-visualization-msgs
-
+              
               install -m 0755 -d /etc/apt/keyrings
               curl -fsSL https://xgc2.apt.xiaokang.ink/xgc2-archive-keyring.gpg \
                 -o /etc/apt/keyrings/xgc2-archive-keyring.gpg
@@ -197,32 +172,10 @@ jobs:
             -e ROS_PACKAGE_CHECK_WORK_DIR=/workspace/work \
             -v "$GITHUB_WORKSPACE:/workspace/repo:ro" \
             -v "$RUNNER_TEMP/package-tests:/workspace/work" \
-            ros:noetic-ros-base-focal \
+            ghcr.io/xgc-team/xgc2-images/xgc2-build-focal-ros-noetic:1.0.0 \
             bash -lc '
               set -euo pipefail
-              apt-get update
-              apt-get install -y --no-install-recommends \
-                build-essential \
-                ca-certificates \
-                cmake \
-                curl \
-                git \
-                libeigen3-dev \
-                rsync \
-                ros-noetic-geometry-msgs \
-                ros-noetic-message-generation \
-                ros-noetic-message-runtime \
-                ros-noetic-pcl-conversions \
-                ros-noetic-pcl-ros \
-                ros-noetic-roscpp \
-                ros-noetic-rospy \
-                ros-noetic-sensor-msgs \
-                ros-noetic-std-msgs \
-                ros-noetic-tf2 \
-                ros-noetic-tf2-geometry-msgs \
-                ros-noetic-tf2-ros \
-                ros-noetic-visualization-msgs
-
+              
               install -m 0755 -d /etc/apt/keyrings
               curl -fsSL https://xgc2.apt.xiaokang.ink/xgc2-archive-keyring.gpg \
                 -o /etc/apt/keyrings/xgc2-archive-keyring.gpg
