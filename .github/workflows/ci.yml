@@ -27,10 +27,9 @@ jobs:
             -e CPP_QUALITY_WORK_DIR=/workspace/work \
             -v "$GITHUB_WORKSPACE:/workspace/repo:ro" \
             -v "$RUNNER_TEMP/cpp-quality:/workspace/work" \
-            ghcr.io/xgc-team/xgc2-images/xgc2-build-focal-ros-noetic:1.0.0 \
+            ghcr.io/xgc-team/xgc2-images/xgc2-build-focal-full-noetic:1.0.0 \
             bash -lc '
               set -euo pipefail
-              
               install -m 0755 -d /etc/apt/keyrings
               curl -fsSL https://xgc2.apt.xiaokang.ink/xgc2-archive-keyring.gpg \
                 -o /etc/apt/keyrings/xgc2-archive-keyring.gpg
@@ -72,10 +71,9 @@ jobs:
             -e ROS_PACKAGE_CHECK_WORK_DIR=/workspace/work \
             -v "$GITHUB_WORKSPACE:/workspace/repo:ro" \
             -v "$RUNNER_TEMP/package-tests:/workspace/work" \
-            ghcr.io/xgc-team/xgc2-images/xgc2-build-focal-ros-noetic:1.0.0 \
+            ghcr.io/xgc-team/xgc2-images/xgc2-build-focal-full-noetic:1.0.0 \
             bash -lc '
               set -euo pipefail
-              
               install -m 0755 -d /etc/apt/keyrings
               curl -fsSL https://xgc2.apt.xiaokang.ink/xgc2-archive-keyring.gpg \
                 -o /etc/apt/keyrings/xgc2-archive-keyring.gpg

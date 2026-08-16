@@ -60,7 +60,6 @@ docker run --rm \
     set -euo pipefail
 
     export DEBIAN_FRONTEND=noninteractive
-    
     install -m 0755 -d /etc/apt/keyrings
     curl -fsSL https://xgc2.apt.xiaokang.ink/xgc2-archive-keyring.gpg \
       -o /etc/apt/keyrings/xgc2-archive-keyring.gpg
