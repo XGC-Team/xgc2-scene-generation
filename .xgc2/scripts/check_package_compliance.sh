@@ -47,6 +47,10 @@ grep -Fq '${env_pkg} (>= 1.1.4-11)' .xgc2/scripts/package_debs.sh
 grep -Fq '${mockamap_pkg} (>= 1.1.4-11)' .xgc2/scripts/package_debs.sh
 grep -Fq "dpkg --compare-versions" .xgc2/scripts/check_installed_packages.sh
 grep -Fq "0.5.6-6~focal" .xgc2/scripts/check_installed_packages.sh
+if grep -Eq '^[[:space:]]*continue-on-error:[[:space:]]*true' .github/workflows/ci.yml; then
+  echo "CI quality/test jobs must fail closed" >&2
+  exit 1
+fi
 
 if find . \
   \( -path './.git' -o -path './.work' -o -path './build' -o -path './devel' -o -path './install' -o -path './vendored' \) -prune \

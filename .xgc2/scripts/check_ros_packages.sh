@@ -25,6 +25,11 @@ if [[ ! -f "/opt/ros/${ROS_DISTRO}/setup.bash" ]]; then
   exit 1
 fi
 
+# catkin tools live under /opt/ros and are not guaranteed to be on PATH in a
+# non-interactive build container until the ROS environment is sourced.
+# shellcheck source=/dev/null
+source "/opt/ros/${ROS_DISTRO}/setup.bash"
+
 command -v catkin_make >/dev/null 2>&1 || {
   echo "required command not found: catkin_make" >&2
   exit 1
