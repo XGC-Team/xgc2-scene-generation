@@ -42,9 +42,9 @@ grep -q 'ros-noetic-xgc2-scene-generation' .xgc2/scripts/package_debs.sh
 grep -Fq 'msgs_pkg="ros-noetic-xgc2-geometry-msgs"' .xgc2/scripts/package_debs.sh
 grep -Fq 'env_pkg="ros-noetic-xgc2-cluttered-environment"' .xgc2/scripts/package_debs.sh
 grep -Fq 'mockamap_pkg="ros-noetic-xgc2-mockamap"' .xgc2/scripts/package_debs.sh
-grep -Fq '${msgs_pkg} (>= 1.1.4-11)' .xgc2/scripts/package_debs.sh
-grep -Fq '${env_pkg} (>= 1.1.4-11)' .xgc2/scripts/package_debs.sh
-grep -Fq '${mockamap_pkg} (>= 1.1.4-11)' .xgc2/scripts/package_debs.sh
+grep -Fq '${msgs_pkg} (>= 1.1.4-12)' .xgc2/scripts/package_debs.sh
+grep -Fq '${env_pkg} (>= 1.1.4-12)' .xgc2/scripts/package_debs.sh
+grep -Fq '${mockamap_pkg} (>= 1.1.4-12)' .xgc2/scripts/package_debs.sh
 grep -Fq "dpkg --compare-versions" .xgc2/scripts/check_installed_packages.sh
 grep -Fq "0.5.6-6~focal" .xgc2/scripts/check_installed_packages.sh
 if grep -Eq '^[[:space:]]*continue-on-error:[[:space:]]*true' .github/workflows/ci.yml; then
