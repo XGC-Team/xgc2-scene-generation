@@ -9,7 +9,7 @@ OUTPUT_DIR=""
 ROS_DISTRO="${ROS_DISTRO:-noetic}"
 
 product_version() {
-  awk -F': *' '/^version:[[:space:]]*/ {print $2; exit}' "${REPO_ROOT}/.xgc2/product.yml"
+  awk '/^version:/ {print $2; exit}' "${REPO_ROOT}/.xgc2/product.yml"
 }
 
 VERSION="${PACKAGE_VERSION:-$(product_version)}"
@@ -39,6 +39,11 @@ if [[ -z "${INSTALL_ROOT}" || -z "${OUTPUT_DIR}" ]]; then
   echo "--install-root and --output-dir are required" >&2
   exit 1
 fi
+
+case "${ROS_DISTRO}" in
+  melodic|noetic) ;;
+  *) echo "unsupported ROS_DISTRO: ${ROS_DISTRO}" >&2; exit 1 ;;
+esac
 
 ARCH="$(dpkg --print-architecture)"
 PREFIX="/opt/ros/${ROS_DISTRO}"
@@ -90,6 +95,8 @@ copy_ros_package_paths() {
   copy_path "${PREFIX_ROOT}/share/${ros_pkg}" "${dst_root}"
   copy_path "${PREFIX_ROOT}/include/${ros_pkg}" "${dst_root}"
   copy_path "${PREFIX_ROOT}/lib/${ros_pkg}" "${dst_root}"
+  copy_path "${PREFIX_ROOT}/lib/pkgconfig/${ros_pkg}.pc" "${dst_root}"
+  copy_path "${PREFIX_ROOT}/lib/python2.7/dist-packages/${ros_pkg}" "${dst_root}"
   copy_path "${PREFIX_ROOT}/lib/python3/dist-packages/${ros_pkg}" "${dst_root}"
   copy_path "${PREFIX_ROOT}/share/gennodejs/ros/${ros_pkg}" "${dst_root}"
   copy_path "${PREFIX_ROOT}/share/common-lisp/ros/${ros_pkg}" "${dst_root}"
@@ -106,12 +113,15 @@ build_ros_package_deb() {
   rm -rf "${pkg_root}"
   mkdir -p "${pkg_root}"
 
+  test -f "${PREFIX_ROOT}/share/${ros_pkg}/package.xml" || {
+    echo "missing installed ROS package: ${ros_pkg}" >&2; exit 1;
+  }
   copy_ros_package_paths "${ros_pkg}" "${pkg_root}"
   write_control "${pkg_root}" "${package}" "${depends}" "${description}"
   fakeroot dpkg-deb --build "${pkg_root}" "${OUTPUT_DIR}/${package}_${VERSION}_${ARCH}.deb" >/dev/null
 }
 
-msgs_pkg="ros-noetic-xgc2-geometry-msgs"
+msgs_pkg="ros-${ROS_DISTRO}-xgc2-geometry-msgs"
 env_pkg="ros-noetic-xgc2-cluttered-environment"
 mockamap_pkg="ros-noetic-xgc2-mockamap"
 meta_pkg="ros-noetic-xgc2-scene-generation"
@@ -119,8 +129,12 @@ meta_pkg="ros-noetic-xgc2-scene-generation"
 build_ros_package_deb \
   "${msgs_pkg}" \
   "xgc2_geometry_msgs" \
-  "ros-noetic-message-runtime, ros-noetic-geometry-msgs, ros-noetic-std-msgs" \
+  "ros-${ROS_DISTRO}-message-runtime, ros-${ROS_DISTRO}-geometry-msgs, ros-${ROS_DISTRO}-std-msgs" \
   "XGC2 convex geometry template and obstacle instance messages"
+
+if [[ "${ROS_DISTRO}" == "melodic" ]]; then
+  exit 0
+fi
 
 build_ros_package_deb \
   "${env_pkg}" \

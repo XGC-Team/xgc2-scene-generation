@@ -27,8 +27,10 @@ fi
 
 # catkin tools live under /opt/ros and are not guaranteed to be on PATH in a
 # non-interactive build container until the ROS environment is sourced.
+set +u
 # shellcheck source=/dev/null
 source "/opt/ros/${ROS_DISTRO}/setup.bash"
+set -u
 
 command -v catkin_make >/dev/null 2>&1 || {
   echo "required command not found: catkin_make" >&2
@@ -46,13 +48,21 @@ command -v rsync >/dev/null 2>&1 || {
 rm -rf "${WORK_DIR}/src" "${WORK_DIR}/build" "${WORK_DIR}/devel"
 mkdir -p "${WORK_DIR}/src"
 rsync -a --delete "${REPO_ROOT}/xgc2_geometry_msgs/" "${WORK_DIR}/src/xgc2_geometry_msgs/"
-rsync -a --delete "${REPO_ROOT}/cluttered_environment/" "${WORK_DIR}/src/cluttered_environment/"
-rsync -a --delete "${REPO_ROOT}/mockamap/" "${WORK_DIR}/src/mockamap/"
+case "${ROS_DISTRO}" in
+  melodic) ;;
+  noetic)
+    rsync -a --delete "${REPO_ROOT}/cluttered_environment/" "${WORK_DIR}/src/cluttered_environment/"
+    rsync -a --delete "${REPO_ROOT}/mockamap/" "${WORK_DIR}/src/mockamap/"
+    ;;
+  *) echo "unsupported ROS_DISTRO: ${ROS_DISTRO}" >&2; exit 1 ;;
+esac
 
 (
   cd "${WORK_DIR}"
+  set +u
   # shellcheck source=/dev/null
   source "/opt/ros/${ROS_DISTRO}/setup.bash"
+  set -u
   catkin_make \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo \
     -DCATKIN_ENABLE_TESTING=ON

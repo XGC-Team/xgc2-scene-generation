@@ -2,7 +2,25 @@
 set -euo pipefail
 
 ROS_DISTRO="${ROS_DISTRO:-noetic}"
+set +u
+# shellcheck source=/dev/null
 source "/opt/ros/${ROS_DISTRO}/setup.bash"
+set -u
+
+dpkg -s "ros-${ROS_DISTRO}-xgc2-geometry-msgs" >/dev/null
+test "$(rospack find xgc2_geometry_msgs)" = "/opt/ros/${ROS_DISTRO}/share/xgc2_geometry_msgs"
+test -f "/opt/ros/${ROS_DISTRO}/include/xgc2_geometry_msgs/ConvexBodyArray.h"
+rosmsg show xgc2_geometry_msgs/GeometryLibrary >/dev/null
+rosmsg show xgc2_geometry_msgs/ConvexBodyArray >/dev/null
+case "${ROS_DISTRO}" in
+  melodic)
+    python2 -c "from xgc2_geometry_msgs.msg import GeometryLibrary, ConvexBodyArray"
+    echo "Installed Melodic message package check passed"
+    exit 0
+    ;;
+  noetic) python3 -c "from xgc2_geometry_msgs.msg import GeometryLibrary, ConvexBodyArray" ;;
+  *) echo "unsupported ROS_DISTRO: ${ROS_DISTRO}" >&2; exit 1 ;;
+esac
 
 dpkg -s ros-noetic-xgc2-scene-generation >/dev/null
 dpkg -s ros-noetic-xgc2-cluttered-environment >/dev/null

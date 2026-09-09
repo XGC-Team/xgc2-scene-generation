@@ -1,115 +1,41 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2016,SC1004
 set -euo pipefail
+# Literal scripts below are expanded by Bash inside the build container.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-
-DOCKER_IMAGE="${DOCKER_IMAGE:-ghcr.io/xgc-team/xgc2-images/xgc2-build-focal-full-noetic:1.0.0}"
-WORK_DIR="${WORK_DIR:-${REPO_ROOT}/.work/docker}"
-OUTPUT_DIR="${OUTPUT_DIR:-${REPO_ROOT}/debs}"
-INSTALL_CHECK="${INSTALL_CHECK:-true}"
-
-product_version() {
-  awk -F': *' '/^version:[[:space:]]*/ {print $2; exit}' "${REPO_ROOT}/.xgc2/product.yml"
-}
-
-PACKAGE_VERSION="${PACKAGE_VERSION:-$(product_version)}"
-if [[ -z "${PACKAGE_VERSION}" ]]; then
-  echo "package version is missing; set PACKAGE_VERSION or .xgc2/product.yml version" >&2
-  exit 1
-fi
-
+export PACKAGE_VERSION="${PACKAGE_VERSION:-$(awk '/^version:/ {print $2; exit}' "${REPO_ROOT}/.xgc2/product.yml")}"
+[[ -n "${PACKAGE_VERSION}" ]] || { echo "package version is missing" >&2; exit 1; }
+export INSTALL_CHECK="${INSTALL_CHECK:-true}"
+container_args=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --image)
-      DOCKER_IMAGE="$2"
-      shift 2
-      ;;
-    --work-dir)
-      WORK_DIR="$2"
-      shift 2
-      ;;
-    --output-dir)
-      OUTPUT_DIR="$2"
-      shift 2
-      ;;
-    --skip-install-check)
-      INSTALL_CHECK=false
-      shift
-      ;;
-    *)
-      echo "unknown argument: $1" >&2
-      exit 1
-      ;;
+    --skip-install-check) export INSTALL_CHECK=false; shift ;;
+    --image|--work-dir|--output-dir) container_args+=("$1" "$2"); shift 2 ;;
+    *) echo "unknown argument: $1" >&2; exit 1 ;;
   esac
 done
-
-mkdir -p "${WORK_DIR}" "${OUTPUT_DIR}"
-
-docker pull "${DOCKER_IMAGE}"
-docker run --rm \
-  -e XGC2_APT_OVERLAY_URL="${XGC2_APT_OVERLAY_URL:-}" \
-  -e DEBIAN_FRONTEND=noninteractive \
-  -e INSTALL_CHECK="${INSTALL_CHECK}" \
-  -e PACKAGE_VERSION="${PACKAGE_VERSION}" \
-  -v "${REPO_ROOT}:/workspace/scene-generation:ro" \
-  -v "${WORK_DIR}:/workspace/work" \
-  -v "${OUTPUT_DIR}:/workspace/out" \
-  "${DOCKER_IMAGE}" \
-  bash -lc '
-    set -euo pipefail
-
-    export DEBIAN_FRONTEND=noninteractive
-    install -m 0755 -d /etc/apt/keyrings
-    curl -fsSL https://xgc2.apt.xiaokang.ink/xgc2-archive-keyring.gpg \
-      -o /etc/apt/keyrings/xgc2-archive-keyring.gpg
-    chmod 0644 /etc/apt/keyrings/xgc2-archive-keyring.gpg
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/xgc2-archive-keyring.gpg] https://xgc2.apt.xiaokang.ink focal main" \
-      > /etc/apt/sources.list.d/xgc2.list
-
-      if [[ -n "${XGC2_APT_OVERLAY_URL:-}" ]]; then
-        sed "s#${XGC2_APT_BASE_URL:-https://xgc2.apt.xiaokang.ink}#${XGC2_APT_OVERLAY_URL%/}#g" \
-          /etc/apt/sources.list.d/xgc2.list \
-          > /etc/apt/sources.list.d/00-xgc2-release-train.list
-      fi
-    apt-get update
-    apt-get install -y --no-install-recommends libxgc2-math-dev
-
-    rm -rf /workspace/work/src /workspace/work/build /workspace/work/devel /workspace/work/install-root
-    mkdir -p /workspace/work/src
-    rsync -a --delete /workspace/scene-generation/xgc2_geometry_msgs/ /workspace/work/src/xgc2_geometry_msgs/
-    rsync -a --delete /workspace/scene-generation/cluttered_environment/ /workspace/work/src/cluttered_environment/
-    rsync -a --delete /workspace/scene-generation/mockamap/ /workspace/work/src/mockamap/
-
-    cd /workspace/work
-    source /opt/ros/noetic/setup.bash
-
-    catkin_make \
-      -DCMAKE_INSTALL_PREFIX=/opt/ros/noetic \
-      -DCMAKE_BUILD_TYPE=Release \
-      -DCMAKE_CXX_FLAGS_RELEASE="-O3 -DNDEBUG" \
-      -DCMAKE_C_FLAGS_RELEASE="-O3 -DNDEBUG"
-
-    DESTDIR=/workspace/work/install-root catkin_make install \
-      -DCMAKE_INSTALL_PREFIX=/opt/ros/noetic \
-      -DCMAKE_BUILD_TYPE=Release \
-      -DCATKIN_ENABLE_TESTING=OFF \
-      -DCMAKE_CXX_FLAGS_RELEASE="-O3 -DNDEBUG" \
-      -DCMAKE_C_FLAGS_RELEASE="-O3 -DNDEBUG"
-
-    /workspace/scene-generation/.xgc2/scripts/package_debs.sh \
-      --install-root /workspace/work/install-root \
-      --output-dir /workspace/out
-
-    if [[ "${INSTALL_CHECK}" == "true" ]]; then
-      apt-get install -y \
-        /workspace/out/ros-noetic-xgc2-scene-generation_*.deb \
-        /workspace/out/ros-noetic-xgc2-geometry-msgs_*.deb \
-        /workspace/out/ros-noetic-xgc2-cluttered-environment_*.deb \
-        /workspace/out/ros-noetic-xgc2-mockamap_*.deb
-      /workspace/scene-generation/.xgc2/scripts/check_installed_packages.sh
-    fi
-  '
-
-echo "Debian package output:"
-find "${OUTPUT_DIR}" -maxdepth 1 -type f -name "*.deb" -print | sort
+"${SCRIPT_DIR}/run_in_build_container.sh" "${container_args[@]}" -- bash -c '
+  set -euo pipefail
+  case "${ROS_DISTRO}" in
+    melodic) packages=(xgc2_geometry_msgs) ;;
+    noetic) packages=(xgc2_geometry_msgs cluttered_environment mockamap) ;;
+    *) echo "unsupported ROS_DISTRO: ${ROS_DISTRO}" >&2; exit 1 ;;
+  esac
+  rm -rf /workspace/work/src /workspace/work/build /workspace/work/devel /workspace/work/install-root
+  mkdir -p /workspace/work/src
+  for package in "${packages[@]}"; do
+    rsync -a --delete "/workspace/scene-generation/${package}/" "/workspace/work/src/${package}/"
+  done
+  cd /workspace/work
+  set +u
+  source "/opt/ros/${ROS_DISTRO}/setup.bash"
+  set -u
+  DESTDIR=/workspace/work/install-root catkin_make install \
+    -DCMAKE_INSTALL_PREFIX="/opt/ros/${ROS_DISTRO}" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCATKIN_ENABLE_TESTING=OFF
+  /workspace/scene-generation/.xgc2/scripts/package_debs.sh \
+    --install-root /workspace/work/install-root --output-dir /workspace/out
+'

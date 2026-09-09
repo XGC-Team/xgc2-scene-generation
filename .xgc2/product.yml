@@ -1,21 +1,29 @@
 schema: xgc2.product.v1
 id: xgc2-scene-generation
 name: XGC2 Scene Generation
-version: 1.1.4-13
+version: 1.1.4-14
 kind: ros1-apt
 summary: ROS1 scene-generation tools for convex obstacle scenarios and procedural
   point-cloud maps.
 ros:
-  distro: noetic
+  distro: melodic,noetic
   packages:
   - xgc2_geometry_msgs
   - cluttered_environment
   - mockamap
 apt:
-  distribution: focal
+  distribution: bionic,focal
   install:
+  - ros-melodic-xgc2-geometry-msgs
   - ros-noetic-xgc2-scene-generation
+  package_distributions:
+    ros-melodic-xgc2-geometry-msgs: [bionic]
+    ros-noetic-xgc2-scene-generation: [focal]
+    ros-noetic-xgc2-geometry-msgs: [focal]
+    ros-noetic-xgc2-cluttered-environment: [focal]
+    ros-noetic-xgc2-mockamap: [focal]
   packages:
+  - ros-melodic-xgc2-geometry-msgs
   - ros-noetic-xgc2-scene-generation
   - ros-noetic-xgc2-geometry-msgs
   - ros-noetic-xgc2-cluttered-environment
@@ -27,6 +35,8 @@ apt:
   - ros-noetic-xgc2-mockamap (>= 1.1.4-11)
 usage:
   install: 'sudo apt update
+
+    sudo apt install ros-melodic-xgc2-geometry-msgs
 
     sudo apt install ros-noetic-xgc2-scene-generation
 
@@ -40,6 +50,12 @@ usage:
     '
 ownership:
   paths:
+  - /opt/ros/melodic/share/xgc2_geometry_msgs
+  - /opt/ros/melodic/include/xgc2_geometry_msgs
+  - /opt/ros/melodic/lib/python2.7/dist-packages/xgc2_geometry_msgs
+  - /opt/ros/melodic/lib/pkgconfig/xgc2_geometry_msgs.pc
+  - /opt/ros/noetic/lib/python3/dist-packages/xgc2_geometry_msgs
+  - /opt/ros/noetic/lib/pkgconfig/xgc2_geometry_msgs.pc
   - /opt/ros/noetic/share/xgc2_geometry_msgs
   - /opt/ros/noetic/include/xgc2_geometry_msgs
   - /opt/ros/noetic/share/cluttered_environment
