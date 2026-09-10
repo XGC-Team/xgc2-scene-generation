@@ -124,6 +124,7 @@ build_ros_package_deb() {
 msgs_pkg="ros-${ROS_DISTRO}-xgc2-geometry-msgs"
 env_pkg="ros-noetic-xgc2-cluttered-environment"
 mockamap_pkg="ros-noetic-xgc2-mockamap"
+scene_pkg="ros-noetic-xgc2-scene-runtime"
 meta_pkg="ros-noetic-xgc2-scene-generation"
 
 build_ros_package_deb \
@@ -148,13 +149,19 @@ build_ros_package_deb \
   "ros-noetic-roscpp, ros-noetic-sensor-msgs, ros-noetic-pcl-ros, ros-noetic-pcl-conversions, ros-noetic-rviz" \
   "XGC2 procedural point-cloud map generator"
 
+build_ros_package_deb \
+  "${scene_pkg}" \
+  "xgc2_scene_runtime" \
+  "${msgs_pkg} (= ${VERSION}), ros-noetic-rospy, ros-noetic-geometry-msgs, ros-noetic-std-msgs, ros-noetic-visualization-msgs, ros-noetic-tf2-ros, python3-yaml" \
+  "XGC2 independent obstacle scene runtime and YAML authoring"
+
 meta_root="${BUILD_DIR}/${meta_pkg}"
 rm -rf "${meta_root}"
 mkdir -p "${meta_root}"
 write_control \
   "${meta_root}" \
   "${meta_pkg}" \
-  "${msgs_pkg} (>= 1.1.4-12), ${env_pkg} (>= 1.1.4-12), ${mockamap_pkg} (>= 1.1.4-12)" \
+  "${scene_pkg} (= ${VERSION}), ${msgs_pkg} (>= 1.1.4-12), ${env_pkg} (>= 1.1.4-12), ${mockamap_pkg} (>= 1.1.4-12)" \
   "XGC2 scene generation package set"
 fakeroot dpkg-deb --build "${meta_root}" "${OUTPUT_DIR}/${meta_pkg}_${VERSION}_${ARCH}.deb" >/dev/null
 

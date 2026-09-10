@@ -1,7 +1,7 @@
 schema: xgc2.product.v1
 id: xgc2-scene-generation
 name: XGC2 Scene Generation
-version: 1.1.4-14
+version: 1.2.0-1
 kind: ros1-apt
 summary: ROS1 scene-generation tools for convex obstacle scenarios and procedural
   point-cloud maps.
@@ -11,6 +11,7 @@ ros:
   - xgc2_geometry_msgs
   - cluttered_environment
   - mockamap
+  - xgc2_scene_runtime
 apt:
   distribution: bionic,focal
   install:
@@ -22,13 +23,16 @@ apt:
     ros-noetic-xgc2-geometry-msgs: [focal]
     ros-noetic-xgc2-cluttered-environment: [focal]
     ros-noetic-xgc2-mockamap: [focal]
+    ros-noetic-xgc2-scene-runtime: [focal]
   packages:
   - ros-melodic-xgc2-geometry-msgs
   - ros-noetic-xgc2-scene-generation
   - ros-noetic-xgc2-geometry-msgs
   - ros-noetic-xgc2-cluttered-environment
   - ros-noetic-xgc2-mockamap
+  - ros-noetic-xgc2-scene-runtime
   depends:
+  - ros-noetic-xgc2-scene-runtime (>= 1.2.0-1)
   - libxgc2-math-dev (>= 0.5.6-6~focal)
   - ros-noetic-xgc2-geometry-msgs (>= 1.1.4-11)
   - ros-noetic-xgc2-cluttered-environment (>= 1.1.4-11)
@@ -61,6 +65,10 @@ ownership:
   - /opt/ros/noetic/share/cluttered_environment
   - /opt/ros/noetic/include/cluttered_environment
   - /opt/ros/noetic/lib/cluttered_environment
+  - /opt/ros/noetic/share/xgc2_scene_runtime
+  - /opt/ros/noetic/lib/xgc2_scene_runtime
+  - /opt/ros/noetic/lib/python3/dist-packages/xgc2_scene_runtime
+  - /opt/ros/noetic/lib/pkgconfig/xgc2_scene_runtime.pc
   - /opt/ros/noetic/share/mockamap
   - /opt/ros/noetic/include/mockamap
   - /opt/ros/noetic/lib/mockamap

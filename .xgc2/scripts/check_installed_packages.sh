@@ -12,6 +12,8 @@ test "$(rospack find xgc2_geometry_msgs)" = "/opt/ros/${ROS_DISTRO}/share/xgc2_g
 test -f "/opt/ros/${ROS_DISTRO}/include/xgc2_geometry_msgs/ConvexBodyArray.h"
 rosmsg show xgc2_geometry_msgs/GeometryLibrary >/dev/null
 rosmsg show xgc2_geometry_msgs/ConvexBodyArray >/dev/null
+rosmsg show xgc2_geometry_msgs/SceneSnapshot >/dev/null
+rossrv show xgc2_geometry_msgs/SceneCommand >/dev/null
 case "${ROS_DISTRO}" in
   melodic)
     python2 -c "from xgc2_geometry_msgs.msg import GeometryLibrary, ConvexBodyArray"
@@ -23,6 +25,9 @@ case "${ROS_DISTRO}" in
 esac
 
 dpkg -s ros-noetic-xgc2-scene-generation >/dev/null
+dpkg -s ros-noetic-xgc2-scene-runtime >/dev/null
+test -x "/opt/ros/noetic/lib/xgc2_scene_runtime/scene_node"
+python3 -c "from xgc2_scene_runtime.store import SceneStore; from xgc2_geometry_msgs.srv import SceneCommand"
 dpkg -s ros-noetic-xgc2-cluttered-environment >/dev/null
 dpkg -s ros-noetic-xgc2-geometry-msgs >/dev/null
 dpkg -s ros-noetic-xgc2-mockamap >/dev/null

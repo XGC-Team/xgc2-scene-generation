@@ -21,7 +21,7 @@ class PackageDebsTest(unittest.TestCase):
         prefix = install / "opt" / "ros" / distro
         # Include the environment packages even in Melodic's fixture: their
         # presence must never silently expand that suite's declared install set.
-        packages = ["cluttered_environment", "mockamap"]
+        packages = ["cluttered_environment", "mockamap", "xgc2_scene_runtime"]
         if include_messages:
             packages.append("xgc2_geometry_msgs")
         python_dir = "python2.7" if distro == "melodic" else "python3"
@@ -69,7 +69,7 @@ class PackageDebsTest(unittest.TestCase):
         actual = {subprocess.check_output(["dpkg-deb", "-f", str(deb), "Package"], universal_newlines=True).strip()
                   for deb in output.glob("*.deb")}
         self.assertEqual(actual, {"ros-noetic-xgc2-" + name for name in
-                                 ["geometry-msgs", "cluttered-environment", "mockamap", "scene-generation"]})
+                                 ["geometry-msgs", "cluttered-environment", "mockamap", "scene-generation", "scene-runtime"]})
 
     def test_missing_message_install_fails_instead_of_empty_deb(self):
         _, _, result = self.assemble("melodic", include_messages=False)

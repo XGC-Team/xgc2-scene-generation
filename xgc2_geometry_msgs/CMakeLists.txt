@@ -13,7 +13,16 @@ add_message_files(
   GeometryLibrary.msg
   ConvexBodyInstance.msg
   ConvexBodyArray.msg
+  SceneGeometry.msg
+  ScenePart.msg
+  SceneObstacle.msg
+  SceneSnapshot.msg
+  SceneObstacleState.msg
+  SceneState.msg
+  SceneConsumerStatus.msg
 )
+
+add_service_files(FILES ApplyScene.srv SceneCommand.srv)
 
 generate_messages(
   DEPENDENCIES

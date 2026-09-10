@@ -1,0 +1,4 @@
+string command_json
+---
+bool success
+string result_json

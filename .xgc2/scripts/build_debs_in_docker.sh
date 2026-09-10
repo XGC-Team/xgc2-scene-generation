@@ -20,7 +20,7 @@ done
   set -euo pipefail
   case "${ROS_DISTRO}" in
     melodic) packages=(xgc2_geometry_msgs) ;;
-    noetic) packages=(xgc2_geometry_msgs cluttered_environment mockamap) ;;
+    noetic) packages=(xgc2_geometry_msgs cluttered_environment mockamap xgc2_scene_runtime) ;;
     *) echo "unsupported ROS_DISTRO: ${ROS_DISTRO}" >&2; exit 1 ;;
   esac
   rm -rf /workspace/work/src /workspace/work/build /workspace/work/devel /workspace/work/install-root
