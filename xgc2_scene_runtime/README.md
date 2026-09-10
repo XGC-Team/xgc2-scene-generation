@@ -73,12 +73,20 @@ with a complete `document`, `undo`, `redo`, `save`, `play`, `pause`, `reset`, an
 
 The response reports `success`, an optional `error`, `epoch`, `revision`,
 `document`, `savedRevision`, `dirty`, `playing`, `sceneTime`, `online`,
-`synchronized`, and consumer statuses. An accepted edit and a saved file are
-separate facts. Consumers acknowledge actual application; unsupported motion or
-geometry remains an explicit failure. Revisions can have gaps after failed
-transport attempts. `resync` reapplies the accepted document at a new revision
-after partial simulator failure or a lost reply without adding undo history or
-changing the saved document.
+`synchronized`, `syncRetryable`, and consumer statuses. An accepted edit and a
+saved file are separate facts. Each live consumer reports explicit `applied`
+(this epoch/revision is in that consumer) and `operational` (it can perform its
+operation). `success` on a consumer is only a derived copy of `applied`.
+`capability` is `""`, `ok`, or `unsupported`. `synchronized` is the conjunction of
+live consumers' `applied` plus matching epoch/revision. `syncRetryable` is true
+only for version lag or apply transport failure. A declared `unsupported`
+capability is not retryable and must not be presented as a sync miss. Exited
+members expire after 3 s of receipt silence (monotonic clock). `resync` reapplies
+the accepted document at a new revision after partial simulator failure or a lost
+reply without adding undo history or changing the saved document.
+
+Publishers of `SceneConsumerStatus` must set `applied` and `operational`
+explicitly and set `success` equal to `applied`. Receivers ignore `success`.
 
 Every accepted geometry edit, including undo/redo, atomically writes back the loaded
 YAML. `save` retries a failed write to that same file. External file changes reject

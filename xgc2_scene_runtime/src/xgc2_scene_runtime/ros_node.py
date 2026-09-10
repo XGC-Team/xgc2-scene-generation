@@ -15,6 +15,7 @@ from xgc2_geometry_msgs.msg import (
 )
 from xgc2_geometry_msgs.srv import ApplyScene, SceneCommand, SceneCommandResponse
 
+from .consumers import ConsumerRegistry
 from .document import SceneError
 from .store import MAX_DOCUMENT_BYTES, SceneStore, load, unique_object
 
@@ -57,7 +58,7 @@ class SceneNode:
         source = rospy.get_param('~scene_file')
         initial, source_digest = load(source)
         self.gazebo = bool(rospy.get_param('~gazebo', True))
-        self.consumers = {}
+        self.registry = ConsumerRegistry()
         self.consumer_lock = threading.RLock()
         self.online = True
         self.snapshot_pub = rospy.Publisher('snapshot', SceneSnapshot, queue_size=1, latch=True)
@@ -92,34 +93,51 @@ class SceneNode:
         except SceneError as error:
             self.gazebo_failure(epoch, revision, str(error))
             raise
-        with self.consumer_lock:
-            self.consumers['gazebo'] = {'consumer': 'gazebo', 'epoch': epoch, 'revision': revision,
-                                       'success': True, 'message': result.message}
+        self._remember({
+            'consumer': 'gazebo', 'epoch': epoch, 'revision': revision,
+            'applied': True, 'operational': True, 'capability': 'ok',
+            'message': result.message, 'header_stamp': rospy.Time.now().to_sec(),
+        })
 
     def gazebo_failure(self, epoch, revision, message):
         # A failed factory operation can leave a partially changed simulator.
         # The accepted document stays intact, but the old success must not mask this.
+        self._remember({
+            'consumer': 'gazebo', 'epoch': epoch, 'revision': revision,
+            'applied': False, 'operational': False, 'capability': '',
+            'message': message, 'header_stamp': rospy.Time.now().to_sec(),
+        })
+
+    def _remember(self, report):
         with self.consumer_lock:
-            self.consumers['gazebo'] = {'consumer': 'gazebo', 'epoch': epoch, 'revision': revision,
-                                       'success': False, 'message': message}
+            self.registry.update(report)
 
     def envelope(self):
         result = self.store.envelope()
         with self.consumer_lock:
-            result['consumers'] = copy.deepcopy(list(self.consumers.values()))
+            public = self.registry.public(result['epoch'], result['revision'])
+        result['consumers'] = public['consumers']
         result['online'] = self.online
-        result['synchronized'] = all(item['success'] and item['epoch'] == result['epoch'] and item['revision'] == result['revision'] for item in result['consumers'])
+        result['synchronized'] = public['synchronized']
+        result['syncRetryable'] = public['syncRetryable']
         return result
 
     def publish_document(self):
         self.document_pub.publish(String(json.dumps(self.envelope(), ensure_ascii=False, allow_nan=False)))
 
     def consumer_status(self, message):
-        # Store the latest reported version; mismatches remain visible, not promoted to success.
-        with self.consumer_lock:
-            self.consumers[message.consumer] = {'consumer': message.consumer, 'epoch': message.epoch,
-                                                'revision': message.revision, 'success': message.success,
-                                                'message': message.message}
+        # Store the latest reported version; mismatches remain visible, not promoted to applied.
+        # Capability gaps stay listed while the consumer is alive; exited members expire.
+        # success on the ROS message is ignored; applied and operational are the facts.
+        stamp = 0.0
+        if message.header.stamp:
+            stamp = message.header.stamp.to_sec()
+        self._remember({
+            'consumer': message.consumer, 'epoch': message.epoch, 'revision': message.revision,
+            'applied': message.applied, 'operational': message.operational,
+            'capability': message.capability, 'generation': message.generation,
+            'message': message.message, 'header_stamp': stamp,
+        })
         self.publish_document()
 
     def command(self, request):
@@ -219,6 +237,10 @@ class SceneNode:
         return [marker]
 
     def tick(self, _event):
+        with self.consumer_lock:
+            dropped = self.registry.expire()
+        if dropped:
+            self.publish_document()
         with self.store.lock:
             message = SceneState()
             message.header.stamp = rospy.Time.now()
