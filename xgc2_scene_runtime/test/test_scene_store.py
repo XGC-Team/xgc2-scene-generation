@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 import yaml
 
@@ -99,23 +100,56 @@ class SceneStoreTest(unittest.TestCase):
         self.assertEqual(len(store.document['obstacles']), 1)
         self.assertEqual(store.undo_stack, [])
 
-    def test_save_roundtrip_and_external_edit_protection(self):
+    def test_edits_undo_and_redo_automatically_survive_restart(self):
         with tempfile.TemporaryDirectory() as root:
             source = Path(root)/'scene.yaml'
             source.write_text(yaml.safe_dump(scene(box())))
             source.chmod(0o640)
             store = SceneStore(load(source)[0], source=source)
-            self.assertTrue(command(store, 'add', obstacle=box('new'))['success'])
+            for operation, values in [('add', {'obstacle': box('new')}), ('undo', {}), ('redo', {})]:
+                result = command(store, operation, **values)
+                self.assertTrue(result['success'], result)
+                self.assertFalse(result['dirty'])
+                self.assertEqual(result['savedRevision'], result['revision'])
+                self.assertEqual(SceneStore(load(source)[0], source=source).document, store.document)
+            self.assertEqual(source.stat().st_mode & 0o777, 0o640)
+
+    def test_agent_file_edits_require_reload_and_are_never_overwritten(self):
+        with tempfile.TemporaryDirectory() as root:
+            source = Path(root)/'scene.yaml'
+            source.write_text(yaml.safe_dump(scene(box())))
+            store = SceneStore(load(source)[0], source=source)
+            external = yaml.safe_dump(scene(box('agent')))
+            source.write_text(external)
+            result = command(store, 'clear')
+            self.assertFalse(result['success'])
+            self.assertIn('reload YAML', result['error'])
+            self.assertEqual(store.revision, 1)
+            self.assertEqual(source.read_text(), external)
+            self.assertFalse(command(store, 'save')['success'])
+            self.assertTrue(command(store, 'reload')['success'])
+            self.assertEqual(store.document['obstacles'][0]['id'], 'agent')
+            self.assertTrue(command(store, 'add', obstacle=box('human'))['success'])
+            self.assertEqual([o['id'] for o in load(source)[0]['obstacles']], ['agent', 'human'])
+            self.assertFalse(command(store, 'save', path='another.yaml')['success'])
+
+    def test_save_failure_keeps_live_edit_and_retry_does_not_apply_it_twice(self):
+        with tempfile.TemporaryDirectory() as root:
+            source = Path(root)/'scene.yaml'
+            source.write_text(yaml.safe_dump(scene(box())))
+            store = SceneStore(load(source)[0], source=source)
+            request = dict(requestId='edit', expectedEpoch=store.epoch, expectedRevision=1,
+                           operation='add', obstacle=box('new'))
+            with mock.patch('xgc2_scene_runtime.store.os.replace', side_effect=OSError('disk full')):
+                result = store.command(request)
+            self.assertFalse(result['success'])
+            self.assertTrue(result['dirty'])
+            self.assertIn('Live scene updated', result['error'])
+            self.assertEqual(len(store.document['obstacles']), 2)
+            self.assertEqual(len(load(source)[0]['obstacles']), 1)
+            self.assertEqual(store.command(request), result)
             self.assertTrue(command(store, 'save')['success'])
             self.assertEqual(load(source)[0], store.document)
-            self.assertEqual(source.stat().st_mode & 0o777, 0o640)
-            source.write_text('# external owner changed file\n'+source.read_text())
-            self.assertTrue(command(store, 'clear')['success'])
-            self.assertFalse(command(store, 'save')['success'])
-            self.assertEqual(store.document['obstacles'], [])
-            self.assertTrue(store.envelope()['dirty'])
-            self.assertFalse(command(store, 'save', path='../escape.yaml')['success'])
-            self.assertTrue(command(store, 'save', path='new-scene.yaml')['success'])
             self.assertFalse(store.envelope()['dirty'])
 
     def test_lost_reply_and_partial_apply_recover_without_reusing_revision(self):

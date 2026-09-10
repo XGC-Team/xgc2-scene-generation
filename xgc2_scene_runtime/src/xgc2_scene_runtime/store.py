@@ -98,7 +98,7 @@ class SceneStore:
     def command(self, request):
         with self.lock:
             try:
-                fields(request, ('requestId', 'expectedEpoch', 'expectedRevision', 'operation', 'obstacle', 'id', 'document', 'path'), ('operation',))
+                fields(request, ('requestId', 'expectedEpoch', 'expectedRevision', 'operation', 'obstacle', 'id', 'document'), ('operation',))
                 if request['operation'] == 'get':
                     return dict(self.envelope(), success=True)
                 rid = identifier(request.get('requestId'), 'Request ID')
@@ -110,8 +110,11 @@ class SceneStore:
                     return copy.deepcopy(previous[1])
                 if request.get('expectedEpoch') != self.epoch or type(request.get('expectedRevision')) is not int or request['expectedRevision'] != self.revision:
                     raise SceneError('Scene changed; refresh before editing')
-                self._execute(request)
-                result = dict(self.envelope(), success=True)
+                try:
+                    self._execute(request)
+                    result = dict(self.envelope(), success=True)
+                except (SceneError, OSError, ValueError, TypeError) as error:
+                    result = dict(self.envelope(), success=False, error=str(error))
                 self.requests[rid] = (fingerprint, result)
                 while len(self.requests) > 256:
                     self.requests.popitem(last=False)
@@ -125,7 +128,20 @@ class SceneStore:
             self.revision = self._apply(self.document)
             return
         if operation == 'save':
-            self._save(request.get('path'))
+            self._save()
+            return
+        if operation == 'reload':
+            if self.source is None:
+                raise SceneError('This scene has no source YAML configured')
+            replacement, source_digest = load(self.source)
+            revision = self._apply(replacement)
+            self.document = replacement
+            self.revision = revision
+            self.saved_document = copy.deepcopy(replacement)
+            self.saved_revision = revision
+            self.file_digests[self.source] = source_digest
+            self.undo_stack.clear()
+            self.redo_stack.clear()
             return
         if operation in ('play', 'pause', 'reset'):
             elapsed = self.scene_time()
@@ -138,12 +154,14 @@ class SceneStore:
             target = self.redo_stack if operation == 'undo' else self.undo_stack
             if not source:
                 raise SceneError('Nothing to {}'.format(operation))
+            self._check_source()
             replacement = source[-1]
             revision = self._apply(replacement)
             target.append(self.document)
             source.pop()
             self.document = replacement
             self.revision = revision
+            self._autosave()
             return
         candidate = copy.deepcopy(self.document)
         obstacles = candidate['obstacles']
@@ -172,12 +190,27 @@ class SceneStore:
         candidate = document(candidate)
         if candidate == self.document:
             return
+        self._check_source()
         revision = self._apply(candidate)
         self.undo_stack.append(self.document)
         self.undo_stack = self.undo_stack[-128:]
         self.redo_stack.clear()
         self.document = candidate
         self.revision = revision
+        self._autosave()
+
+    def _check_source(self):
+        if self.source is not None:
+            current = digest(self.source.read_bytes()) if self.source.exists() else None
+            if current != self.file_digests.get(self.source):
+                raise SceneError('Scene YAML changed outside the editor; reload YAML before editing')
+
+    def _autosave(self):
+        if self.source is not None:
+            try:
+                self._save()
+            except (SceneError, OSError) as error:
+                raise SceneError('Live scene updated, but YAML was not saved: {}'.format(error)) from error
 
     def _apply(self, candidate):
         # Reserve the identity before transport. A lost reply may mean the
@@ -189,17 +222,12 @@ class SceneStore:
         self.apply(candidate, self.epoch, revision)
         return revision
 
-    def _save(self, relative):
+    def _save(self):
         if self.save_root is None:
             raise SceneError('This scene has no writable project directory configured')
-        if relative is not None:
-            if not isinstance(relative, str) or not relative or Path(relative).is_absolute():
-                raise SceneError('Save path must be relative to the configured project directory')
-            target = (self.save_root/relative).resolve()
-        else:
-            target = self.source
+        target = self.source
         if target is None:
-            raise SceneError('Choose a scene YAML filename')
+            raise SceneError('This scene has no source YAML configured')
         try:
             target.relative_to(self.save_root)
         except ValueError:
@@ -211,7 +239,7 @@ class SceneStore:
         current = digest(target.read_bytes()) if target.exists() else None
         expected = self.file_digests.get(target)
         if current != expected:
-            raise SceneError('Scene file changed outside the editor; reload or save to another filename')
+            raise SceneError('Scene YAML changed outside the editor; reload YAML before editing')
         encoded = yaml.safe_dump(self.document, allow_unicode=True, sort_keys=False).encode('utf-8')
         handle, temporary = tempfile.mkstemp(prefix='.'+target.name+'.', suffix='.tmp', dir=str(target.parent))
         try:

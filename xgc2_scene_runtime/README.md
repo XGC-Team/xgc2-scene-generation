@@ -69,7 +69,7 @@ Endpoints below are relative to the selected namespace:
 `requestId`, `expectedEpoch`, and `expectedRevision`. Supported operations are
 `add`/`update` with a complete `obstacle`, `delete` with `id`, `clear`, `replace`
 with a complete `document`, `undo`, `redo`, `save`, `play`, `pause`, `reset`, and
-`resync`. A drag previews locally and submits once on release.
+`resync`, and `reload`. A drag previews locally and submits once on release.
 
 The response reports `success`, an optional `error`, `epoch`, `revision`,
 `document`, `savedRevision`, `dirty`, `playing`, `sceneTime`, `online`,
@@ -80,9 +80,11 @@ transport attempts. `resync` reapplies the accepted document at a new revision
 after partial simulator failure or a lost reply without adding undo history or
 changing the saved document.
 
-`save` atomically writes YAML. Its optional `path` is relative to the configured
-save directory. Traversal, an existing unowned destination, and external file
-changes are rejected. Saving does not commit the project repository.
+Every accepted geometry edit, including undo/redo, atomically writes back the loaded
+YAML. `save` retries a failed write to that same file. External file changes reject
+further edits until `reload` loads and applies the project YAML; reload clears undo
+history. A failed write retains the accepted live geometry and reports dirty state.
+Saving does not commit the project repository.
 
 Motion definitions support `hold`, world-frame `constant_twist` (`linear`,
 `angular`), `ping_pong` (`point_a`, `point_b`, positive `speed`), and an XY
