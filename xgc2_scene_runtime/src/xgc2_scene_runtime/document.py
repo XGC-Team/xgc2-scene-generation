@@ -6,6 +6,9 @@ import re
 SCHEMA = 'xgc2.scene.v1'
 IDENTITY = {'position': [0.0, 0.0, 0.0], 'orientation': [0.0, 0.0, 0.0, 1.0]}
 ID_PATTERN = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$')
+# Product visual: opaque amber. Geometry stays authored; color is not a
+# per-scene or per-part authoring choice. Gazebo transparency follows alpha.
+OBSTACLE_VISUAL_COLOR = [1.0, 0.5, 0.1, 1.0]
 
 
 class SceneError(ValueError):
@@ -174,11 +177,13 @@ def obstacle(value):
         if pid in ids:
             raise SceneError('Duplicate part ID {}'.format(pid))
         ids.add(pid)
-        color = vector(part.get('color', [0.9, 0.6, 0.1, 0.65]), 'color', 4)
-        if any(x < 0 or x > 1 for x in color):
-            raise SceneError('Color channels must be between 0 and 1')
+        if 'color' in part:
+            color = vector(part['color'], 'color', 4)
+            if any(x < 0 or x > 1 for x in color):
+                raise SceneError('Color channels must be between 0 and 1')
         normalized.append({'id': pid, 'pose': pose(part.get('pose', {})),
-                           'geometry': geometry(part['geometry']), 'color': color})
+                           'geometry': geometry(part['geometry']),
+                           'color': list(OBSTACLE_VISUAL_COLOR)})
     initial = pose(value.get('pose', {}))
     movement = motion(value.get('motion', {'type': 'hold'}))
     start = initial['position']

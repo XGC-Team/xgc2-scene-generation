@@ -33,7 +33,7 @@ obstacles:
     parts:
       - id: body
         geometry: {type: box, size: [1, 1, 1]}
-        color: [0.9, 0.6, 0.1, 0.65]
+        color: [1.0, 0.5, 0.1, 1.0]
     motion: {type: hold}
 ```
 

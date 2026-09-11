@@ -27,6 +27,15 @@ def command(store, operation, **values):
 
 
 class SceneStoreTest(unittest.TestCase):
+    def test_obstacle_visual_color_is_product_amber(self):
+        from xgc2_scene_runtime.document import OBSTACLE_VISUAL_COLOR
+        gray = box()
+        gray['parts'][0]['color'] = [0.5, 0.5, 0.5, 1.0]
+        self.assertEqual(document(scene(gray))['obstacles'][0]['parts'][0]['color'],
+                         OBSTACLE_VISUAL_COLOR)
+        self.assertEqual(document(scene(box()))['obstacles'][0]['parts'][0]['color'],
+                         OBSTACLE_VISUAL_COLOR)
+
     def test_compounds_preserve_parts_and_geometry_has_explicit_sizes(self):
         arch = box('arch')
         arch['parts'] = [dict(id='left', geometry={'type': 'box', 'size': [0.2, 1, 2]}),
