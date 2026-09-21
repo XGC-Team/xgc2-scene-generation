@@ -57,9 +57,16 @@ def load(path):
         raise SceneError('Invalid scene YAML: {}'.format(error))
 
 
+FROZEN_REJECTED = frozenset(
+    ('add', 'update', 'delete', 'clear', 'replace', 'undo', 'redo', 'save', 'reload'))
+FROZEN_ERROR = 'Scene is frozen by the replay asset for this Run; create a new asset instead of editing'
+
+
 class SceneStore:
-    def __init__(self, initial, source=None, save_root=None, apply=None, clock=time.monotonic, source_digest=None):
+    def __init__(self, initial, source=None, save_root=None, apply=None, clock=time.monotonic, source_digest=None,
+                 frozen=False):
         self.lock = threading.RLock()
+        self.frozen = bool(frozen)
         self.document = document(initial)
         self.epoch = str(uuid.uuid4())
         self.revision = 1
@@ -88,6 +95,7 @@ class SceneStore:
         with self.lock:
             return {'epoch': self.epoch, 'revision': self.revision, 'savedRevision': self.saved_revision,
                     'dirty': self.document != self.saved_document, 'playing': self.playing,
+                    'frozen': self.frozen,
                     'sceneTime': self.scene_time(), 'document': copy.deepcopy(self.document)}
 
     def states(self):
@@ -124,6 +132,8 @@ class SceneStore:
 
     def _execute(self, request):
         operation = request['operation']
+        if self.frozen and operation in FROZEN_REJECTED:
+            raise SceneError(FROZEN_ERROR)
         if operation == 'resync':
             self.revision = self._apply(self.document)
             return

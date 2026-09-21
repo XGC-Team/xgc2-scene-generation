@@ -94,6 +94,13 @@ further edits until `reload` loads and applies the project YAML; reload clears u
 history. A failed write retains the accepted live geometry and reports dirty state.
 Saving does not commit the project repository.
 
+With `frozen:=true` (replay asset Runs), the initial load, Gazebo application, and
+publications happen once as usual; afterwards the scene is a per-Run frozen fact.
+`add`, `update`, `delete`, `clear`, `replace`, `undo`, `redo`, `save`, and `reload`
+are rejected with an explicit error instead of changing the scene or the YAML, and
+the response envelope reports `frozen`. Reads, playback (`play`/`pause`/`reset`),
+and `resync` still work; the default `frozen:=false` changes nothing.
+
 Motion definitions support `hold`, world-frame `constant_twist` (`linear`,
 `angular`), `ping_pong` (`point_a`, `point_b`, positive `speed`), and an XY
 `circle` (`center`, `radius`, `angular_speed`, optional `phase`). Playback starts
