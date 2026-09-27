@@ -50,8 +50,8 @@ class FrozenSceneStoreTest(unittest.TestCase):
         store = SceneStore(scene(box()), frozen=True)
         result = command(store, 'clear')
         self.assertEqual(result['success'], False)
-        self.assertIn('frozen', result['error'])
-        self.assertIn('replay asset', result['error'])
+        self.assertIn('read-only', result['error'])
+        self.assertIn('editable scene', result['error'])
         replay = store.command(dict(requestId='r0', expectedEpoch=store.epoch, expectedRevision=1,
                                     operation='clear'))
         self.assertEqual(replay, result)
@@ -103,6 +103,8 @@ class FrozenLaunchContractTest(unittest.TestCase):
         self.assertEqual(args.get('frozen'), 'false')
         params = {item.get('name'): item.get('value') for item in root.iter('param')}
         self.assertEqual(params.get('frozen'), '$(arg frozen)')
+        self.assertEqual(args.get('working_file'), '')
+        self.assertEqual(params.get('working_file'), '$(arg working_file)')
 
 
 if __name__ == '__main__':

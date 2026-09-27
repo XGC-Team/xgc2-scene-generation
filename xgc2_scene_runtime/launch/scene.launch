@@ -2,12 +2,14 @@
   <arg name="scene_file" />
   <arg name="scene_namespace" default="/xgc/scene" />
   <arg name="save_directory" default="" />
+  <arg name="working_file" default="" />
   <arg name="gazebo" default="true" />
   <arg name="frozen" default="false" />
   <group ns="$(arg scene_namespace)">
     <node pkg="xgc2_scene_runtime" type="scene_node" name="runtime" output="screen" required="true">
       <param name="scene_file" value="$(arg scene_file)" />
       <param name="save_directory" value="$(arg save_directory)" />
+      <param name="working_file" value="$(arg working_file)" />
       <param name="gazebo" value="$(arg gazebo)" />
       <param name="frozen" value="$(arg frozen)" />
     </node>

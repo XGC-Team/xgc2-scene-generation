@@ -59,14 +59,18 @@ def load(path):
 
 FROZEN_REJECTED = frozenset(
     ('add', 'update', 'delete', 'clear', 'replace', 'undo', 'redo', 'save', 'reload'))
-FROZEN_ERROR = 'Scene is frozen by the replay asset for this Run; create a new asset instead of editing'
+FROZEN_ERROR = 'Scene geometry is read-only for this simulator; select an editable scene to change obstacles'
 
 
 class SceneStore:
     def __init__(self, initial, source=None, save_root=None, apply=None, clock=time.monotonic, source_digest=None,
-                 frozen=False):
+                 frozen=False, working_file=None):
         self.lock = threading.RLock()
         self.frozen = bool(frozen)
+        self.working_file = Path(working_file).resolve() if working_file else None
+        if self.working_file and self.working_file.exists():
+            source = self.working_file
+            initial, source_digest = load(source)
         self.document = document(initial)
         self.epoch = str(uuid.uuid4())
         self.revision = 1
@@ -74,7 +78,8 @@ class SceneStore:
         self.saved_revision = 1
         self.saved_document = copy.deepcopy(self.document)
         self.source = Path(source).resolve() if source else None
-        self.save_root = Path(save_root).resolve() if save_root else (self.source.parent if self.source else None)
+        save_target = self.working_file or self.source
+        self.save_root = Path(save_root).resolve() if save_root else (save_target.parent if save_target else None)
         self.file_digests = {}
         if self.source and self.source.exists():
             self.file_digests[self.source] = source_digest or digest(self.source.read_bytes())
@@ -138,6 +143,7 @@ class SceneStore:
             self.revision = self._apply(self.document)
             return
         if operation == 'save':
+            self._check_source()
             self._save()
             return
         if operation == 'reload':
@@ -164,7 +170,7 @@ class SceneStore:
             target = self.redo_stack if operation == 'undo' else self.undo_stack
             if not source:
                 raise SceneError('Nothing to {}'.format(operation))
-            self._check_source()
+            self._prepare_edit()
             replacement = source[-1]
             revision = self._apply(replacement)
             target.append(self.document)
@@ -200,7 +206,7 @@ class SceneStore:
         candidate = document(candidate)
         if candidate == self.document:
             return
-        self._check_source()
+        self._prepare_edit()
         revision = self._apply(candidate)
         self.undo_stack.append(self.document)
         self.undo_stack = self.undo_stack[-128:]
@@ -208,6 +214,13 @@ class SceneStore:
         self.document = candidate
         self.revision = revision
         self._autosave()
+
+    def _prepare_edit(self):
+        self._check_source()
+        if self.working_file and self.source != self.working_file:
+            # Establish the experiment's writable copy before changing live
+            # geometry. Subsequent edits and reloads use only that copy.
+            self._save()
 
     def _check_source(self):
         if self.source is not None:
@@ -235,7 +248,7 @@ class SceneStore:
     def _save(self):
         if self.save_root is None:
             raise SceneError('This scene has no writable project directory configured')
-        target = self.source
+        target = self.working_file or self.source
         if target is None:
             raise SceneError('This scene has no source YAML configured')
         try:
@@ -244,6 +257,8 @@ class SceneStore:
             raise SceneError('Save target is outside the configured project directory')
         if target.suffix.lower() not in ('.yaml', '.yml'):
             raise SceneError('Save target must be a YAML file')
+        if self.working_file:
+            target.parent.mkdir(parents=True, exist_ok=True)
         if not target.parent.is_dir():
             raise SceneError('Save directory does not exist')
         current = digest(target.read_bytes()) if target.exists() else None

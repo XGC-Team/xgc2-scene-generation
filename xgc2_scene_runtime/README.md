@@ -1,14 +1,23 @@
 # Obstacle scene runtime
 
-`xgc2_scene_runtime` loads and owns an obstacle scene independently of the
-planner and simulator. The algorithm project owns the YAML file. To start a
-scene, run the following in a sourced ROS environment:
+`xgc2_scene_runtime` owns the active obstacle document independently of the
+planner and simulator. A scene asset supplies the initial YAML. To keep edits
+for one experiment separate from that shared asset, pass an optional
+`working_file` path:
 
 ```bash
 roslaunch xgc2_scene_runtime scene.launch \
-  scene_file:=/absolute/project/scene.yaml \
-  namespace:=/xgc/scene gazebo:=true
+  scene_file:=/absolute/assets/scene.yaml \
+  working_file:=/absolute/experiments/exp-a/scene.yaml \
+  scene_namespace:=/xgc/scene gazebo:=true
 ```
+
+An existing working file is loaded in preference to the source asset. If it
+does not exist, startup reads the source without creating a file; the first
+geometry edit creates the working copy before applying that edit. With
+`working_file` set, edits, undo/redo, `save`, and `reload` use the experiment
+copy and leave the source asset unchanged. Standalone modeling without
+`working_file` writes edits directly to its supplied YAML.
 
 With Gazebo enabled, first start the `scene_editable/scene_editable.world`
 asset from `gazebo_sim_worlds`. The world provides an adapter; it does not select
@@ -16,9 +25,10 @@ or load YAML. This Gazebo adapter accepts the `world` frame and uses the
 namespace declared by its world plugin (the supplied asset uses `/xgc/scene`).
 Other frames are explicitly rejected; no implicit frame conversion is applied.
 Set `gazebo:=false` to run without that simulator. Set
-`save_directory` to a writable project directory when it differs from the
-source YAML's parent directory. The GCS Scene user workflow owns this process;
-starting or stopping the algorithm does not start or stop it.
+`save_directory` to specify a writable save root; it must contain the working
+file. When omitted, the target file's parent directory is used. The GCS Scene
+user workflow owns this process; starting or stopping the algorithm does not
+start or stop it.
 
 ```yaml
 schema: xgc2.scene.v1
@@ -88,18 +98,22 @@ reply without adding undo history or changing the saved document.
 Publishers of `SceneConsumerStatus` must set `applied` and `operational`
 explicitly and set `success` equal to `applied`. Receivers ignore `success`.
 
-Every accepted geometry edit, including undo/redo, atomically writes back the loaded
-YAML. `save` retries a failed write to that same file. External file changes reject
-further edits until `reload` loads and applies the project YAML; reload clears undo
-history. A failed write retains the accepted live geometry and reports dirty state.
+Every accepted geometry edit, including undo/redo, atomically writes to the
+active save target. With `working_file`, that target is the experiment copy;
+`save` retries a failed write there, and `reload` loads it and clears undo
+history. External changes to the active file reject further edits until reload.
+A failed first copy write does not apply the edit to the live scene. A failed
+write after a live apply retains the accepted geometry and reports dirty state.
 Saving does not commit the project repository.
 
-With `frozen:=true` (replay asset Runs), the initial load, Gazebo application, and
-publications happen once as usual; afterwards the scene is a per-Run frozen fact.
+`frozen` is an explicit process setting; it is not inferred from whether the
+scene came from a replay asset. With `frozen:=true`, the initial load, Gazebo
+application, and publications happen once as usual; afterwards the scene is a
+per-Run frozen fact.
 `add`, `update`, `delete`, `clear`, `replace`, `undo`, `redo`, `save`, and `reload`
 are rejected with an explicit error instead of changing the scene or the YAML, and
 the response envelope reports `frozen`. Reads, playback (`play`/`pause`/`reset`),
-and `resync` still work; the default `frozen:=false` changes nothing.
+and `resync` still work; the default `frozen:=false` keeps geometry editable.
 
 Motion definitions support `hold`, world-frame `constant_twist` (`linear`,
 `angular`), `ping_pong` (`point_a`, `point_b`, positive `speed`), and an XY

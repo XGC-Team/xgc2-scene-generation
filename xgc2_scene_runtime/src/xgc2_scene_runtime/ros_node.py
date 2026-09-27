@@ -75,7 +75,7 @@ class SceneNode:
             self.apply_service = rospy.ServiceProxy('gazebo/apply', ApplyScene)
         self.store = SceneStore(initial, source, rospy.get_param('~save_directory', '') or None,
                                 self.apply_scene, lambda: rospy.Time.now().to_sec(), source_digest=source_digest,
-                                frozen=self.frozen)
+                                frozen=self.frozen, working_file=rospy.get_param('~working_file', '') or None)
         self.status_sub = rospy.Subscriber('consumer_status', SceneConsumerStatus, self.consumer_status, queue_size=50)
         self.service = rospy.Service('command', SceneCommand, self.command)
         self.publish_definition()

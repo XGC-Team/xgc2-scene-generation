@@ -227,6 +227,122 @@ class SceneStoreTest(unittest.TestCase):
         self.assertTrue(command(store, 'clear')['success'])
         self.assertEqual(store.command({'operation': 'get'})['document']['obstacles'], [])
 
+    def test_experiment_working_files_are_isolated_and_persist_edits(self):
+        with tempfile.TemporaryDirectory() as root:
+            root = Path(root)
+            source = root/'shared.yaml'
+            source.write_text(yaml.safe_dump(scene(box('shared'))))
+            original_source = source.read_bytes()
+            a_file = root/'experiment-a'/'scene.yaml'
+            b_file = root/'experiment-b'/'scene.yaml'
+            a = SceneStore(load(source)[0], source=source, save_root=root, working_file=a_file)
+            b = SceneStore(load(source)[0], source=source, save_root=root, working_file=b_file)
+
+            self.assertTrue(command(a, 'add', obstacle=box('a-only'))['success'])
+            self.assertTrue(command(b, 'add', obstacle=box('b-only'))['success'])
+            self.assertEqual([item['id'] for item in load(source)[0]['obstacles']], ['shared'])
+            self.assertEqual([item['id'] for item in load(a_file)[0]['obstacles']], ['shared', 'a-only'])
+            self.assertEqual([item['id'] for item in load(b_file)[0]['obstacles']], ['shared', 'b-only'])
+
+            b_bytes = b_file.read_bytes()
+            self.assertTrue(command(a, 'undo')['success'])
+            self.assertEqual([item['id'] for item in load(a_file)[0]['obstacles']], ['shared'])
+            self.assertEqual(b_file.read_bytes(), b_bytes)
+            self.assertTrue(command(a, 'redo')['success'])
+            self.assertEqual([item['id'] for item in load(a_file)[0]['obstacles']], ['shared', 'a-only'])
+            self.assertEqual(b_file.read_bytes(), b_bytes)
+
+            self.assertTrue(command(a, 'save')['success'])
+            self.assertEqual(source.read_bytes(), original_source)
+            self.assertEqual(b_file.read_bytes(), b_bytes)
+            self.assertTrue(command(a, 'reload')['success'])
+            self.assertEqual([item['id'] for item in a.document['obstacles']], ['shared', 'a-only'])
+            self.assertEqual(source.read_bytes(), original_source)
+            self.assertEqual(b_file.read_bytes(), b_bytes)
+
+            reopened_a = SceneStore(load(source)[0], source=source, save_root=root, working_file=a_file)
+            reopened_b = SceneStore(load(source)[0], source=source, save_root=root, working_file=b_file)
+            self.assertEqual(reopened_a.document, a.document)
+            self.assertEqual(reopened_b.document, b.document)
+            self.assertEqual(source.read_bytes(), original_source)
+
+    def test_working_file_is_created_on_first_edit_before_apply(self):
+        with tempfile.TemporaryDirectory() as root:
+            root = Path(root)
+            source = root/'shared.yaml'
+            source.write_text(yaml.safe_dump(scene(box('shared'))))
+            original_source = source.read_bytes()
+            working_file = root/'experiment'/'scene.yaml'
+            apply_observations = []
+
+            def apply(doc, epoch, revision):
+                if revision > 1:
+                    self.assertTrue(working_file.is_file())
+                    apply_observations.append((copy.deepcopy(doc), load(working_file)[0]))
+
+            store = SceneStore(load(source)[0], source=source, save_root=root,
+                               working_file=working_file, apply=apply)
+            self.assertFalse(working_file.exists())
+            self.assertTrue(command(store, 'add', obstacle=box('experiment-only'))['success'])
+
+            self.assertEqual(len(apply_observations), 1)
+            applied_doc, copied_doc = apply_observations[0]
+            self.assertEqual([item['id'] for item in applied_doc['obstacles']],
+                             ['shared', 'experiment-only'])
+            self.assertEqual([item['id'] for item in copied_doc['obstacles']], ['shared'])
+            self.assertEqual([item['id'] for item in load(working_file)[0]['obstacles']],
+                             ['shared', 'experiment-only'])
+            self.assertEqual(source.read_bytes(), original_source)
+
+    def test_first_working_copy_write_failure_does_not_apply_or_change_source(self):
+        with tempfile.TemporaryDirectory() as root:
+            root = Path(root)
+            source = root/'shared.yaml'
+            source.write_text(yaml.safe_dump(scene(box('shared'))))
+            original_source = source.read_bytes()
+            working_file = root/'experiment'/'scene.yaml'
+            applied = []
+            store = SceneStore(load(source)[0], source=source, save_root=root,
+                               working_file=working_file,
+                               apply=lambda doc, epoch, revision: applied.append(copy.deepcopy(doc)))
+            before = copy.deepcopy(store.document)
+            before_revision = store.revision
+            before_apply_count = len(applied)
+
+            with mock.patch('xgc2_scene_runtime.store.os.replace', side_effect=OSError('disk full')):
+                result = command(store, 'add', obstacle=box('experiment-only'))
+
+            self.assertFalse(result['success'])
+            self.assertIn('disk full', result['error'])
+            self.assertEqual(store.document, before)
+            self.assertEqual(store.revision, before_revision)
+            self.assertEqual(len(applied), before_apply_count)
+            self.assertFalse(working_file.exists())
+            self.assertEqual(source.read_bytes(), original_source)
+
+    def test_existing_working_file_wins_over_changed_source_on_reopen(self):
+        with tempfile.TemporaryDirectory() as root:
+            root = Path(root)
+            source = root/'shared.yaml'
+            source.write_text(yaml.safe_dump(scene(box('shared'))))
+            working_file = root/'experiment'/'scene.yaml'
+            first = SceneStore(load(source)[0], source=source, save_root=root, working_file=working_file)
+            self.assertTrue(command(first, 'add', obstacle=box('experiment-only'))['success'])
+            working_document, _ = load(working_file)
+
+            changed_source = yaml.safe_dump(scene(box('asset-changed-later')))
+            source.write_text(changed_source)
+            changed_source_bytes = source.read_bytes()
+            reopened = SceneStore(load(source)[0], source=source, save_root=root, working_file=working_file)
+
+            self.assertEqual(reopened.document, working_document)
+            self.assertEqual([item['id'] for item in reopened.document['obstacles']],
+                             ['shared', 'experiment-only'])
+            self.assertEqual(source.read_bytes(), changed_source_bytes)
+            self.assertTrue(command(reopened, 'reload')['success'])
+            self.assertEqual(reopened.document, working_document)
+            self.assertEqual(source.read_bytes(), changed_source_bytes)
+
 
 if __name__ == '__main__':
     unittest.main()
