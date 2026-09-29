@@ -197,6 +197,17 @@ def obstacle(value):
     return {'id': oid, 'name': name, 'pose': initial, 'parts': normalized, 'motion': movement}
 
 
+def check_obstacle_set(obstacles):
+    """Scene-wide limits for a list of already normalized obstacles."""
+    if len(obstacles) > 512:
+        raise SceneError('Scene supports at most 512 obstacles')
+    if len({item['id'] for item in obstacles}) != len(obstacles):
+        raise SceneError('Duplicate obstacle ID')
+    if sum(len(item['parts']) for item in obstacles) > 4096:
+        raise SceneError('Scene supports at most 4096 convex parts')
+    return obstacles
+
+
 def document(value):
     fields(value, ('schema', 'id', 'frame', 'obstacles'), ('schema', 'id', 'frame', 'obstacles'))
     if value['schema'] != SCHEMA:
@@ -207,9 +218,5 @@ def document(value):
         raise SceneError('Scene frame must be explicit and have no leading slash')
     if not isinstance(value['obstacles'], list) or len(value['obstacles']) > 512:
         raise SceneError('Scene supports at most 512 obstacles')
-    obstacles = [obstacle(item) for item in value['obstacles']]
-    if len({item['id'] for item in obstacles}) != len(obstacles):
-        raise SceneError('Duplicate obstacle ID')
-    if sum(len(item['parts']) for item in obstacles) > 4096:
-        raise SceneError('Scene supports at most 4096 convex parts')
+    obstacles = check_obstacle_set([obstacle(item) for item in value['obstacles']])
     return {'schema': SCHEMA, 'id': value['id'], 'frame': frame, 'obstacles': obstacles}

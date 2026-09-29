@@ -1,6 +1,11 @@
-"""Single scene writer with revision checks, bounded undo and atomic YAML saves."""
+"""Single scene writer with revision checks, bounded undo and atomic YAML saves.
 
-import copy
+Documents are immutable values. Every change builds a new top-level dict and
+obstacle list and shares the unchanged obstacles, so undo history, the saved
+baseline and command results reference documents instead of copying them.
+Nothing may modify a document, its obstacles or their fields in place.
+"""
+
 import hashlib
 import json
 import os
@@ -14,7 +19,7 @@ from collections import OrderedDict
 
 import yaml
 
-from .document import SceneError, document, fields, identifier, obstacle
+from .document import SceneError, check_obstacle_set, document, fields, identifier, obstacle
 from .motion import state
 
 MAX_DOCUMENT_BYTES = 8 * 1024 * 1024
@@ -31,8 +36,47 @@ def unique_object(pairs):
     return result
 
 
-class SceneLoader(yaml.SafeLoader):
+# libyaml parses and emits several times faster than the pure-Python classes;
+# a 500-obstacle autosave spent most of an edit in the Python emitter.
+_SAFE_LOADER = getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
+_SAFE_DUMPER = getattr(yaml, 'CSafeDumper', yaml.SafeDumper)
+
+
+class SceneLoader(_SAFE_LOADER):
     pass
+
+
+def dump_yaml(value):
+    return yaml.dump(value, Dumper=_SAFE_DUMPER, allow_unicode=True, sort_keys=False)
+
+
+class DocumentYaml:
+    """YAML text of a document, re-emitting only obstacles that changed.
+
+    Obstacles are immutable and shared between revisions, so the text of an
+    unchanged obstacle object is reused. The output equals dump_yaml(document):
+    the obstacle sequence is the last key and PyYAML writes it unindented, so
+    each item is the block that a one-item list dumps to.
+    """
+
+    def __init__(self):
+        self._items = {}
+
+    def dump(self, value):
+        obstacles = value['obstacles']
+        if not obstacles or list(value)[-1] != 'obstacles':
+            self._items = {}
+            return dump_yaml(value)
+        items, texts = {}, []
+        for item in obstacles:
+            cached = self._items.get(id(item))
+            if cached is None or cached[0] is not item:
+                cached = (item, dump_yaml([item]))
+            items[id(item)] = cached
+            texts.append(cached[1])
+        self._items = items
+        header = dump_yaml({key: field for key, field in value.items() if key != 'obstacles'})
+        return header + 'obstacles:\n' + ''.join(texts)
 
 
 def yaml_object(loader, node):
@@ -76,7 +120,7 @@ class SceneStore:
         self.revision = 1
         self.next_revision = 2
         self.saved_revision = 1
-        self.saved_document = copy.deepcopy(self.document)
+        self.saved_document = self.document
         self.source = Path(source).resolve() if source else None
         save_target = self.working_file or self.source
         self.save_root = Path(save_root).resolve() if save_root else (save_target.parent if save_target else None)
@@ -91,17 +135,24 @@ class SceneStore:
         self.undo_stack = []
         self.redo_stack = []
         self.requests = OrderedDict()
+        self.yaml = DocumentYaml()
         self.apply(self.document, self.epoch, self.revision)
 
     def scene_time(self):
         return self.elapsed + (max(0.0, self.clock()-self.started_at) if self.playing else 0.0)
 
-    def envelope(self):
+    def status(self):
+        """Envelope fields other than the document and the running scene time."""
         with self.lock:
             return {'epoch': self.epoch, 'revision': self.revision, 'savedRevision': self.saved_revision,
-                    'dirty': self.document != self.saved_document, 'playing': self.playing,
-                    'frozen': self.frozen,
-                    'sceneTime': self.scene_time(), 'document': copy.deepcopy(self.document)}
+                    'dirty': self.document is not self.saved_document and self.document != self.saved_document,
+                    'playing': self.playing, 'frozen': self.frozen}
+
+    def envelope(self):
+        with self.lock:
+            result = self.status()
+            result.update(sceneTime=self.scene_time(), document=self.document)
+            return result
 
     def states(self):
         with self.lock:
@@ -120,7 +171,7 @@ class SceneStore:
                 if previous:
                     if previous[0] != fingerprint:
                         raise SceneError('Request ID was already used for a different operation')
-                    return copy.deepcopy(previous[1])
+                    return dict(previous[1])
                 if request.get('expectedEpoch') != self.epoch or type(request.get('expectedRevision')) is not int or request['expectedRevision'] != self.revision:
                     raise SceneError('Scene changed; refresh before editing')
                 try:
@@ -131,7 +182,7 @@ class SceneStore:
                 self.requests[rid] = (fingerprint, result)
                 while len(self.requests) > 256:
                     self.requests.popitem(last=False)
-                return copy.deepcopy(result)
+                return dict(result)
             except (SceneError, OSError, ValueError, TypeError) as error:
                 return dict(self.envelope(), success=False, error=str(error))
 
@@ -153,7 +204,7 @@ class SceneStore:
             revision = self._apply(replacement)
             self.document = replacement
             self.revision = revision
-            self.saved_document = copy.deepcopy(replacement)
+            self.saved_document = replacement
             self.saved_revision = revision
             self.file_digests[self.source] = source_digest
             self.undo_stack.clear()
@@ -179,8 +230,9 @@ class SceneStore:
             self.revision = revision
             self._autosave()
             return
-        candidate = copy.deepcopy(self.document)
-        obstacles = candidate['obstacles']
+        # Only the edited obstacle is validated again; the others are already
+        # normalized and shared with the current document.
+        obstacles = list(self.document['obstacles'])
         if operation in ('add', 'update'):
             replacement = obstacle(request.get('obstacle'))
             indices = [i for i, item in enumerate(obstacles) if item['id'] == replacement['id']]
@@ -192,18 +244,19 @@ class SceneStore:
                 if not indices:
                     raise SceneError('Obstacle no longer exists')
                 obstacles[indices[0]] = replacement
+            candidate = dict(self.document, obstacles=check_obstacle_set(obstacles))
         elif operation == 'delete':
             oid = identifier(request.get('id'), 'Obstacle ID')
-            candidate['obstacles'] = [item for item in obstacles if item['id'] != oid]
-            if len(candidate['obstacles']) == len(obstacles):
+            remaining = [item for item in obstacles if item['id'] != oid]
+            if len(remaining) == len(obstacles):
                 raise SceneError('Obstacle no longer exists')
+            candidate = dict(self.document, obstacles=remaining)
         elif operation == 'clear':
-            candidate['obstacles'] = []
+            candidate = dict(self.document, obstacles=[])
         elif operation == 'replace':
             candidate = document(request.get('document'))
         else:
             raise SceneError('Unsupported scene operation {!r}'.format(operation))
-        candidate = document(candidate)
         if candidate == self.document:
             return
         self._prepare_edit()
@@ -265,7 +318,7 @@ class SceneStore:
         expected = self.file_digests.get(target)
         if current != expected:
             raise SceneError('Scene YAML changed outside the editor; reload YAML before editing')
-        encoded = yaml.safe_dump(self.document, allow_unicode=True, sort_keys=False).encode('utf-8')
+        encoded = self.yaml.dump(self.document).encode('utf-8')
         handle, temporary = tempfile.mkstemp(prefix='.'+target.name+'.', suffix='.tmp', dir=str(target.parent))
         try:
             with os.fdopen(handle, 'wb') as stream:
@@ -289,5 +342,5 @@ class SceneStore:
                 os.unlink(temporary)
         self.source = target
         self.file_digests[target] = digest(encoded)
-        self.saved_document = copy.deepcopy(self.document)
+        self.saved_document = self.document
         self.saved_revision = self.revision
