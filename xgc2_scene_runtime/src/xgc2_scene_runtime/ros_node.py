@@ -69,6 +69,13 @@ class SceneNode:
         self.tf_static = tf2_ros.StaticTransformBroadcaster()
         self.tf_dynamic = tf2_ros.TransformBroadcaster()
         self.frame_prefix = 'xgc_scene_' + hashlib.sha256(rospy.get_namespace().encode()).hexdigest()[:12]
+        # Per-revision caches: obstacle TF frames, and the snapshot built for
+        # the Gazebo apply that the definition publish would otherwise rebuild.
+        self._frames_key, self._frames = None, {}
+        self._applied_snapshot = (None, None)
+        # Consumer heartbeats republish the document only when its public
+        # view changed; it is latched, so repeats carry no information.
+        self._published_view = None
         self.apply_service = None
         if self.gazebo:
             rospy.wait_for_service('gazebo/apply', timeout=30.0)
@@ -86,7 +93,9 @@ class SceneNode:
         if self.apply_service is None:
             return
         try:
-            result = self.apply_service(snapshot(document, epoch, revision))
+            message = snapshot(document, epoch, revision)
+            self._applied_snapshot = ((epoch, revision), message)
+            result = self.apply_service(message)
             if not result.success or result.epoch != epoch or result.applied_revision != revision:
                 raise SceneError('Gazebo did not apply the scene: {}'.format(result.message))
         except rospy.ServiceException as error:
@@ -124,8 +133,25 @@ class SceneNode:
         result['syncRetryable'] = public['syncRetryable']
         return result
 
-    def publish_document(self):
-        self.document_pub.publish(String(json.dumps(self.envelope(), ensure_ascii=False, allow_nan=False)))
+    def publish_document(self, changed_only=False):
+        """Publish the envelope; with changed_only, skip a view already published.
+
+        The view is everything in the envelope except the running scene time,
+        which subscribers take from the state topic.
+        """
+        with self.store.lock:
+            status = self.store.status()
+            with self.consumer_lock:
+                public = self.registry.public(status['epoch'], status['revision'])
+            view = json.dumps([status, public, self.online], sort_keys=True)
+            if changed_only and view == self._published_view:
+                return False
+            result = dict(status, sceneTime=self.store.scene_time(), document=self.store.document,
+                          consumers=public['consumers'], online=self.online, synchronized=public['synchronized'],
+                          syncRetryable=public['syncRetryable'])
+            self.document_pub.publish(String(json.dumps(result, ensure_ascii=False, allow_nan=False)))
+            self._published_view = view
+            return True
 
     def consumer_status(self, message):
         # Store the latest reported version; mismatches remain visible, not promoted to applied.
@@ -140,7 +166,7 @@ class SceneNode:
             'capability': message.capability, 'generation': message.generation,
             'message': message.message, 'header_stamp': stamp,
         })
-        self.publish_document()
+        self.publish_document(changed_only=True)
 
     def command(self, request):
         try:
@@ -161,12 +187,21 @@ class SceneNode:
             result = dict(self.envelope(), success=False, error=str(error))
         return SceneCommandResponse(success=result['success'], result_json=json.dumps(result, ensure_ascii=False, allow_nan=False))
 
+    def obstacle_frames(self):
+        """TF child frame per obstacle ID, rebuilt once per document revision."""
+        key = (self.store.epoch, self.store.revision)
+        if key != self._frames_key:
+            # tf2 caches static transforms indefinitely. Switching motion modes must
+            # not reuse the same child frame for both static and dynamic TF data.
+            self._frames = {
+                item['id']: '{}/{}/{}/{}'.format(self.frame_prefix, self.store.epoch,
+                                                 'fixed' if item['motion']['type'] == 'hold' else 'moving', item['id'])
+                for item in self.store.document['obstacles']}
+            self._frames_key = key
+        return self._frames
+
     def obstacle_frame(self, oid):
-        item = next(item for item in self.store.document['obstacles'] if item['id'] == oid)
-        mode = 'fixed' if item['motion']['type'] == 'hold' else 'moving'
-        # tf2 caches static transforms indefinitely. Switching motion modes must
-        # not reuse the same child frame for both static and dynamic TF data.
-        return '{}/{}/{}/{}'.format(self.frame_prefix, self.store.epoch, mode, oid)
+        return self.obstacle_frames()[oid]
 
     def transform(self, oid, pose, stamp):
         transform = TransformStamped()
@@ -179,7 +214,9 @@ class SceneNode:
 
     def publish_definition(self):
         with self.store.lock:
-            message = snapshot(self.store.document, self.store.epoch, self.store.revision)
+            key, message = self._applied_snapshot
+            if key != (self.store.epoch, self.store.revision):
+                message = snapshot(self.store.document, self.store.epoch, self.store.revision)
             self.snapshot_pub.publish(message)
             static = [self.transform(item['id'], item['pose'], message.header.stamp)
                       for item in self.store.document['obstacles'] if item['motion']['type'] == 'hold']
@@ -242,7 +279,7 @@ class SceneNode:
         with self.consumer_lock:
             dropped = self.registry.expire()
         if dropped:
-            self.publish_document()
+            self.publish_document(changed_only=True)
         with self.store.lock:
             message = SceneState()
             message.header.stamp = rospy.Time.now()
