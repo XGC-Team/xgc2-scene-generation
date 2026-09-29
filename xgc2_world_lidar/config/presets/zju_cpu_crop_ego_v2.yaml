@@ -1,0 +1,16 @@
+# Preset zju_cpu_crop_ego_v2: the uav_simulator/local_sensing CPU crop with a
+# heading half-space: see-through 5 m ball, dot(unit(p - x), body x) >= 0.0,
+# z slab |dz| <= tan(30 deg) * 5 m. Frame "world".
+mode: penetrating
+range: 5.0
+min_range: 0.0
+h_fov_deg: 360.0
+v_fov_deg: 180.0
+surface_spacing: 0.1
+noise_std: 0.0
+penetrating_heading_crop: true
+heading_cos_min: 0.0
+vertical_slab_tan: 0.5773502691896258
+penetrating_keep_buried: true
+frame_id: world
+publish_beams: false
