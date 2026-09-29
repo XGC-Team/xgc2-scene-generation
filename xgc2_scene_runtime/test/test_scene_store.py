@@ -344,5 +344,74 @@ class SceneStoreTest(unittest.TestCase):
             self.assertEqual(source.read_bytes(), changed_source_bytes)
 
 
+class SceneEditCostTest(unittest.TestCase):
+    """Edits of large scenes share unchanged obstacles and re-emit only changed YAML."""
+
+    @staticmethod
+    def varied_scene(count):
+        tetra = {'type': 'convex', 'vertices': [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+                 'triangles': [0, 1, 2, 0, 3, 1, 0, 2, 3, 1, 3, 2]}
+        obstacles = []
+        for index in range(count):
+            item = box('o{:03d}'.format(index))
+            item['name'] = '障碍物 {} with a long descriptive name that PyYAML may fold at eighty columns'.format(index)
+            item['parts'].append({'id': 'hull', 'pose': {'position': [0, 0, 1e-7 * index]}, 'geometry': tetra})
+            if index % 3 == 0:
+                item['motion'] = {'type': 'circle', 'center': [1, 2 - 0.5, 3], 'radius': 0.5, 'angular_speed': 0.1,
+                                  'phase': 1.5707963267948966}
+                item['pose'] = {'position': [1.0000000000000000, 2.0, 3.0]}
+            obstacles.append(item)
+        return scene(*obstacles)
+
+    def test_incremental_yaml_equals_a_full_dump(self):
+        from xgc2_scene_runtime.store import DocumentYaml, dump_yaml
+        writer = DocumentYaml()
+        for count in (0, 1, 7):
+            value = document(self.varied_scene(count))
+            self.assertEqual(writer.dump(value), dump_yaml(value))
+            self.assertEqual(yaml.safe_load(writer.dump(value)), value)
+
+    def test_one_edit_validates_and_emits_only_the_edited_obstacle(self):
+        from xgc2_scene_runtime import store as store_module
+        with tempfile.TemporaryDirectory() as root:
+            source = Path(root)/'scene.yaml'
+            source.write_text(yaml.safe_dump(self.varied_scene(40)))
+            store = SceneStore(load(source)[0], source=source)
+            self.assertTrue(command(store, 'save')['success'])
+            before = store.document
+            snapshot = copy.deepcopy(before)
+            validated, emitted = [], []
+            original_obstacle, original_dump = store_module.obstacle, store_module.dump_yaml
+            with mock.patch.object(store_module, 'obstacle', side_effect=lambda value: validated.append(1) or original_obstacle(value)), \
+                    mock.patch.object(store_module, 'dump_yaml', side_effect=lambda value: emitted.append(value) or original_dump(value)):
+                moved = copy.deepcopy(before['obstacles'][5])
+                moved['pose']['position'] = [9.0, 9.0, 9.0]
+                self.assertTrue(command(store, 'update', obstacle=moved)['success'])
+            self.assertEqual(len(validated), 1)
+            # One edited obstacle plus the document header.
+            self.assertEqual(len(emitted), 2)
+            self.assertEqual(load(source)[0], store.document)
+            # The previous revision is intact for undo and shares unchanged obstacles.
+            self.assertEqual(before, snapshot)
+            self.assertIs(store.document['obstacles'][4], before['obstacles'][4])
+            self.assertTrue(command(store, 'undo')['success'])
+            self.assertEqual(store.document, snapshot)
+            self.assertEqual(load(source)[0], snapshot)
+
+    def test_scene_limits_still_apply_to_incremental_edits(self):
+        store = SceneStore(scene(*[box('o{}'.format(i)) for i in range(512)]))
+        result = command(store, 'add', obstacle=box('one-too-many'))
+        self.assertFalse(result['success'])
+        self.assertIn('at most 512 obstacles', result['error'])
+        many_parts = box('wide')
+        many_parts['parts'] = [{'id': 'p{}'.format(i), 'geometry': {'type': 'sphere', 'radius': 0.1}} for i in range(128)]
+        full = SceneStore(scene(*[dict(many_parts, id='w{}'.format(i)) for i in range(32)]))
+        result = command(full, 'add', obstacle=box('one-more-part'))
+        self.assertFalse(result['success'])
+        self.assertIn('at most 4096 convex parts', result['error'])
+        duplicate = SceneStore(scene(box('a'), box('b')))
+        self.assertFalse(command(duplicate, 'add', obstacle=box('a'))['success'])
+
+
 if __name__ == '__main__':
     unittest.main()
