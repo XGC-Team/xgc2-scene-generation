@@ -65,6 +65,7 @@
 
 #include "xgc2_world_lidar/convex_body_conversion.h"
 #include "xgc2_world_lidar/scene_conversion.h"
+#include "xgc2_world_lidar/observation_contract.h"
 #include "xgc2_world_lidar/world_lidar.h"
 
 namespace xgc2_world_lidar {
@@ -258,7 +259,14 @@ public:
         pose_timeout_ = pnh.param("pose_timeout", 0.5);
         worker_threads_ = std::max(1, pnh.param("worker_threads", 1));
         const double rate = pnh.param("rate", 10.0);
-        if (!(rate > 0.0)) throw std::invalid_argument("~rate must be > 0");
+        if (!std::isfinite(rate) || !(rate > 0.0))
+            throw std::invalid_argument("~rate must be finite and > 0");
+        if (frame_id_ != "world" || !std::isfinite(pose_timeout_) || pose_timeout_ <= 0.0)
+            throw std::invalid_argument("world lidar needs frame_id=world and a positive finite pose_timeout");
+        std::vector<double> mount(6, 0.0);
+        if (pnh.hasParam("sensor_pose") && !pnh.getParam("sensor_pose", mount))
+            throw std::invalid_argument("~sensor_pose must be a six-number array");
+        sensor_mount_ = mountingPose(mount);
 
         lidar_ = std::make_unique<WorldLidar>(loadConfig(pnh));
         has_beams_ = lidar_->config().mode != SensorConfig::kPenetrating;
@@ -310,7 +318,14 @@ public:
             // Poses of every served vehicle (a vehicle without a sensor is still a body for the others).
             v.sub = nh_.subscribe<geometry_msgs::PoseStamped>(
                 substituteId(pose_pattern, v.id), 1,
-                [this, k](const geometry_msgs::PoseStamped::ConstPtr& msg) { vehicles_[k].pose = msg; });
+                [this, k](const geometry_msgs::PoseStamped::ConstPtr& msg) {
+                    if (!validObservationPose(poseOf(msg->pose), msg->header.frame_id, frame_id_)) {
+                        vehicles_[k].pose.reset();
+                        ROS_WARN_THROTTLE(1.0, "world_lidar: invalid or non-world body pose; no scan");
+                        return;
+                    }
+                    vehicles_[k].pose = msg;
+                });
             ROS_INFO("world_lidar: vehicle %d  %s -> %s", v.id, substituteId(pose_pattern, v.id).c_str(),
                      v.sensed ? substituteId(out_pattern, v.id).c_str() : "(no sensor: not in ~enabled_vehicles)");
         }
@@ -367,9 +382,19 @@ private:
     }
 
     void snapshotCallback(const xgc2_geometry_msgs::SceneSnapshot::ConstPtr& msg) {
-        if (snapshot_ && msg->epoch == snapshot_->epoch && msg->revision < snapshot_->revision) return;
-        snapshot_ = msg;
+        if (snapshot_ && msg->epoch == snapshot_->epoch && msg->revision <= snapshot_->revision) return;
+        // A new document invalidates the installed scene immediately. In particular,
+        // do not scan the previous epoch while waiting for a new dynamic state.
+        scene_ready_ = false;
+        pending_ = false;
+        map_dirty_ = false;
         state_.reset();
+        if (msg->header.frame_id != frame_id_) {
+            snapshot_.reset();
+            ROS_ERROR("world_lidar: snapshot frame is not world");
+            return;
+        }
+        snapshot_ = msg;
         const bool has_dynamic = std::any_of(msg->obstacles.begin(), msg->obstacles.end(),
                                              [](const auto& o) { return o.dynamic; });
         if (!has_dynamic) {
@@ -382,6 +407,12 @@ private:
 
     void stateCallback(const xgc2_geometry_msgs::SceneState::ConstPtr& msg) {
         if (!snapshot_ || msg->epoch != snapshot_->epoch || msg->revision != snapshot_->revision) return;
+        if (msg->header.frame_id != frame_id_) {
+            state_.reset();
+            pending_ = false;
+            scene_ready_ = false;
+            return;
+        }
         state_ = msg;
         pending_ = true;
     }
@@ -480,7 +511,7 @@ private:
     // Publishes the global map of the installed scene when it changed (rate
     // limited while obstacles move). Never while disabled: the map waits.
     void publishMap(const ros::Time& now) {
-        if (!enabled_ || !map_dirty_) return;
+        if (!enabled_ || !scene_ready_ || !map_dirty_ || !map_lidar_ || !map_pub_.getNumSubscribers()) return;
         const bool has_dynamic = map_has_dynamic_;
         if (map_lidar_ && (!has_dynamic || map_stamp_.isZero() || (now - map_stamp_).toSec() >= map_period_)) {
             map_dirty_ = false;
@@ -497,6 +528,12 @@ private:
 
     void tick(const ros::TimerEvent&) {
         const ros::Time now = ros::Time::now();
+        if (!enabled_) return;
+        const bool subscribed = std::any_of(vehicles_.begin(), vehicles_.end(), [this](const Vehicle& v) {
+            return v.sensed && (v.pub.getNumSubscribers() ||
+                               (publish_beams_ && v.beams_pub.getNumSubscribers()));
+        });
+        if (!subscribed && !(map_lidar_ && map_pub_.getNumSubscribers())) return;
         if (pending_) {
             pending_ = false;
             try {
@@ -511,12 +548,17 @@ private:
             ROS_WARN_THROTTLE(5.0, "world_lidar: no scene installed yet; not publishing");
             return;
         }
+        if (map_has_dynamic_ && !gazebo_source_ &&
+            (!state_ || !freshObservationTime(state_->header.stamp.toSec(), now.toSec(), pose_timeout_))) {
+            ROS_WARN_THROTTLE(1.0, "world_lidar: dynamic scene state is stale or from a future clock epoch");
+            return;
+        }
         publishMap(now);
         std::vector<std::size_t> fresh;
         for (std::size_t k = 0; k < vehicles_.size(); ++k) {
             const auto& pose = vehicles_[k].pose;
             if (!pose) continue;
-            if (!pose->header.stamp.isZero() && (now - pose->header.stamp).toSec() > pose_timeout_) {
+            if (!freshObservationTime(pose->header.stamp.toSec(), now.toSec(), pose_timeout_)) {
                 if (vehicles_[k].sensed)
                     ROS_WARN_THROTTLE(5.0, "world_lidar: pose of vehicle %d is stale", vehicles_[k].id);
                 continue;
@@ -525,7 +567,8 @@ private:
         }
         std::vector<std::size_t> active;
         for (std::size_t k : fresh)
-            if (vehicles_[k].sensed) active.push_back(k);
+            if (vehicles_[k].sensed && (vehicles_[k].pub.getNumSubscribers() ||
+                (publish_beams_ && vehicles_[k].beams_pub.getNumSubscribers()))) active.push_back(k);
         // Bodies of the other served vehicles with a fresh pose (tagged returns).
         std::vector<VehicleBody> bodies;
         if (vehicle_bodies_)
@@ -535,7 +578,7 @@ private:
         std::vector<std::vector<Beam>> beams(active.size());
         auto scanOne = [&](std::size_t i) {
             const Vehicle& v = vehicles_[active[i]];
-            const Pose p = poseOf(v.pose->pose);
+            const Pose p = sensorWorldPose(poseOf(v.pose->pose), sensor_mount_);
             Eigen::Quaterniond q = p.orientation.normalized();
             if (yaw_only_) {
                 const Eigen::Vector3d x = q * Eigen::Vector3d::UnitX();
@@ -566,7 +609,7 @@ private:
         }
         for (std::size_t i = 0; i < active.size(); ++i) {
             const Vehicle& v = vehicles_[active[i]];
-            const ros::Time stamp = v.pose->header.stamp.isZero() ? now : v.pose->header.stamp;
+            const ros::Time stamp = v.pose->header.stamp;
             v.pub.publish(toTaggedCloud(clouds[i], vehicle_bodies_, stamp, frame_id_));
             if (publish_beams_) v.beams_pub.publish(toBeamCloud(beams[i], vehicle_bodies_, stamp, frame_id_));
         }
@@ -574,6 +617,7 @@ private:
 
     ros::NodeHandle nh_;
     std::string frame_id_;
+    Pose sensor_mount_;
     bool yaw_only_ = false;
     double pose_timeout_ = 0.5;
     int worker_threads_ = 1;
