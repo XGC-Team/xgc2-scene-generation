@@ -1,0 +1,16 @@
+<launch>
+  <node pkg="xgc2_world_lidar" type="world_lidar_node" name="lidar_contract" output="screen" required="true">
+    <param name="scene_source" value="snapshot"/>
+    <param name="scene_namespace" value="/lidar_contract_scene"/>
+    <param name="pose_topic_pattern" value="/lidar_contract_pose"/>
+    <param name="output_topic_pattern" value="/lidar_contract_points"/>
+    <param name="beams_topic_pattern" value="/lidar_contract_beams"/>
+    <param name="mode" value="raycast"/>
+    <param name="publish_beams" value="true"/>
+    <param name="h_res" value="20"/>
+    <param name="v_res" value="4"/>
+    <param name="rate" value="20"/>
+    <rosparam param="sensor_pose">[1, 0, 0, 0, 0, 0]</rosparam>
+  </node>
+  <test test-name="observation_contract" pkg="xgc2_world_lidar" type="observation_contract_test.py" time-limit="60"/>
+</launch>

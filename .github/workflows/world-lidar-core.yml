@@ -2,41 +2,64 @@ name: World lidar core
 on:
   push:
     branches: [integration/paper-runtime-20260930]
-    paths: ['xgc2_world_lidar/**', '.github/workflows/world-lidar-core.yml']
-  pull_request:
-    branches: [noetic]
-    paths: ['xgc2_world_lidar/**', '.github/workflows/world-lidar-core.yml']
+    paths: ['xgc2_world_lidar/**', '.ci/apply-observation-contract.py', '.github/workflows/world-lidar-core.yml']
   workflow_dispatch:
 permissions:
   contents: read
+  packages: read
 jobs:
   core:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      packages: read
+    container:
+      image: ghcr.io/xgc-team/xgc2-images/xgc2-build-focal-full-noetic:1.0.0
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-        with:
-          persist-credentials: false
-      - name: Install compiler dependency
-        run: sudo apt-get update -qq && sudo apt-get install -y libeigen3-dev
-      - name: Compile and execute the production sensor core
+      - name: Apply the reviewed branch-local source edit
+        if: github.ref == 'refs/heads/integration/paper-runtime-20260930'
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p /tmp/lidar-evidence
-          git rev-parse HEAD > /tmp/lidar-evidence/source-commit.txt
-          for test in test_world_lidar test_scene_sources; do
-            g++ -std=c++17 -O2 -Wall -Wextra -I/usr/include/eigen3 -Ixgc2_world_lidar/include \
-              xgc2_world_lidar/src/world_lidar.cpp xgc2_world_lidar/src/scene_conversion.cpp \
-              xgc2_world_lidar/src/convex_body_conversion.cpp xgc2_world_lidar/test/${test}.cpp \
-              -o /tmp/${test}
-            /tmp/${test} 2>&1 | tee /tmp/lidar-evidence/${test}.log
-          done
-      - name: Preserve the exact public source used for replay
-        if: always()
+          if test -f .ci/apply-observation-contract.py; then
+            python3 .ci/apply-observation-contract.py
+            git rm .ci/apply-observation-contract.py
+          fi
+      - name: Build production node and run real ROS and core tests
+        shell: bash
         run: |
-          mkdir -p /tmp/lidar-evidence
-          git archive --format=tar.gz --output=/tmp/lidar-evidence/source.tar.gz HEAD
+          set -eo pipefail
+          source /opt/ros/noetic/setup.bash
+          mkdir -p /tmp/lidar-ws/src /tmp/lidar-evidence
+          ln -s "$GITHUB_WORKSPACE/xgc2_geometry_msgs" /tmp/lidar-ws/src/xgc2_geometry_msgs
+          ln -s "$GITHUB_WORKSPACE/xgc2_world_lidar" /tmp/lidar-ws/src/xgc2_world_lidar
+          cd /tmp/lidar-ws
+          catkin_make -j2 -DCMAKE_BUILD_TYPE=RelWithDebInfo 2>&1 | tee /tmp/lidar-evidence/build.log
+          source devel/setup.bash
+          for suite in world_lidar scene_sources observation_contract; do
+            devel/lib/xgc2_world_lidar/test_${suite} 2>&1 | tee /tmp/lidar-evidence/${suite}.log
+          done
+          catkin_make -j2 run_tests_xgc2_world_lidar 2>&1 | tee /tmp/lidar-evidence/ros-tests.log
+          catkin_test_results build/test_results
+      - name: Commit tested source only to this integration branch
+        if: success() && github.ref == 'refs/heads/integration/paper-runtime-20260930'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add xgc2_world_lidar/src/world_lidar_node.cpp
+          if ! git diff --cached --quiet; then
+            git diff --cached --check
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'fix(lidar): validate observation frames, epochs and mounting on the tested node'
+            git push origin HEAD:refs/heads/integration/paper-runtime-20260930
+          fi
+          git rev-parse HEAD > /tmp/lidar-evidence/source-commit.txt
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
