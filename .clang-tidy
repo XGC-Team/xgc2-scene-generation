@@ -11,7 +11,7 @@ Checks: >
   readability-inconsistent-declaration-parameter-name,
   readability-redundant-*
 WarningsAsErrors: '*,-clang-analyzer-core.uninitialized.UndefReturn,-clang-analyzer-core.DivideZero'
-HeaderFilterRegex: '.*cluttered_environment/(include|src)/.*'
+HeaderFilterRegex: '.*(cluttered_environment|xgc2_world_lidar)/(include|src)/.*'
 AnalyzeTemporaryDtors: false
 CheckOptions:
   - key: bugprone-argument-comment.StrictMode

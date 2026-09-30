@@ -37,14 +37,14 @@ require_command clang-tidy
 require_command rsync
 
 mapfile -t cpp_files < <(
-  find "${REPO_ROOT}/cluttered_environment" \
+  find "${REPO_ROOT}/cluttered_environment" "${REPO_ROOT}/xgc2_world_lidar" \
     \( -path '*/build/*' -o -path '*/devel/*' -o -path '*/install/*' -o -path '*/vendored/*' \) -prune \
     -o -type f \( -name '*.cpp' -o -name '*.h' -o -name '*.hpp' -o -name '*.cc' -o -name '*.cxx' \) -print |
     sort
 )
 
 if [[ ${#cpp_files[@]} -eq 0 ]]; then
-  echo "no C++ source files found under cluttered_environment" >&2
+  echo "no C++ source files found under the sensor and geometry packages" >&2
   exit 1
 fi
 
@@ -68,6 +68,7 @@ rm -rf "${WORK_DIR}/src" "${WORK_DIR}/build" "${WORK_DIR}/devel"
 mkdir -p "${WORK_DIR}/src"
 rsync -a --delete "${REPO_ROOT}/xgc2_geometry_msgs/" "${WORK_DIR}/src/xgc2_geometry_msgs/"
 rsync -a --delete "${REPO_ROOT}/cluttered_environment/" "${WORK_DIR}/src/cluttered_environment/"
+rsync -a --delete "${REPO_ROOT}/xgc2_world_lidar/" "${WORK_DIR}/src/xgc2_world_lidar/"
 cp "${REPO_ROOT}/.clang-tidy" "${WORK_DIR}/src/.clang-tidy"
 
 (
@@ -87,7 +88,7 @@ if [[ ! -f "${compile_db}" ]]; then
 fi
 
 mapfile -t tidy_files < <(
-  find "${WORK_DIR}/src/cluttered_environment" \
+  find "${WORK_DIR}/src/cluttered_environment" "${WORK_DIR}/src/xgc2_world_lidar" \
     \( -path '*/build/*' -o -path '*/devel/*' -o -path '*/install/*' -o -path '*/vendored/*' \) -prune \
     -o -type f \( -name '*.cpp' -o -name '*.h' -o -name '*.hpp' -o -name '*.cc' -o -name '*.cxx' \) -print |
     sort
@@ -97,7 +98,7 @@ echo "Checking clang-tidy on ${#tidy_files[@]} C++ files"
 for file in "${tidy_files[@]}"; do
   clang-tidy \
     -p "${WORK_DIR}/build" \
-    -header-filter="${WORK_DIR}/src/cluttered_environment/(include|src)/.*" \
+    -header-filter="${WORK_DIR}/src/(cluttered_environment|xgc2_world_lidar)/(include|src)/.*" \
     "$file"
 done
 
