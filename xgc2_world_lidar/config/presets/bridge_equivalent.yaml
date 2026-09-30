@@ -1,0 +1,20 @@
+# Preset bridge_equivalent: see-through 8 m ball of surface samples at 0.1 m,
+# every part sampled on its own (samples inside another obstacle kept), no
+# heading or vertical crop, 20 Hz, stamp = pose stamp. Loaded on top of
+# config/world_lidar.yaml (launch arg preset:=bridge_equivalent).
+mode: penetrating
+range: 8.0
+min_range: 0.0
+h_fov_deg: 360.0
+v_fov_deg: 180.0
+surface_spacing: 0.1
+noise_std: 0.0
+penetrating_heading_crop: false
+penetrating_keep_buried: true
+rate: 20.0
+yaw_only: false
+frame_id: world
+pose_timeout: 0.5
+publish_beams: false
+vehicle_bodies: false
+global_map_spacing: 0.1

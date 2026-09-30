@@ -1,0 +1,56 @@
+# world_lidar_node parameters (loaded into the node's private namespace).
+# launch/world_lidar.launch sets the per-robot topics and the scene source.
+# Sensor
+mode: raycast            # raycast (S1, first return) | penetrating (S0-like, see-through)
+                         # | depth_frustum (S2, pinhole first return)
+range: 20.0              # m, max range (Euclidean, along the beam)
+min_range: 0.0           # m, closer returns are dropped (beam hit = 0)
+h_fov_deg: 360.0
+v_fov_deg: 30.0
+h_res: 360
+v_res: 32
+surface_spacing: 0.1     # m, penetrating sample spacing
+noise_std: 0.0           # m, range noise
+seed: 0
+# penetrating only: ZJU local_sensing CPU crop (pointcloud_render_node.cpp:127-136)
+penetrating_heading_crop: false
+heading_cos_min: 0.0     # keep dot(unit(p - x), body x) >= this; EGO-v2 0.0, Swarm-Formation/FLIP 0.5
+vertical_slab_tan: 0.5773502691896258   # keep |dz| <= tan * range (tan(pi/6))
+# depth_frustum only: pinhole camera looking along body +x (0 = derive from h_fov_deg)
+width: 160
+height: 120
+fx: 0.0
+fy: 0.0
+cx: 0.0
+cy: 0.0
+rate: 10.0               # Hz, per vehicle
+yaw_only: false          # true: sensor keeps level (yaw from the vehicle attitude only)
+frame_id: world
+pose_timeout: 0.5        # s; stale poses are not scanned
+worker_threads: 1        # >1 scans vehicles in parallel
+
+# Per-beam records (raycast / depth_frustum): x y z dx dy dz range hit
+publish_beams: false
+beams_topic_pattern: simple_lidar/beams
+
+# Other served vehicles as spheres; adds int32 vehicle_id (-1 static) to points and beams
+vehicle_bodies: false
+vehicle_body_radius: 0.3 # m
+
+# Vehicles (vehicle_ids overrides num_vehicles; ids are substituted for {id})
+num_vehicles: 1
+pose_topic_pattern: /uav{id}/mavros/local_position/pose
+output_topic_pattern: simple_lidar/points   # relative: <node namespace>/simple_lidar/points
+
+# Scene: snapshot (common scene document, <scene_namespace>/{snapshot,state})
+#        | gazebo (Gazebo obstacle truth, geometry_library + instances)
+scene_source: snapshot
+scene_namespace: /xgc/scene
+geometry_library_topic: /xgc2/simulation/obstacles/geometry_library
+instances_topic: /xgc2/simulation/obstacles/instances
+
+# Latched global map (penetrating, whole scene, no range/FOV filter)
+publish_global_map: false
+global_map_topic: /world_lidar/global_map
+global_map_spacing: 0.1
+global_map_rate: 1.0     # Hz, republish limit while dynamic obstacles move

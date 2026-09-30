@@ -1,0 +1,54 @@
+<launch>
+  <!-- World-frame LiDAR of one robot.
+       Publishes <namespace>/simple_lidar/points (and <namespace>/simple_lidar/beams in
+       raycast / depth_frustum with publish_beams), frame "world". Node: <namespace>/world_lidar,
+       runtime toggle <namespace>/world_lidar/set_enabled (std_srvs/SetBool).
+       Nothing starts unless enable:=true. -->
+  <arg name="enable" default="false"/>
+  <!-- Absolute robot namespace, e.g. /uav1 or /ugv2. -->
+  <arg name="namespace"/>
+  <!-- snapshot: the scene runtime's document (/xgc/scene/{snapshot,state}), on every simulator;
+       gazebo: Gazebo obstacle truth (/xgc2/simulation/obstacles/{geometry_library,instances}). -->
+  <arg name="scene_source" default="snapshot"/>
+  <!-- geometry_msgs/PoseStamped of the robot body in the world frame. -->
+  <arg name="pose_topic" default="/vrpn_client_node$(arg namespace)/pose"/>
+  <!-- Optional parameter file loaded first; the node defaults equal config/world_lidar.yaml. -->
+  <arg name="config" default=""/>
+  <!-- Empty or bridge_equivalent | zju_cpu_crop | zju_cpu_crop_ego_v2 (config/presets/). -->
+  <arg name="preset" default=""/>
+  <!-- Empty keeps config / preset; else raycast | penetrating | depth_frustum. -->
+  <arg name="mode" default=""/>
+  <!-- 0 keeps config / preset. -->
+  <arg name="rate_hz" default="0"/>
+  <arg name="range" default="0"/>
+  <arg name="h_fov_deg" default="0"/>
+  <arg name="v_fov_deg" default="0"/>
+  <arg name="h_res" default="0"/>
+  <arg name="v_res" default="0"/>
+  <!-- Empty keeps config / preset; true | false. Ignored in penetrating. -->
+  <arg name="publish_beams" default=""/>
+  <arg name="start_enabled" default="true"/>
+
+  <group if="$(arg enable)">
+    <node pkg="xgc2_world_lidar" type="world_lidar_node" name="world_lidar" ns="$(arg namespace)" output="screen" required="true">
+      <rosparam if="$(eval arg('config') != '')" command="load" file="$(arg config)"/>
+      <param name="preset" value="$(arg preset)"/>
+      <param name="scene_source" value="$(arg scene_source)"/>
+      <rosparam param="vehicle_ids">[1]</rosparam>
+      <rosparam param="enabled_vehicles">[]</rosparam>
+      <param name="pose_topic_pattern" value="$(arg pose_topic)"/>
+      <param name="output_topic_pattern" value="simple_lidar/points"/>
+      <param name="beams_topic_pattern" value="simple_lidar/beams"/>
+      <param name="publish_global_map" value="false"/>
+      <param if="$(eval arg('mode') != '')" name="mode" value="$(arg mode)"/>
+      <param if="$(eval arg('publish_beams') != '')" name="publish_beams" value="$(arg publish_beams)"/>
+      <param if="$(eval float(arg('rate_hz')) > 0)" name="rate" type="double" value="$(arg rate_hz)"/>
+      <param if="$(eval float(arg('range')) > 0)" name="range" type="double" value="$(arg range)"/>
+      <param if="$(eval float(arg('h_fov_deg')) > 0)" name="h_fov_deg" type="double" value="$(arg h_fov_deg)"/>
+      <param if="$(eval float(arg('v_fov_deg')) > 0)" name="v_fov_deg" type="double" value="$(arg v_fov_deg)"/>
+      <param if="$(eval int(arg('h_res')) > 0)" name="h_res" type="int" value="$(arg h_res)"/>
+      <param if="$(eval int(arg('v_res')) > 0)" name="v_res" type="int" value="$(arg v_res)"/>
+      <param name="enabled" value="$(arg start_enabled)"/>
+    </node>
+  </group>
+</launch>

@@ -31,6 +31,14 @@ python3 -c "from xgc2_scene_runtime.store import SceneStore; from xgc2_geometry_
 dpkg -s ros-noetic-xgc2-cluttered-environment >/dev/null
 dpkg -s ros-noetic-xgc2-geometry-msgs >/dev/null
 dpkg -s ros-noetic-xgc2-mockamap >/dev/null
+dpkg -s ros-noetic-xgc2-world-lidar >/dev/null
+test "$(rospack find xgc2_world_lidar)" = "/opt/ros/${ROS_DISTRO}/share/xgc2_world_lidar"
+test -x "/opt/ros/${ROS_DISTRO}/lib/xgc2_world_lidar/world_lidar_node"
+test -f "/opt/ros/${ROS_DISTRO}/share/xgc2_world_lidar/config/presets/zju_cpu_crop.yaml"
+if ldd "/opt/ros/${ROS_DISTRO}/lib/xgc2_world_lidar/world_lidar_node" | grep -q 'not found'; then
+  echo "missing shared library dependency in world_lidar_node" >&2
+  exit 1
+fi
 dpkg -s libxgc2-math-dev >/dev/null
 math_version="$(dpkg-query -W -f='${Version}' libxgc2-math-dev)"
 dpkg --compare-versions "${math_version}" ge '0.5.6-6~focal'

@@ -19,6 +19,8 @@ required_files=(
   "xgc2_scene_runtime/scripts/scene_node"
   "mockamap/package.xml"
   "mockamap/CMakeLists.txt"
+  "xgc2_world_lidar/package.xml"
+  "xgc2_world_lidar/CMakeLists.txt"
   ".xgc2/scripts/package_debs.sh"
   ".xgc2/scripts/check_installed_packages.sh"
   ".xgc2/scripts/run_in_build_container.sh"
@@ -36,6 +38,10 @@ done
 grep -q '<name>xgc2_geometry_msgs</name>' xgc2_geometry_msgs/package.xml
 grep -q '<name>cluttered_environment</name>' cluttered_environment/package.xml
 grep -q '<name>mockamap</name>' mockamap/package.xml
+grep -q '<name>xgc2_world_lidar</name>' xgc2_world_lidar/package.xml
+grep -q '^project(xgc2_world_lidar)' xgc2_world_lidar/CMakeLists.txt
+grep -q 'xgc2_world_lidar' .xgc2/product.yml
+grep -Fq 'world_lidar_pkg="ros-noetic-xgc2-world-lidar"' .xgc2/scripts/package_debs.sh
 grep -q '^project(xgc2_geometry_msgs)' xgc2_geometry_msgs/CMakeLists.txt
 grep -q '^project(cluttered_environment)' cluttered_environment/CMakeLists.txt
 grep -q '^project(mockamap)' mockamap/CMakeLists.txt
