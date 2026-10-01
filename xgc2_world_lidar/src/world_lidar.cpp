@@ -527,41 +527,6 @@ std::vector<Eigen::Vector3d> sampleShape(const Shape& s, double spacing) {
     return world;
 }
 
-// Surface samples of every shape, without those strictly inside another
-// shape (unless keep_buried): what remains lies on the boundary of the union
-// of the solids.
-std::vector<std::vector<Eigen::Vector3d>>
-sampleScene(const std::vector<Shape>& shapes, double spacing, bool keep_buried) {
-    std::vector<std::vector<Eigen::Vector3d>> out(shapes.size());
-    for (std::size_t i = 0; i < shapes.size(); ++i) {
-        if (keep_buried) {
-            out[i] = sampleShape(shapes[i], spacing);
-            continue;
-        }
-        std::vector<const Shape*> overlapping;
-        for (std::size_t j = 0; j < shapes.size(); ++j) {
-            if (j == i)
-                continue;
-            const Aabb& a = shapes[i].bounds;
-            const Aabb& b = shapes[j].bounds;
-            if ((a.lo.array() <= b.hi.array()).all() && (b.lo.array() <= a.hi.array()).all())
-                overlapping.push_back(&shapes[j]);
-        }
-        for (const auto& p : sampleShape(shapes[i], spacing)) {
-            bool buried = false;
-            for (const Shape* other : overlapping) {
-                if (other->residual(p) < -1e-9) {
-                    buried = true;
-                    break;
-                }
-            }
-            if (!buried)
-                out[i].push_back(p);
-        }
-    }
-    return out;
-}
-
 } // namespace
 
 // Bounding-volume hierarchy over obstacle AABBs (median split on the longest
@@ -611,6 +576,38 @@ struct Bvh {
         nodes[index].left = left;
         nodes[index].right = right;
         return index;
+    }
+
+    // Appends every shape other than `skip` whose bounds overlap `box` (closed
+    // boxes, the test the pairwise loop used). Each node box encloses its
+    // shapes' bounds, so pruning never drops an overlapping shape.
+    void overlapping(const std::vector<Shape>& shapes,
+                     const Aabb& box,
+                     int skip,
+                     std::vector<const Shape*>* out) const {
+        if (nodes.empty())
+            return;
+        int stack[128];
+        int top = 0;
+        stack[top++] = 0;
+        while (top > 0) {
+            const Node& node = nodes[stack[--top]];
+            if (!((box.lo.array() <= node.box.hi.array()).all() &&
+                  (node.box.lo.array() <= box.hi.array()).all()))
+                continue;
+            if (node.left >= 0) {
+                stack[top++] = node.right;
+                stack[top++] = node.left;
+                continue;
+            }
+            for (int i = node.first; i < node.first + node.count; ++i) {
+                const int j = order[i];
+                const Aabb& b = shapes[j].bounds;
+                if (j != skip && (box.lo.array() <= b.hi.array()).all() &&
+                    (b.lo.array() <= box.hi.array()).all())
+                    out->push_back(&shapes[j]);
+            }
+        }
     }
 
     // First surface distance in [0, tmax], or +inf.
@@ -671,6 +668,36 @@ struct Bvh {
         return best;
     }
 };
+
+// Surface samples of every shape, without those strictly inside another
+// shape (unless keep_buried): what remains lies on the boundary of the union
+// of the solids. `bvh` indexes `shapes` and finds the shapes that can bury a
+// sample (whether one does is independent of the order they are tried in).
+std::vector<std::vector<Eigen::Vector3d>>
+sampleScene(const std::vector<Shape>& shapes, const Bvh& bvh, double spacing, bool keep_buried) {
+    std::vector<std::vector<Eigen::Vector3d>> out(shapes.size());
+    std::vector<const Shape*> overlapping;
+    for (std::size_t i = 0; i < shapes.size(); ++i) {
+        if (keep_buried) {
+            out[i] = sampleShape(shapes[i], spacing);
+            continue;
+        }
+        overlapping.clear();
+        bvh.overlapping(shapes, shapes[i].bounds, static_cast<int>(i), &overlapping);
+        for (const auto& p : sampleShape(shapes[i], spacing)) {
+            bool buried = false;
+            for (const Shape* other : overlapping) {
+                if (other->residual(p) < -1e-9) {
+                    buried = true;
+                    break;
+                }
+            }
+            if (!buried)
+                out[i].push_back(p);
+        }
+    }
+    return out;
+}
 
 // A balanced k-d tree over the sampled map. Points are copied into leaf
 // order, so a query walks contiguous memory. A query marks the scene index of
@@ -933,7 +960,7 @@ LidarScene::LidarScene(const std::vector<Obstacle>& obstacles, double spacing, b
     for (const auto& o : obstacles)
         data_->shapes.push_back(detail::compile(o));
     data_->bvh.build(data_->shapes);
-    for (const auto& samples : detail::sampleScene(data_->shapes, spacing, keep_buried))
+    for (const auto& samples : detail::sampleScene(data_->shapes, data_->bvh, spacing, keep_buried))
         data_->points.insert(data_->points.end(), samples.begin(), samples.end());
     data_->index.build(data_->points);
 }
@@ -980,8 +1007,8 @@ std::vector<Eigen::Vector3d> WorldLidar::globalMap(double spacing) const {
         config_.penetrating_keep_buried == scene_->data_->keep_buried)
         return scene_->data_->points;
     std::vector<Eigen::Vector3d> out;
-    for (const auto& pts :
-         detail::sampleScene(scene_->data_->shapes, spacing, config_.penetrating_keep_buried))
+    for (const auto& pts : detail::sampleScene(
+             scene_->data_->shapes, scene_->data_->bvh, spacing, config_.penetrating_keep_buried))
         out.insert(out.end(), pts.begin(), pts.end());
     return out;
 }
