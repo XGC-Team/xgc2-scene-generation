@@ -10,6 +10,7 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 find_package(Eigen3 REQUIRED)
+find_package(Threads REQUIRED)
 find_package(catkin QUIET COMPONENTS
   roscpp roslib geometry_msgs sensor_msgs std_srvs xgc2_geometry_msgs
 )
@@ -19,7 +20,9 @@ if(catkin_FOUND)
 endif()
 include_directories(include ${EIGEN3_INCLUDE_DIR})
 add_library(${PROJECT_NAME} STATIC
-  src/world_lidar.cpp src/scene_conversion.cpp src/convex_body_conversion.cpp)
+  src/world_lidar.cpp src/scene_conversion.cpp src/convex_body_conversion.cpp
+  src/scan_pool.cpp)
+target_link_libraries(${PROJECT_NAME} PUBLIC Threads::Threads)
 if(TARGET Eigen3::Eigen)
   target_link_libraries(${PROJECT_NAME} PUBLIC Eigen3::Eigen)
 else()

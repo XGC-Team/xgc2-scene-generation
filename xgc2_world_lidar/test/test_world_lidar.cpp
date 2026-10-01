@@ -11,6 +11,7 @@
 #include <stdexcept>
 #include <vector>
 
+#include "xgc2_world_lidar/scan_pool.h"
 #include "xgc2_world_lidar/scene_conversion.h"
 #include "xgc2_world_lidar/world_lidar.h"
 
@@ -806,9 +807,9 @@ void testPackedCloudMatchesTagged() {
     int mismatches = 0;
     for (int mode = 0; mode < 3; ++mode) {
         for (const bool with_id : {false, true}) {
-            SensorConfig c = lidar32(mode == 0   ? SensorConfig::kRaycast
-                                     : mode == 1 ? SensorConfig::kPenetrating
-                                                 : SensorConfig::kDepthFrustum);
+            const SensorConfig::Mode modes[] = {
+                SensorConfig::kRaycast, SensorConfig::kPenetrating, SensorConfig::kDepthFrustum};
+            SensorConfig c = lidar32(modes[mode]);
             c.range = 8.0;
             c.noise_std = 0.02;
             c.seed = 5;
@@ -844,9 +845,88 @@ void testPackedCloudMatchesTagged() {
     std::printf("  %d mismatching scans\n", mismatches);
 }
 
+void testScanPool() {
+    std::printf("scan pool: every job once, errors after the batch, sizing\n");
+    using xgc2_world_lidar::ScanPool;
+    for (const std::size_t threads :
+         {std::size_t{0}, std::size_t{1}, std::size_t{3}, std::size_t{8}}) {
+        ScanPool pool(threads);
+        CHECK(pool.threads() == std::max<std::size_t>(threads, 1));
+        for (const std::size_t count :
+             {std::size_t{0}, std::size_t{1}, std::size_t{2}, std::size_t{37}}) {
+            for (int batch = 0; batch < 20; ++batch) {
+                std::vector<int> runs(count, 0);
+                pool.run(count, [&](std::size_t i) { ++runs[i]; });
+                CHECK(std::all_of(runs.begin(), runs.end(), [](int n) { return n == 1; }));
+            }
+        }
+        std::vector<int> runs(10, 0);
+        bool rethrown = false;
+        try {
+            pool.run(runs.size(), [&](std::size_t i) {
+                ++runs[i];
+                if (i == 4)
+                    throw std::runtime_error("job 4");
+            });
+        } catch (const std::runtime_error&) {
+            rethrown = true;
+        }
+        CHECK(rethrown);
+        CHECK(std::all_of(runs.begin(), runs.end(), [](int n) { return n == 1; }));
+    }
+    CHECK(xgc2_world_lidar::defaultScanThreads(7, 8) == 4);
+    CHECK(xgc2_world_lidar::defaultScanThreads(3, 8) == 3);
+    CHECK(xgc2_world_lidar::defaultScanThreads(100, 16) == 8);
+    CHECK(xgc2_world_lidar::defaultScanThreads(0, 8) == 1);
+    CHECK(xgc2_world_lidar::defaultScanThreads(5, 0) == 1);
+    CHECK(xgc2_world_lidar::defaultScanThreads(5, 1) == 1);
+}
+
+// A fleet scanned on the pool publishes exactly the clouds of a serial pass:
+// each robot has its own sensor and scan counter over one shared scene.
+void testParallelFleetEqualsSerial() {
+    std::printf("fleet: pooled scans equal serial scans\n");
+    std::mt19937 rng(31);
+    const auto scene =
+        std::make_shared<const xgc2_world_lidar::LidarScene>(randomScene(rng, 50, 10.0), 0.1, true);
+    SensorConfig c;
+    c.mode = SensorConfig::kPenetrating;
+    c.range = 8.0;
+    c.h_fov_deg = 360.0;
+    c.v_fov_deg = 180.0;
+    c.penetrating_keep_buried = true;
+    c.noise_std = 0.01;
+    c.seed = 3;
+    const int robots = 12;
+    std::vector<std::unique_ptr<WorldLidar>> serial, pooled;
+    for (int i = 0; i < robots; ++i) {
+        serial.push_back(std::make_unique<WorldLidar>(c));
+        pooled.push_back(std::make_unique<WorldLidar>(c));
+        serial.back()->setScene(scene);
+        pooled.back()->setScene(scene);
+    }
+    xgc2_world_lidar::ScanPool pool(4);
+    std::vector<std::vector<uint8_t>> a(robots), b(robots);
+    int mismatches = 0;
+    for (int tick = 0; tick < 5; ++tick) {
+        auto at = [&](int i) { return Eigen::Vector3d(-6.0 + i, 0.3 * tick, 0.5); };
+        for (int i = 0; i < robots; ++i)
+            serial[i]->scanInto(at(i), kI, {}, false, &a[i]);
+        pool.run(robots, [&](std::size_t i) {
+            pooled[i]->scanInto(at(static_cast<int>(i)), kI, {}, false, &b[i]);
+        });
+        for (int i = 0; i < robots; ++i)
+            mismatches += a[i] == b[i] ? 0 : 1;
+    }
+    CHECK(mismatches == 0);
+    std::printf("  %d mismatching clouds\n", mismatches);
+}
+
 int main() {
     testPenetratingMatchesBruteForce();
     testPackedCloudMatchesTagged();
+    testScanPool();
+    testParallelFleetEqualsSerial();
     testSharedSceneIndex();
     testRaycastOcclusion();
     testPenetratingBackFaces();

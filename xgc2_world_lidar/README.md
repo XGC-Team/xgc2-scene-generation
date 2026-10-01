@@ -103,6 +103,10 @@ policy, then shared by the fleet. Penetrating queries use a spatial index before
 applying per-robot FOV/crops; nonpenetrating rays use the shared geometry BVH.
 Unsubscribed sensors do no scan work. Each configured rate has its own simulation
 clock schedule, avoiding wall callback jitter that silently reduces scan rates.
+The robots due in a tick are scanned in parallel on a fixed thread pool (one
+thread per sensed robot, up to half the hardware threads; `~worker_threads`
+overrides), each into its own reused cloud message. Scans are independent, so
+the clouds are those of a serial pass.
 A scene replacement invalidates old observations, and removed obstacles cannot
 remain in the sampled map. The ROS fleet regression covers these boundaries.
 

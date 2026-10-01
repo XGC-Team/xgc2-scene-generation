@@ -55,16 +55,17 @@
 #include <cmath>
 #include <cstring>
 #include <fstream>
-#include <future>
 #include <map>
 #include <memory>
 #include <regex>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "xgc2_world_lidar/convex_body_conversion.h"
 #include "xgc2_world_lidar/observation_contract.h"
+#include "xgc2_world_lidar/scan_pool.h"
 #include "xgc2_world_lidar/scene_conversion.h"
 #include "xgc2_world_lidar/world_lidar.h"
 
@@ -86,20 +87,14 @@ Pose poseOf(const geometry_msgs::Pose& p) {
     return out;
 }
 
-// A PointCloud2 of `count` records: `float_fields` float32 fields, then an
-// int32 `vehicle_id` when `with_id`. `write(i, floats, id)` fills record i.
-template <class Write>
-sensor_msgs::PointCloud2 makeCloud(std::size_t count,
-                                   const std::vector<std::string>& float_fields,
-                                   bool with_id,
-                                   const ros::Time& stamp,
-                                   const std::string& frame_id,
-                                   Write&& write) {
+// The layout of a PointCloud2 of `float_fields` float32 fields, then an
+// int32 `vehicle_id` when `with_id`; no records yet.
+sensor_msgs::PointCloud2 cloudLayout(const std::vector<std::string>& float_fields,
+                                     bool with_id,
+                                     const std::string& frame_id) {
     sensor_msgs::PointCloud2 msg;
-    msg.header.stamp = stamp;
     msg.header.frame_id = frame_id;
     msg.height = 1;
-    msg.width = static_cast<uint32_t>(count);
     uint32_t offset = 0;
     for (const auto& name : float_fields) {
         sensor_msgs::PointField f;
@@ -121,8 +116,28 @@ sensor_msgs::PointCloud2 makeCloud(std::size_t count,
     }
     msg.is_bigendian = false;
     msg.point_step = offset;
-    msg.row_step = msg.point_step * msg.width;
     msg.is_dense = true;
+    return msg;
+}
+
+// Sets the record count and stamp of a cloud whose `data` holds the records.
+void finishCloud(sensor_msgs::PointCloud2* msg, std::size_t count, const ros::Time& stamp) {
+    msg->header.stamp = stamp;
+    msg->width = static_cast<uint32_t>(count);
+    msg->row_step = msg->point_step * msg->width;
+}
+
+// A PointCloud2 of `count` records: `float_fields` float32 fields, then an
+// int32 `vehicle_id` when `with_id`. `write(i, floats, id)` fills record i.
+template <class Write>
+sensor_msgs::PointCloud2 makeCloud(std::size_t count,
+                                   const std::vector<std::string>& float_fields,
+                                   bool with_id,
+                                   const ros::Time& stamp,
+                                   const std::string& frame_id,
+                                   Write&& write) {
+    sensor_msgs::PointCloud2 msg = cloudLayout(float_fields, with_id, frame_id);
+    finishCloud(&msg, count, stamp);
     msg.data.resize(msg.row_step);
     std::vector<float> floats(float_fields.size());
     uint8_t* out = msg.data.data();
@@ -153,21 +168,29 @@ sensor_msgs::PointCloud2 toCloud(const std::vector<Eigen::Vector3d>& points,
                      });
 }
 
-sensor_msgs::PointCloud2 toTaggedCloud(const std::vector<TaggedPoint>& points,
-                                       bool with_id,
-                                       const ros::Time& stamp,
-                                       const std::string& frame_id) {
-    return makeCloud(points.size(),
-                     {"x", "y", "z"},
-                     with_id,
-                     stamp,
-                     frame_id,
-                     [&](std::size_t i, float* f, int32_t* id) {
-                         f[0] = static_cast<float>(points[i].point.x());
-                         f[1] = static_cast<float>(points[i].point.y());
-                         f[2] = static_cast<float>(points[i].point.z());
-                         *id = points[i].vehicle_id;
-                     });
+// The beam hits as /points records (x y z float32, + vehicle_id), in beam
+// order: one scan feeds both topics, so /points are exactly the beam hits.
+std::size_t packHits(const std::vector<Beam>& beams, bool with_id, std::vector<uint8_t>* data) {
+    const std::size_t stride = with_id ? 16 : 12;
+    std::size_t count = 0;
+    for (const auto& b : beams)
+        count += b.hit ? 1 : 0;
+    data->resize(count * stride);
+    uint8_t* out = data->data();
+    for (const auto& b : beams) {
+        if (!b.hit)
+            continue;
+        const Eigen::Vector3d p = b.origin + b.range * b.direction;
+        const float xyz[3] = {
+            static_cast<float>(p.x()), static_cast<float>(p.y()), static_cast<float>(p.z())};
+        std::memcpy(out, xyz, sizeof xyz);
+        if (with_id) {
+            const int32_t id = b.vehicle_id;
+            std::memcpy(out + sizeof xyz, &id, sizeof id);
+        }
+        out += stride;
+    }
+    return count;
 }
 
 // Free-segment records: origin, unit direction, range, hit (1/0).
@@ -299,7 +322,7 @@ public:
         frame_id_ = pnh.param<std::string>("frame_id", "world");
         yaw_only_ = pnh.param("yaw_only", false);
         pose_timeout_ = pnh.param("pose_timeout", 0.5);
-        worker_threads_ = std::max(1, pnh.param("worker_threads", 1));
+        const int worker_threads = pnh.param("worker_threads", 0); // <= 0: automatic
         double rate = pnh.param("rate", 10.0);
         if (!std::isfinite(rate) || !(rate > 0.0))
             throw std::invalid_argument("~rate must be finite and > 0");
@@ -453,6 +476,7 @@ public:
                 v.pub = nh_.advertise<sensor_msgs::PointCloud2>(points_topic, 1);
                 if (v.publish_beams)
                     v.beams_pub = nh_.advertise<sensor_msgs::PointCloud2>(beams_topic, 1);
+                v.cloud = cloudLayout({"x", "y", "z"}, vehicle_bodies_, frame_id_);
             }
             // Poses of every served vehicle (a vehicle without a sensor is still a body for the
             // others).
@@ -472,6 +496,16 @@ public:
                      v.sensed ? points_topic.c_str() : "(no sensor)",
                      v.rate);
         }
+        // Scans are independent: every robot has its own sensor and scan
+        // counter, and the shared scene is immutable. They run on a pool sized
+        // from the sensed robots and the hardware; ~worker_threads overrides.
+        const std::size_t sensed = static_cast<std::size_t>(std::count_if(
+            vehicles_.begin(), vehicles_.end(), [](const Vehicle& v) { return v.sensed; }));
+        const std::size_t threads =
+            worker_threads > 0 ? std::min<std::size_t>(static_cast<std::size_t>(worker_threads),
+                                                       std::max<std::size_t>(sensed, 1))
+                               : defaultScanThreads(sensed, std::thread::hardware_concurrency());
+        pool_ = std::make_unique<ScanPool>(threads);
         enable_srv_ = pnh.advertiseService("set_enabled", &WorldLidarNode::setEnabled, this);
 
         const std::string scene_source = pnh.param<std::string>("scene_source", "snapshot");
@@ -518,6 +552,7 @@ public:
                  rate,
                  publish_beams_ ? "on" : "off",
                  vehicle_bodies_ ? "on" : "off");
+        ROS_INFO("world_lidar: %zu sensors on %zu scan threads", sensed, pool_->threads());
         ROS_INFO("world_lidar: %s (toggle with %s)",
                  enabled_ ? "enabled" : "disabled: publishing nothing",
                  enable_srv_.getService().c_str());
@@ -535,6 +570,9 @@ private:
         double rate = 10.0;
         bool publish_beams = false;
         ros::Time next_scan;
+        // The /points message, reused: its records keep their capacity, and
+        // publish() serializes before it returns.
+        sensor_msgs::PointCloud2 cloud;
     };
 
     bool setEnabled(std_srvs::SetBool::Request& req, std_srvs::SetBool::Response& res) {
@@ -797,56 +835,42 @@ private:
                 bodies.push_back({vehicles_[k].id,
                                   poseOf(vehicles_[k].pose->pose).position,
                                   vehicle_body_radius_});
-        std::vector<std::vector<TaggedPoint>> clouds(active.size());
-        std::vector<std::vector<Beam>> beams(active.size());
-        auto scanOne = [&](std::size_t i) {
-            const Vehicle& v = vehicles_[active[i]];
-            const Pose p = sensorWorldPose(poseOf(v.pose->pose), sensor_mount_);
-            Eigen::Quaterniond q = p.orientation.normalized();
-            if (yaw_only_) {
-                const Eigen::Vector3d x = q * Eigen::Vector3d::UnitX();
-                q = Eigen::AngleAxisd(std::atan2(x.y(), x.x()), Eigen::Vector3d::UnitZ());
-            }
-            std::vector<VehicleBody> others;
-            for (const auto& b : bodies)
-                if (b.id != v.id)
-                    others.push_back(b);
-            if (!v.publish_beams) {
-                clouds[i] = v.lidar->scanTagged(p.position, q, others);
-                return;
-            }
-            // One scan feeds both topics, so /points are exactly the beam hits.
-            beams[i] = v.lidar->scanWithBeams(p.position, q, others);
-            for (const auto& b : beams[i])
-                if (b.hit)
-                    clouds[i].push_back({b.origin + b.range * b.direction, b.vehicle_id});
-        };
-        if (worker_threads_ <= 1 || active.size() <= 1) {
-            for (std::size_t i = 0; i < active.size(); ++i)
-                scanOne(i);
-        } else {
-            std::vector<std::future<void>> jobs;
-            const std::size_t workers = std::min<std::size_t>(worker_threads_, active.size());
-            for (std::size_t w = 0; w < workers; ++w)
-                jobs.push_back(std::async(std::launch::async, [&, w] {
-                    for (std::size_t i = w; i < active.size(); i += workers)
-                        scanOne(i);
-                }));
-            for (auto& j : jobs)
-                j.get();
-        }
-        for (std::size_t i = 0; i < active.size(); ++i) {
-            Vehicle& v = vehicles_[active[i]];
+        for (std::size_t k : active) {
+            Vehicle& v = vehicles_[k];
             if (v.next_scan.isZero())
                 v.next_scan = scheduled;
             v.next_scan += ros::Duration(1.0 / v.rate);
             if (v.next_scan <= scheduled)
                 v.next_scan = scheduled + ros::Duration(1.0 / v.rate);
-            const ros::Time stamp = v.pose->header.stamp;
-            v.pub.publish(toTaggedCloud(clouds[i], vehicle_bodies_, stamp, frame_id_));
-            if (v.publish_beams)
-                v.beams_pub.publish(toBeamCloud(beams[i], vehicle_bodies_, stamp, frame_id_));
         }
+        // Each job scans one robot into its reused message and publishes it.
+        pool_->run(active.size(),
+                   [&](std::size_t i) { scanAndPublish(vehicles_[active[i]], bodies); });
+    }
+
+    void scanAndPublish(Vehicle& v, const std::vector<VehicleBody>& bodies) {
+        const Pose p = sensorWorldPose(poseOf(v.pose->pose), sensor_mount_);
+        Eigen::Quaterniond q = p.orientation.normalized();
+        if (yaw_only_) {
+            const Eigen::Vector3d x = q * Eigen::Vector3d::UnitX();
+            q = Eigen::AngleAxisd(std::atan2(x.y(), x.x()), Eigen::Vector3d::UnitZ());
+        }
+        std::vector<VehicleBody> others;
+        for (const auto& b : bodies)
+            if (b.id != v.id)
+                others.push_back(b);
+        const ros::Time stamp = v.pose->header.stamp;
+        if (!v.publish_beams) {
+            const std::size_t count =
+                v.lidar->scanInto(p.position, q, others, vehicle_bodies_, &v.cloud.data);
+            finishCloud(&v.cloud, count, stamp);
+            v.pub.publish(v.cloud);
+            return;
+        }
+        const std::vector<Beam> beams = v.lidar->scanWithBeams(p.position, q, others);
+        finishCloud(&v.cloud, packHits(beams, vehicle_bodies_, &v.cloud.data), stamp);
+        v.pub.publish(v.cloud);
+        v.beams_pub.publish(toBeamCloud(beams, vehicle_bodies_, stamp, frame_id_));
     }
 
     Pose sensor_mount_;
@@ -869,7 +893,7 @@ private:
     std::vector<Vehicle> vehicles_;
     std::string frame_id_;
     ros::NodeHandle nh_;
-    int worker_threads_ = 1;
+    std::unique_ptr<ScanPool> pool_;
     ros::Time map_stamp_;
     ros::Time last_tick_;
     bool yaw_only_ = false;

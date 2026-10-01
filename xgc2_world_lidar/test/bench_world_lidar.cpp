@@ -3,7 +3,8 @@
 // PointCloud2 float32 x y z records). Not a test; run it by hand:
 //
 //   bench_world_lidar [--parts FILE] [--robots N] [--ticks T]
-//                     [--mode penetrating|raycast] [--path tagged|into] [--seed S]
+//                     [--mode penetrating|raycast] [--path tagged|into]
+//                     [--threads W] [--seed S]
 //
 // Without --parts the scene is a synthetic stand-in for the native
 // Swarm-Formation forest (60 pillars, 20 rings of 126 thin capsules: 2580
@@ -24,6 +25,8 @@
 // kept) or a 360 x 32 raycast over the same range. --path tagged scans with
 // scanTagged() and packs the records the way the node used to; --path into
 // writes them in place with scanInto() into a buffer reused across ticks.
+// --threads W scans the robots of a tick on a ScanPool of W threads, as the
+// node does (0: the node's default for this many robots on this host).
 // The checksum covers every output byte, so two builds or paths that print
 // the same checksum produced identical clouds point for point.
 
@@ -41,8 +44,10 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 
+#include "xgc2_world_lidar/scan_pool.h"
 #include "xgc2_world_lidar/scene_conversion.h"
 #include "xgc2_world_lidar/world_lidar.h"
 
@@ -162,11 +167,9 @@ void pack(const std::vector<TaggedPoint>& points, std::vector<uint8_t>* data) {
     }
 }
 
-} // namespace
-
-int main(int argc, char** argv) {
+int run(int argc, char** argv) {
     std::string parts, mode = "penetrating", path = "tagged";
-    int robots = 7, ticks = 40;
+    int robots = 7, ticks = 40, threads = 1;
     unsigned seed = 7;
     for (int i = 1; i + 1 < argc; i += 2) {
         const std::string key = argv[i], value = argv[i + 1];
@@ -178,6 +181,8 @@ int main(int argc, char** argv) {
             ticks = std::max(1, std::atoi(value.c_str()));
         else if (key == "--mode")
             mode = value;
+        else if (key == "--threads")
+            threads = std::max(0, std::atoi(value.c_str()));
         else if (key == "--path")
             path = value;
         else if (key == "--seed")
@@ -242,19 +247,23 @@ int main(int argc, char** argv) {
             -16.0 + 30.0 * (column + 0.5) / side, -7.0 + 14.0 * (row + 0.5) / side, 0.5);
     }
     std::vector<std::vector<uint8_t>> clouds(robots);
+    if (threads == 0)
+        threads = static_cast<int>(xgc2_world_lidar::defaultScanThreads(
+            static_cast<std::size_t>(robots), std::thread::hardware_concurrency()));
+    xgc2_world_lidar::ScanPool pool(static_cast<std::size_t>(threads));
     std::vector<double> tick_ms, tick_cpu;
     double points = 0.0;
     Fnv checksum;
     for (int t = 0; t < ticks; ++t) {
         const auto tick_start = Clock::now();
         const double cpu_start = cpuMs();
-        for (int i = 0; i < robots; ++i) {
+        pool.run(static_cast<std::size_t>(robots), [&](std::size_t i) {
             const Eigen::Vector3d p = start[i] + Eigen::Vector3d(0.075 * t, 0.0, 0.0);
             if (path == "into")
                 fleet[i]->scanInto(p, Eigen::Quaterniond::Identity(), {}, false, &clouds[i]);
             else
                 pack(fleet[i]->scanTagged(p, Eigen::Quaterniond::Identity(), {}), &clouds[i]);
-        }
+        });
         tick_cpu.push_back(cpuMs() - cpu_start);
         tick_ms.push_back(msSince(tick_start));
         for (const auto& cloud : clouds) {
@@ -268,12 +277,13 @@ int main(int argc, char** argv) {
     for (double v : tick_ms)
         mean += v;
     mean /= static_cast<double>(tick_ms.size());
-    std::printf("%s via %s, %d robots, %d ticks, 1 thread: tick wall mean %.2f p50 %.2f p95 "
+    std::printf("%s via %s, %d robots, %d ticks, %d threads: tick wall mean %.2f p50 %.2f p95 "
                 "%.2f ms, cpu p50 %.2f ms (%.3f ms/scan), %.0f points/scan, checksum %016llx\n",
                 mode.c_str(),
                 path.c_str(),
                 robots,
                 ticks,
+                threads,
                 mean,
                 sorted[sorted.size() / 2],
                 sorted[std::min(sorted.size() - 1, sorted.size() * 95 / 100)],
@@ -282,4 +292,17 @@ int main(int argc, char** argv) {
                 points / (static_cast<double>(ticks) * robots),
                 static_cast<unsigned long long>(checksum.h));
     return 0;
+}
+
+} // namespace
+
+int main(int argc, char** argv) {
+    try {
+        return run(argc, argv);
+    } catch (const std::exception& e) {
+        std::fprintf(stderr, "bench_world_lidar: %s\n", e.what());
+    } catch (...) {
+        std::fprintf(stderr, "bench_world_lidar: unknown error\n");
+    }
+    return 1;
 }
