@@ -20,6 +20,71 @@ from topic_contract_test import snapshot, xyz
 
 
 class FleetContract(unittest.TestCase):
+    def test_reference_only_world_does_not_create_sensor_topics(self):
+        executables = roslib.packages.find_node('xgc2_world_lidar', 'world_lidar_node')
+        self.assertTrue(executables)
+        observed = []
+        subscriber = rospy.Subscriber('/xgc/scene/reference_cloud', PointCloud2,
+                                      observed.append, queue_size=10)
+        publisher = rospy.Publisher('/reference_test/snapshot', SceneSnapshot,
+                                    queue_size=1, latch=True)
+        manifest = {'schemaVersion': 1, 'robots': [],
+                    'referenceCloud': {'surfaceSpacing': 0.1}}
+        process = subprocess.Popen([executables[0], '__name:=reference_only_lidar',
+                                    '_scene_namespace:=/reference_test',
+                                    '_fleet_json:=' + json.dumps(manifest)],
+                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            deadline = time.monotonic() + 10
+            while publisher.get_num_connections() != 1:
+                self.assertIsNone(process.poll(), 'reference-only node exited')
+                self.assertLess(time.monotonic(), deadline)
+                time.sleep(0.02)
+            publisher.publish(snapshot())
+            while not any(cloud.width for cloud in observed):
+                self.assertLess(time.monotonic(), deadline, 'no actual scene cloud')
+                time.sleep(0.02)
+            cloud = observed[-1]
+            self.assertEqual(cloud.header.frame_id, 'world')
+            self.assertEqual(cloud.point_step, 12)
+            self.assertEqual([field.name for field in cloud.fields], ['x', 'y', 'z'])
+            publishers = rosgraph.Master(rospy.get_name()).getSystemState()[0]
+            owned = [topic for topic, nodes in publishers if '/reference_only_lidar' in nodes]
+            self.assertEqual(set(owned), {'/xgc/scene/reference_cloud', '/rosout'})
+
+            removed = snapshot()
+            removed.revision = 2
+            removed.obstacles = []
+            publisher.publish(removed)
+            deadline = time.monotonic() + 5
+            while observed[-1].width:
+                self.assertLess(time.monotonic(), deadline, 'removed scene retained a map')
+                time.sleep(0.02)
+
+            # An unready dynamic revision must clear the previous latched map.
+            restored = snapshot()
+            restored.revision = 3
+            publisher.publish(restored)
+            while not observed[-1].width:
+                self.assertLess(time.monotonic(), deadline)
+                time.sleep(0.02)
+            pending = snapshot()
+            pending.revision = 4
+            pending.obstacles[0].dynamic = True
+            publisher.publish(pending)
+            while observed[-1].width:
+                self.assertLess(time.monotonic(), deadline, 'pending revision retained old map')
+                time.sleep(0.02)
+        finally:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
+            subscriber.unregister()
+            publisher.unregister()
+
     def test_fleet_manifest_exceeding_linux_argv_limit(self):
         robots = [{'namespace': '/large_fleet_with_long_namespace/uav_%d' % i,
                    'mode': 'penetrating', 'rangeMeters': 8, 'rateHz': 20,

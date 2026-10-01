@@ -319,16 +319,11 @@ public:
         if (vehicle_bodies_ && !(vehicle_body_radius_ > 0.0))
             throw std::invalid_argument("~vehicle_body_radius must be > 0");
 
-        if (pnh.param("publish_global_map", false)) {
-            SensorConfig map_config;
-            map_config.mode = SensorConfig::kPenetrating;
-            map_config.surface_spacing = pnh.param("global_map_spacing", 0.1);
-            map_config.penetrating_keep_buried = lidar_->config().penetrating_keep_buried;
-            map_lidar_ = std::make_unique<WorldLidar>(map_config);
-            map_pub_ = nh_.advertise<sensor_msgs::PointCloud2>(
-                pnh.param<std::string>("global_map_topic", "/world_lidar/global_map"), 1, true);
-            map_period_ = 1.0 / std::max(1e-3, pnh.param("global_map_rate", 1.0));
-        }
+        bool publish_map = pnh.param("publish_global_map", false);
+        double map_spacing = pnh.param("global_map_spacing", 0.1);
+        bool map_keep_buried = lidar_->config().penetrating_keep_buried;
+        std::string map_topic =
+            pnh.param<std::string>("global_map_topic", "/world_lidar/global_map");
 
         std::vector<int> ids;
         if (!pnh.getParam("vehicle_ids", ids)) {
@@ -373,11 +368,31 @@ public:
                 throw std::invalid_argument("unsupported fleet sensor schema");
             for (const auto& item : fleet.get_child("robots"))
                 sensor_specs.push_back(item.second);
-            if (sensor_specs.empty() || sensor_specs.size() > 512)
-                throw std::invalid_argument("fleet sensor roster must contain 1..512 robots");
+            const auto reference = fleet.get_child_optional("referenceCloud");
+            if (reference) {
+                publish_map = true;
+                map_spacing = reference->get<double>("surfaceSpacing");
+                map_keep_buried = false;
+                map_topic = "/xgc/scene/reference_cloud";
+            }
+            if ((sensor_specs.empty() && !reference) || sensor_specs.size() > 512)
+                throw std::invalid_argument(
+                    "fleet needs 1..512 robots or a scene reference cloud");
             ids.clear();
             for (std::size_t i = 0; i < sensor_specs.size(); ++i)
                 ids.push_back(static_cast<int>(i + 1));
+        }
+        if (publish_map) {
+            if (!std::isfinite(map_spacing) || map_spacing <= 0.0 || map_spacing > 10.0)
+                throw std::invalid_argument("invalid reference map spacing");
+            SensorConfig map_config;
+            map_config.mode = SensorConfig::kPenetrating;
+            map_config.surface_spacing = map_spacing;
+            map_config.penetrating_keep_buried = map_keep_buried;
+            map_lidar_ = std::make_unique<WorldLidar>(map_config);
+            map_pub_ = nh_.advertise<sensor_msgs::PointCloud2>(map_topic, 1, true);
+            map_period_ = 1.0 / std::max(1e-3, pnh.param("global_map_rate", 1.0));
+            ROS_INFO("world_lidar: scene reference %s (not a robot sensor)", map_topic.c_str());
         }
         vehicles_.resize(ids.size());
         std::set<std::string> namespaces;
@@ -539,6 +554,11 @@ private:
         scene_ready_ = false;
         pending_ = false;
         map_dirty_ = false;
+        map_stamp_ = ros::Time();
+        // A pending or refused revision must not leave a latched previous map
+        // visible. Local scans still wait for the matching scene/state pair.
+        if (map_lidar_)
+            map_pub_.publish(toCloud({}, ros::Time::now(), frame_id_));
         state_.reset();
         if (msg->header.frame_id != frame_id_) {
             snapshot_.reset();
