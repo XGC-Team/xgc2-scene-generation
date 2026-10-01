@@ -123,3 +123,7 @@ coordinates. The initial obstacle position must equal the path start; moving a
 whole obstacle in the editor translates its path with it. `reset` rewinds playback; it does not reset geometry or
 robots. Current positions never overwrite saved initial poses. Consumers must
 declare which motion models they support.
+
+## External random scene sources
+
+A `xgc2.scene-source.v1` source declares `mode: random`, `format: geometry`, and a `generator` with an explicit `command` argument vector and numeric `parameters`. The external generator returns JSON with a validated `scene` document and provenance fields. The runtime generates once for its Run-owned `working_file`, saves the geometry and `.generation.yaml` receipt, and reuses that result on process restart. Failed generators publish no scene. Fixed sources continue to use `xgc2.scene.v1` directly; the simulator consumes the same saved geometry authority.

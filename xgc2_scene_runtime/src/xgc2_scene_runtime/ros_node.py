@@ -17,6 +17,7 @@ from xgc2_geometry_msgs.srv import ApplyScene, SceneCommand, SceneCommandRespons
 
 from .consumers import ConsumerRegistry
 from .document import SceneError
+from .generation import resolve
 from .store import MAX_DOCUMENT_BYTES, SceneStore, load, unique_object
 
 
@@ -56,7 +57,8 @@ def snapshot(document, epoch, revision):
 class SceneNode:
     def __init__(self):
         source = rospy.get_param('~scene_file')
-        initial, source_digest = load(source)
+        overrides = json.loads(rospy.get_param('~generation_parameters_json', '{}'))
+        (initial, source_digest), source = resolve(source, rospy.get_param('~working_file', '') or '', overrides)
         self.gazebo = bool(rospy.get_param('~gazebo', True))
         self.frozen = bool(rospy.get_param('~frozen', False))
         self.registry = ConsumerRegistry()

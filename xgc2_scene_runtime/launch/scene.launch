@@ -5,6 +5,7 @@
   <arg name="working_file" default="" />
   <arg name="gazebo" default="true" />
   <arg name="frozen" default="false" />
+  <arg name="generation_parameters_json" default="{}" />
   <group ns="$(arg scene_namespace)">
     <node pkg="xgc2_scene_runtime" type="scene_node" name="runtime" output="screen" required="true">
       <param name="scene_file" value="$(arg scene_file)" />
@@ -12,6 +13,7 @@
       <param name="working_file" value="$(arg working_file)" />
       <param name="gazebo" value="$(arg gazebo)" />
       <param name="frozen" value="$(arg frozen)" />
+      <param name="generation_parameters_json" value="$(arg generation_parameters_json)" />
     </node>
   </group>
 </launch>
