@@ -624,14 +624,24 @@ struct Bvh {
         for (int i = 0; i < 3; ++i)
             inv[i] = 1.0 / (std::abs(d[i]) < 1e-300 ? 1e-300 : d[i]);
         double best = kInf;
-        int stack[128];
+        // Each entry keeps the entry distance its box test returned. A node is
+        // pushed only when its box is entered within min(best, tmax) at push
+        // time, so retesting the box against a smaller `best` at pop time
+        // rejects it exactly when that entry distance exceeds `best`.
+        struct Entry {
+            int node;
+            double t;
+        };
+        Entry stack[128];
         int top = 0;
-        if (nodes[0].box.enter(o, inv, tmax) < kInf)
-            stack[top++] = 0;
+        const double t_root = nodes[0].box.enter(o, inv, tmax);
+        if (t_root < kInf)
+            stack[top++] = {0, t_root};
         while (top > 0) {
-            const Node& node = nodes[stack[--top]];
-            if (node.box.enter(o, inv, std::min(best, tmax)) == kInf)
+            const Entry entry = stack[--top];
+            if (entry.t > best)
                 continue;
+            const Node& node = nodes[entry.node];
             if (node.left < 0) {
                 for (int i = node.first; i < node.first + node.count; ++i) {
                     double t0, t1;
@@ -648,14 +658,14 @@ struct Bvh {
             // Push the far child first so the near one is visited first.
             if (tl <= tr) {
                 if (tr < kInf)
-                    stack[top++] = node.right;
+                    stack[top++] = {node.right, tr};
                 if (tl < kInf)
-                    stack[top++] = node.left;
+                    stack[top++] = {node.left, tl};
             } else {
                 if (tl < kInf)
-                    stack[top++] = node.left;
+                    stack[top++] = {node.left, tl};
                 if (tr < kInf)
-                    stack[top++] = node.right;
+                    stack[top++] = {node.right, tr};
             }
         }
         return best;
