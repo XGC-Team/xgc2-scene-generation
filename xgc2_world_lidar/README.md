@@ -1,15 +1,17 @@
 # xgc2_world_lidar
 
 Optional world-frame LiDAR / point-cloud sensor for simulated robots. It is
-the same sensor on every simulator: one ROS-free core, one node per robot and
-one topic contract.
+the shared scene sampler for lightweight sensing and explicit sampled modes on
+Gazebo: one ROS-free core and a world-owned fleet node. Gazebo's native surface
+ray sensor remains a separate implementation of the simple-lidar topic contract.
 
 - **Core** (`include/xgc2_world_lidar/`, `src/world_lidar.cpp`,
   `src/scene_conversion.cpp`, `src/convex_body_conversion.cpp`): C++17 and
   Eigen only. BVH ray casting and surface sampling over closed convex solids.
 - **Node** (`src/world_lidar_node.cpp`, `launch/world_lidar.launch`): a thin
-  ROS1 edge. XGC2 starts one per robot whose Experiment slot enables the
-  sensor.
+  ROS1 edge. XGC2 starts one fleet node for the opted-in robot slots and any
+  explicitly declared scene reference layer. Standalone per-robot launch is
+  also available for sensor checks.
 
 ## Modes
 
@@ -103,3 +105,12 @@ Unsubscribed sensors do no scan work. Each configured rate has its own simulatio
 clock schedule, avoiding wall callback jitter that silently reduces scan rates.
 A scene replacement invalidates old observations, and removed obstacles cannot
 remain in the sampled map. The ROS fleet regression covers these boundaries.
+
+The optional `referenceCloud: {"surfaceSpacing": 0.1}` manifest entry publishes
+the full scene's sampled exterior at `/xgc/scene/reference_cloud`, world-frame
+XYZ. It is a visualization reference, never a local sensor or an algorithm's
+private map. Reference-only manifests may have an empty robots array; no robot
+pose subscriptions or sensor topics are invented. Local sensors retain their
+own range/FOV and sampling policy. The reference shares compiled scene data
+where policies match and is published latched when consumed. Replacing,
+removing, or waiting for a dynamic scene revision clears the old reference.
