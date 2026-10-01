@@ -31,6 +31,9 @@ foreach(suite world_lidar scene_sources observation_contract)
   target_link_libraries(test_${suite} PRIVATE ${PROJECT_NAME})
   add_test(NAME test_${suite} COMMAND test_${suite})
 endforeach()
+# Fleet scan benchmark (not a test): see the usage at the top of the source.
+add_executable(bench_world_lidar test/bench_world_lidar.cpp)
+target_link_libraries(bench_world_lidar PRIVATE ${PROJECT_NAME})
 
 if(catkin_FOUND)
   include_directories(${catkin_INCLUDE_DIRS})
