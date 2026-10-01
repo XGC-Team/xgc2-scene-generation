@@ -195,6 +195,16 @@ public:
     std::vector<TaggedPoint> scanTagged(const Eigen::Vector3d& position,
                                         const Eigen::Quaterniond& attitude,
                                         const std::vector<VehicleBody>& others = {}) const;
+    // The points scanTagged() returns, written straight into `data` as the
+    // records of a sensor_msgs/PointCloud2: float32 x y z in host byte order,
+    // then int32 vehicle_id (-1 static geometry) when `with_id` (point_step 12
+    // or 16). `data` is resized to exactly the records; its capacity is kept,
+    // so a buffer reused across scans does not reallocate. Returns the count.
+    std::size_t scanInto(const Eigen::Vector3d& position,
+                         const Eigen::Quaterniond& attitude,
+                         const std::vector<VehicleBody>& others,
+                         bool with_id,
+                         std::vector<uint8_t>* data) const;
     // Distance along unit `direction` to the first surface within max_range,
     // or +infinity. A ray starting inside a solid returns its exit surface.
     double castRay(const Eigen::Vector3d& origin,
@@ -220,12 +230,18 @@ private:
                     uint64_t scan_index,
                     const std::vector<VehicleBody>& others,
                     Sink&& sink) const;
-    template <class Sink>
+    // Out: reserve(upper bound of the points to come), push(point, vehicle id).
+    template <class Out>
     void samplePenetrating(const Eigen::Vector3d& position,
                            const Eigen::Matrix3d& rotation,
                            uint64_t scan_index,
                            const std::vector<VehicleBody>& others,
-                           Sink&& sink) const;
+                           Out& out) const;
+    template <class Out>
+    void scanPoints(const Eigen::Vector3d& position,
+                    const Eigen::Quaterniond& attitude,
+                    const std::vector<VehicleBody>& others,
+                    Out& out) const;
     bool insideFov(const Eigen::Vector3d& sensor_frame_vector) const;
     bool insideCrop(const Eigen::Vector3d& world_offset, const Eigen::Matrix3d& rotation) const;
 

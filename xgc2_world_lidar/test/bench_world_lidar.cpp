@@ -3,7 +3,7 @@
 // PointCloud2 float32 x y z records). Not a test; run it by hand:
 //
 //   bench_world_lidar [--parts FILE] [--robots N] [--ticks T]
-//                     [--mode penetrating|raycast] [--seed S]
+//                     [--mode penetrating|raycast] [--path tagged|into] [--seed S]
 //
 // Without --parts the scene is a synthetic stand-in for the native
 // Swarm-Formation forest (60 pillars, 20 rings of 126 thin capsules: 2580
@@ -21,9 +21,11 @@
 // (quaternions x y z w). Robots start on a grid over the scene and move along
 // +x by 0.075 m per tick (1.5 m/s at 20 Hz). The sensor is the lightweight
 // default (bridge_equivalent: penetrating, 8 m, full sphere, buried samples
-// kept) or a 360 x 32 raycast over the same range. The checksum covers every
-// output byte, so two builds that print the same checksum produced identical
-// clouds point for point.
+// kept) or a 360 x 32 raycast over the same range. --path tagged scans with
+// scanTagged() and packs the records the way the node used to; --path into
+// writes them in place with scanInto() into a buffer reused across ticks.
+// The checksum covers every output byte, so two builds or paths that print
+// the same checksum produced identical clouds point for point.
 
 #include <algorithm>
 #include <chrono>
@@ -163,7 +165,7 @@ void pack(const std::vector<TaggedPoint>& points, std::vector<uint8_t>* data) {
 } // namespace
 
 int main(int argc, char** argv) {
-    std::string parts, mode = "penetrating";
+    std::string parts, mode = "penetrating", path = "tagged";
     int robots = 7, ticks = 40;
     unsigned seed = 7;
     for (int i = 1; i + 1 < argc; i += 2) {
@@ -176,6 +178,8 @@ int main(int argc, char** argv) {
             ticks = std::max(1, std::atoi(value.c_str()));
         else if (key == "--mode")
             mode = value;
+        else if (key == "--path")
+            path = value;
         else if (key == "--seed")
             seed = static_cast<unsigned>(std::atoi(value.c_str()));
         else {
@@ -221,6 +225,10 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "--mode must be penetrating or raycast\n");
         return 2;
     }
+    if (path != "tagged" && path != "into") {
+        std::fprintf(stderr, "--path must be tagged or into\n");
+        return 2;
+    }
     auto scene = std::make_shared<const LidarScene>(
         obstacles, config.surface_spacing, config.penetrating_keep_buried);
     std::vector<std::unique_ptr<WorldLidar>> fleet;
@@ -242,7 +250,10 @@ int main(int argc, char** argv) {
         const double cpu_start = cpuMs();
         for (int i = 0; i < robots; ++i) {
             const Eigen::Vector3d p = start[i] + Eigen::Vector3d(0.075 * t, 0.0, 0.0);
-            pack(fleet[i]->scanTagged(p, Eigen::Quaterniond::Identity(), {}), &clouds[i]);
+            if (path == "into")
+                fleet[i]->scanInto(p, Eigen::Quaterniond::Identity(), {}, false, &clouds[i]);
+            else
+                pack(fleet[i]->scanTagged(p, Eigen::Quaterniond::Identity(), {}), &clouds[i]);
         }
         tick_cpu.push_back(cpuMs() - cpu_start);
         tick_ms.push_back(msSince(tick_start));
@@ -257,9 +268,10 @@ int main(int argc, char** argv) {
     for (double v : tick_ms)
         mean += v;
     mean /= static_cast<double>(tick_ms.size());
-    std::printf("%s, %d robots, %d ticks, 1 thread: tick wall mean %.2f p50 %.2f p95 "
+    std::printf("%s via %s, %d robots, %d ticks, 1 thread: tick wall mean %.2f p50 %.2f p95 "
                 "%.2f ms, cpu p50 %.2f ms (%.3f ms/scan), %.0f points/scan, checksum %016llx\n",
                 mode.c_str(),
+                path.c_str(),
                 robots,
                 ticks,
                 mean,

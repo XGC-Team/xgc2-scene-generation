@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstring>
 #include <random>
 #include <stdexcept>
 #include <string>
@@ -661,81 +662,108 @@ struct Bvh {
     }
 };
 
-// A balanced point index over the sampled map. Bounding boxes prune regions
-// outside the requested range; angular tests are applied only to candidates.
+// A balanced k-d tree over the sampled map. Points are copied into leaf
+// order, so a query walks contiguous memory. A query marks the scene index of
+// every point within range in a bitmap instead of collecting and sorting
+// candidates; the caller visits the marks in ascending scene index, the order
+// every scan has always produced (and that seeded range noise depends on).
+// Bounding boxes prune regions outside the range; angular tests are applied
+// only to marked points.
 struct PointIndex {
+    static constexpr std::size_t kLeafSize = 32;
     struct Node {
         Aabb box;
-        int left = -1, right = -1, first = 0, count = 0;
+        int left = -1, right = -1; // children; -1 for a leaf
+        uint32_t first = 0, count = 0;
+    };
+    struct Item {
+        Eigen::Vector3d point;
+        uint32_t id;
     };
     std::vector<Node> nodes;
-    std::vector<std::size_t> order;
+    std::vector<Eigen::Vector3d> leaf_points; // points in leaf order
+    std::vector<uint32_t> leaf_ids;           // their scene indices
+
     void build(const std::vector<Eigen::Vector3d>& points) {
-        order.resize(points.size());
-        for (std::size_t i = 0; i < points.size(); ++i)
-            order[i] = i;
+        if (points.size() > std::numeric_limits<uint32_t>::max())
+            throw std::invalid_argument("too many scene samples");
         nodes.clear();
-        if (!points.empty())
-            buildNode(points, 0, points.size());
+        std::vector<Item> items(points.size());
+        for (std::size_t i = 0; i < points.size(); ++i)
+            items[i] = {points[i], static_cast<uint32_t>(i)};
+        if (!items.empty())
+            buildNode(items, 0, items.size());
+        leaf_points.resize(items.size());
+        leaf_ids.resize(items.size());
+        for (std::size_t i = 0; i < items.size(); ++i) {
+            leaf_points[i] = items[i].point;
+            leaf_ids[i] = items[i].id;
+        }
     }
-    int
-    buildNode(const std::vector<Eigen::Vector3d>& points, std::size_t first, std::size_t count) {
+    int buildNode(std::vector<Item>& items, std::size_t first, std::size_t count) {
         const int index = static_cast<int>(nodes.size());
         nodes.emplace_back();
         Aabb box;
         for (std::size_t i = first; i < first + count; ++i)
-            box.grow(points[order[i]]);
+            box.grow(items[i].point);
         nodes[index].box = box;
-        if (count <= 32) {
-            nodes[index].first = static_cast<int>(first);
-            nodes[index].count = static_cast<int>(count);
+        if (count <= kLeafSize) {
+            nodes[index].first = static_cast<uint32_t>(first);
+            nodes[index].count = static_cast<uint32_t>(count);
             return index;
         }
         int axis = 0;
         (box.hi - box.lo).maxCoeff(&axis);
         const std::size_t mid = first + count / 2;
+        const auto begin = items.begin() + static_cast<std::ptrdiff_t>(first);
         std::nth_element(
-            order.begin() + first,
-            order.begin() + mid,
-            order.begin() + first + count,
-            [&](std::size_t a, std::size_t b) { return points[a][axis] < points[b][axis]; });
-        const int left = buildNode(points, first, mid - first);
-        const int right = buildNode(points, mid, first + count - mid);
+            begin,
+            items.begin() + static_cast<std::ptrdiff_t>(mid),
+            begin + static_cast<std::ptrdiff_t>(count),
+            [axis](const Item& a, const Item& b) { return a.point[axis] < b.point[axis]; });
+        const int left = buildNode(items, first, mid - first);
+        const int right = buildNode(items, mid, first + count - mid);
         nodes[index].left = left;
         nodes[index].right = right;
         return index;
     }
-    void radius(const std::vector<Eigen::Vector3d>& points,
-                int index,
-                const Eigen::Vector3d& center,
-                double r2,
-                std::vector<std::size_t>& out) const {
-        const Node& n = nodes[index];
-        const Eigen::Vector3d closest = center.cwiseMax(n.box.lo).cwiseMin(n.box.hi);
-        if ((closest - center).squaredNorm() > r2)
-            return;
-        if (n.count) {
-            for (int i = n.first; i < n.first + n.count; ++i) {
-                const std::size_t k = order[i];
-                if ((points[k] - center).squaredNorm() <= r2)
-                    out.push_back(k);
+    // Sets bit k of `bits` for every scene point k with
+    // (p_k - center).squaredNorm() <= r2 and returns how many it set.
+    std::size_t mark(const Eigen::Vector3d& center, double r2, uint64_t* bits) const {
+        if (nodes.empty())
+            return 0;
+        std::size_t marked = 0;
+        int stack[64]; // depth is log2(samples / kLeafSize) + 1
+        int top = 0;
+        stack[top++] = 0;
+        while (top > 0) {
+            const Node& n = nodes[stack[--top]];
+            const Eigen::Vector3d closest = center.cwiseMax(n.box.lo).cwiseMin(n.box.hi);
+            if ((closest - center).squaredNorm() > r2)
+                continue;
+            if (n.left >= 0) {
+                stack[top++] = n.right;
+                stack[top++] = n.left;
+                continue;
             }
-        } else {
-            radius(points, n.left, center, r2, out);
-            radius(points, n.right, center, r2, out);
+            for (uint32_t i = n.first, end = n.first + n.count; i < end; ++i) {
+                if ((leaf_points[i] - center).squaredNorm() <= r2) {
+                    const uint32_t id = leaf_ids[i];
+                    bits[id >> 6] |= uint64_t{1} << (id & 63u);
+                    ++marked;
+                }
+            }
         }
-    }
-    std::vector<std::size_t> radius(const std::vector<Eigen::Vector3d>& points,
-                                    const Eigen::Vector3d& center,
-                                    double range) const {
-        std::vector<std::size_t> out;
-        if (!nodes.empty())
-            radius(points, 0, center, range * range, out);
-        // Stable scene order also preserves seeded range-noise reproducibility.
-        std::sort(out.begin(), out.end());
-        return out;
+        return marked;
     }
 };
+
+// Per-thread scratch bitmap of a scan over `samples` scene points, all zero.
+std::vector<uint64_t>& scanBits(std::size_t samples) {
+    thread_local std::vector<uint64_t> bits;
+    bits.assign((samples + 63) / 64, 0);
+    return bits;
+}
 
 struct Scene {
     std::vector<Shape> shapes;
@@ -1033,12 +1061,71 @@ bool WorldLidar::insideCrop(const Eigen::Vector3d& world_offset,
     return std::abs(world_offset.z()) <= config_.vertical_slab_tan * config_.range;
 }
 
-template <class Sink>
+namespace {
+
+int bodySampleCount(double radius, double spacing) {
+    return std::max(12,
+                    static_cast<int>(std::ceil(4.0 * kPi * radius * radius / (spacing * spacing))));
+}
+
+// Scan outputs: reserve(n) announces an upper bound of the points to come,
+// push(point, vehicle) appends one.
+struct PointsOut {
+    std::vector<Eigen::Vector3d> points;
+    void reserve(std::size_t n) { points.reserve(n); }
+    void push(const Eigen::Vector3d& p, int) { points.push_back(p); }
+};
+
+struct TaggedOut {
+    std::vector<TaggedPoint> points;
+    void reserve(std::size_t n) { points.reserve(n); }
+    void push(const Eigen::Vector3d& p, int vehicle) { points.push_back({p, vehicle}); }
+};
+
+// PointCloud2 records written in place: float32 x y z (+ int32 vehicle id).
+// The buffer only grows to the announced bound, so a reused buffer neither
+// reallocates nor zero-fills more than the growth of the bound.
+class PackedOut {
+public:
+    PackedOut(std::vector<uint8_t>* data, bool with_id)
+        : data_(data), stride_(with_id ? 16 : 12), with_id_(with_id) {}
+    void reserve(std::size_t n) {
+        if (data_->size() < n * stride_)
+            data_->resize(n * stride_);
+    }
+    void push(const Eigen::Vector3d& p, int vehicle) {
+        if (data_->size() < (count_ + 1) * stride_)
+            data_->resize(std::max<std::size_t>(2 * data_->size(), (count_ + 1) * stride_));
+        uint8_t* out = data_->data() + count_ * stride_;
+        const float xyz[3] = {
+            static_cast<float>(p.x()), static_cast<float>(p.y()), static_cast<float>(p.z())};
+        std::memcpy(out, xyz, sizeof xyz);
+        if (with_id_) {
+            const int32_t id = vehicle;
+            std::memcpy(out + sizeof xyz, &id, sizeof id);
+        }
+        ++count_;
+    }
+    std::size_t finish() {
+        data_->resize(count_ * stride_);
+        return count_;
+    }
+
+private:
+    std::vector<uint8_t>* data_;
+    std::size_t stride_;
+    bool with_id_;
+    std::size_t count_ = 0;
+};
+
+} // namespace
+
+template <class Out>
 void WorldLidar::samplePenetrating(const Eigen::Vector3d& position,
                                    const Eigen::Matrix3d& rotation,
                                    uint64_t scan_index,
                                    const std::vector<VehicleBody>& others,
-                                   Sink&& sink) const {
+                                   Out& out) const {
     const double r2 = config_.range * config_.range;
     const double rmin2 = config_.min_range * config_.min_range;
     const bool noisy = config_.noise_std > 0.0;
@@ -1053,49 +1140,67 @@ void WorldLidar::samplePenetrating(const Eigen::Vector3d& position,
         if (!insideFov(to_sensor * v) || !insideCrop(v, rotation))
             return;
         if (!noisy) {
-            sink(p, vehicle);
+            out.push(p, vehicle);
             return;
         }
         const double dist = std::sqrt(d2);
         const double t = dist + noise(rng);
         if (t <= 0.0 || t > config_.range || t < config_.min_range)
             return;
-        sink(Eigen::Vector3d(position + v * (t / dist)), vehicle);
+        out.push(Eigen::Vector3d(position + v * (t / dist)), vehicle);
     };
     const auto& scene = *scene_->data_;
-    for (std::size_t k : scene.index.radius(scene.points, position, config_.range))
-        consider(scene.points[k], -1);
-    for (const auto& b : others) {
+    std::vector<uint64_t>& bits = detail::scanBits(scene.points.size());
+    std::size_t bound = scene.index.mark(position, r2, bits.data());
+    std::vector<int> body_samples(others.size(), 0);
+    for (std::size_t i = 0; i < others.size(); ++i) {
+        const VehicleBody& b = others[i];
         if ((b.position - position).norm() - b.radius > config_.range)
             continue;
-        const int n = std::max(
-            12,
-            static_cast<int>(std::ceil(4.0 * kPi * b.radius * b.radius /
-                                       (config_.surface_spacing * config_.surface_spacing))));
-        for (const auto& u : fibonacciSphere(n))
+        body_samples[i] = bodySampleCount(b.radius, config_.surface_spacing);
+        bound += static_cast<std::size_t>(body_samples[i]);
+    }
+    out.reserve(bound);
+    // Ascending scene index: the order of the scene samples.
+    for (std::size_t w = 0; w < bits.size(); ++w) {
+        for (uint64_t word = bits[w]; word != 0; word &= word - 1)
+            consider(scene.points[64 * w + static_cast<std::size_t>(__builtin_ctzll(word))], -1);
+    }
+    for (std::size_t i = 0; i < others.size(); ++i) {
+        if (body_samples[i] == 0)
+            continue;
+        const VehicleBody& b = others[i];
+        for (const auto& u : fibonacciSphere(body_samples[i]))
             consider(b.position + b.radius * u, b.id);
     }
 }
 
-std::vector<Eigen::Vector3d> WorldLidar::scan(const Eigen::Vector3d& position,
-                                              const Eigen::Quaterniond& attitude) const {
+template <class Out>
+void WorldLidar::scanPoints(const Eigen::Vector3d& position,
+                            const Eigen::Quaterniond& attitude,
+                            const std::vector<VehicleBody>& others,
+                            Out& out) const {
     if (!finite(position))
         throw std::invalid_argument("non-finite sensor position");
+    checkBodies(others);
     const Eigen::Matrix3d rotation = rotationOf(attitude);
     const uint64_t index = scan_counter_.fetch_add(1, std::memory_order_relaxed);
-    std::vector<Eigen::Vector3d> out;
     if (config_.mode == SensorConfig::kPenetrating) {
-        samplePenetrating(position, rotation, index, {}, [&](const Eigen::Vector3d& p, int) {
-            out.push_back(p);
-        });
-    } else {
-        out.reserve(beams_.size() / 2);
-        traceBeams(position, rotation, index, {}, [&](const Beam& b) {
-            if (b.hit)
-                out.push_back(b.origin + b.range * b.direction);
-        });
+        samplePenetrating(position, rotation, index, others, out);
+        return;
     }
-    return out;
+    out.reserve(beams_.size());
+    traceBeams(position, rotation, index, others, [&](const Beam& b) {
+        if (b.hit)
+            out.push(b.origin + b.range * b.direction, b.vehicle_id);
+    });
+}
+
+std::vector<Eigen::Vector3d> WorldLidar::scan(const Eigen::Vector3d& position,
+                                              const Eigen::Quaterniond& attitude) const {
+    PointsOut out;
+    scanPoints(position, attitude, {}, out);
+    return std::move(out.points);
 }
 
 std::vector<Beam> WorldLidar::scanWithBeams(const Eigen::Vector3d& position,
@@ -1117,23 +1222,21 @@ std::vector<Beam> WorldLidar::scanWithBeams(const Eigen::Vector3d& position,
 std::vector<TaggedPoint> WorldLidar::scanTagged(const Eigen::Vector3d& position,
                                                 const Eigen::Quaterniond& attitude,
                                                 const std::vector<VehicleBody>& others) const {
-    if (!finite(position))
-        throw std::invalid_argument("non-finite sensor position");
-    checkBodies(others);
-    const Eigen::Matrix3d rotation = rotationOf(attitude);
-    const uint64_t index = scan_counter_.fetch_add(1, std::memory_order_relaxed);
-    std::vector<TaggedPoint> out;
-    if (config_.mode == SensorConfig::kPenetrating) {
-        samplePenetrating(position, rotation, index, others, [&](const Eigen::Vector3d& p, int id) {
-            out.push_back({p, id});
-        });
-    } else {
-        traceBeams(position, rotation, index, others, [&](const Beam& b) {
-            if (b.hit)
-                out.push_back({b.origin + b.range * b.direction, b.vehicle_id});
-        });
-    }
-    return out;
+    TaggedOut out;
+    scanPoints(position, attitude, others, out);
+    return std::move(out.points);
+}
+
+std::size_t WorldLidar::scanInto(const Eigen::Vector3d& position,
+                                 const Eigen::Quaterniond& attitude,
+                                 const std::vector<VehicleBody>& others,
+                                 bool with_id,
+                                 std::vector<uint8_t>* data) const {
+    if (data == nullptr)
+        throw std::invalid_argument("null cloud buffer");
+    PackedOut out(data, with_id);
+    scanPoints(position, attitude, others, out);
+    return out.finish();
 }
 
 } // namespace xgc2_world_lidar

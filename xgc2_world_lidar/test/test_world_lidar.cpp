@@ -2,11 +2,14 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <limits>
 #include <memory>
 #include <random>
 #include <stdexcept>
+#include <vector>
 
 #include "xgc2_world_lidar/scene_conversion.h"
 #include "xgc2_world_lidar/world_lidar.h"
@@ -677,7 +680,173 @@ void testSharedSceneIndex() {
     CHECK(b.scene().get() == scene.get());
 }
 
+// The penetrating model, written as the plain loop it specifies: every scene
+// sample in scene order (then every vehicle-body sample), kept when it lies in
+// (0, range], at or beyond min_range, inside the field of view and the heading
+// crop, with seeded range noise drawn per kept sample in that order. The
+// indexed scan must return exactly these points in exactly this order.
+std::vector<xgc2_world_lidar::TaggedPoint>
+bruteForcePenetrating(const WorldLidar& lidar,
+                      const Eigen::Vector3d& position,
+                      const Eigen::Quaterniond& attitude,
+                      const std::vector<VehicleBody>& others,
+                      uint64_t scan_index) {
+    const SensorConfig& c = lidar.config();
+    const double pi = 3.14159265358979323846;
+    const Eigen::Matrix3d rotation =
+        Eigen::Quaterniond(attitude.coeffs() / attitude.norm()).toRotationMatrix();
+    const Eigen::Matrix3d to_sensor = rotation.transpose();
+    const double r2 = c.range * c.range, rmin2 = c.min_range * c.min_range;
+    const bool noisy = c.noise_std > 0.0;
+    std::seed_seq seq{static_cast<uint32_t>(c.seed),
+                      static_cast<uint32_t>(scan_index),
+                      static_cast<uint32_t>(scan_index >> 32)};
+    std::mt19937_64 rng(seq);
+    std::normal_distribution<double> noise(0.0, noisy ? c.noise_std : 1.0);
+    std::vector<xgc2_world_lidar::TaggedPoint> out;
+    auto consider = [&](const Eigen::Vector3d& p, int vehicle) {
+        const Eigen::Vector3d v = p - position;
+        const double d2 = v.squaredNorm();
+        if (d2 > r2 || d2 == 0.0 || d2 < rmin2)
+            return;
+        const Eigen::Vector3d s = to_sensor * v;
+        if (c.h_fov_deg < 360.0 &&
+            std::abs(std::atan2(s.y(), s.x())) > 0.5 * c.h_fov_deg * pi / 180.0 + 1e-9)
+            return;
+        if (c.v_fov_deg < 180.0 && std::abs(std::atan2(s.z(), std::hypot(s.x(), s.y()))) >
+                                       0.5 * c.v_fov_deg * pi / 180.0 + 1e-9)
+            return;
+        if (c.penetrating_heading_crop &&
+            (v.normalized().dot(rotation.col(0)) < c.heading_cos_min ||
+             std::abs(v.z()) > c.vertical_slab_tan * c.range))
+            return;
+        if (!noisy) {
+            out.push_back({p, vehicle});
+            return;
+        }
+        const double dist = std::sqrt(d2);
+        const double t = dist + noise(rng);
+        if (t <= 0.0 || t > c.range || t < c.min_range)
+            return;
+        out.push_back({position + v * (t / dist), vehicle});
+    };
+    for (const auto& p : lidar.globalMap(c.surface_spacing))
+        consider(p, -1);
+    for (const auto& b : others) {
+        if ((b.position - position).norm() - b.radius > c.range)
+            continue;
+        const int n =
+            std::max(12,
+                     static_cast<int>(std::ceil(4.0 * pi * b.radius * b.radius /
+                                                (c.surface_spacing * c.surface_spacing))));
+        const double golden = pi * (3.0 - std::sqrt(5.0));
+        for (int i = 0; i < n; ++i) {
+            const double z = 1.0 - 2.0 * (i + 0.5) / n;
+            const double rho = std::sqrt(std::max(0.0, 1.0 - z * z));
+            const double phi = golden * i;
+            consider(b.position +
+                         b.radius * Eigen::Vector3d(rho * std::cos(phi), rho * std::sin(phi), z),
+                     b.id);
+        }
+    }
+    return out;
+}
+
+void testPenetratingMatchesBruteForce() {
+    std::printf("penetrating: indexed scans equal the brute-force model point for point\n");
+    std::mt19937 rng(2024);
+    const std::vector<Obstacle> scene = randomScene(rng, 60, 12.0);
+    std::uniform_real_distribution<double> pos(-12.0, 12.0), z(-2.0, 2.0);
+    int scans = 0, mismatches = 0;
+    std::size_t points = 0;
+    for (int variant = 0; variant < 8; ++variant) {
+        SensorConfig c;
+        c.mode = SensorConfig::kPenetrating;
+        c.range = variant % 2 ? 5.0 : 9.0;
+        c.surface_spacing = variant < 4 ? 0.1 : 0.25;
+        c.h_fov_deg = variant == 2 ? 120.0 : 360.0;
+        c.v_fov_deg = variant == 2 ? 40.0 : 180.0;
+        c.min_range = variant == 3 ? 1.5 : 0.0;
+        c.penetrating_keep_buried = variant % 3 != 0;
+        c.penetrating_heading_crop = variant == 5 || variant == 6;
+        c.heading_cos_min = variant == 5 ? 0.5 : 0.0;
+        c.noise_std = variant == 7 ? 0.05 : 0.0;
+        c.seed = 11;
+        WorldLidar lidar(c);
+        lidar.setScene(scene);
+        for (uint64_t k = 0; k < 6; ++k) {
+            const Eigen::Vector3d p(pos(rng), pos(rng), z(rng));
+            const Eigen::Quaterniond q = randomQuat(rng);
+            std::vector<VehicleBody> others;
+            if (k % 2)
+                others = {{3, p + Eigen::Vector3d(1.0, 0.5, 0.0), 0.3},
+                          {9, p + Eigen::Vector3d(-2.0, 0.0, 0.4), 0.25}};
+            const auto expected = bruteForcePenetrating(lidar, p, q, others, k);
+            const auto got = lidar.scanTagged(p, q, others);
+            bool same = got.size() == expected.size();
+            for (std::size_t i = 0; same && i < got.size(); ++i)
+                same = got[i].point == expected[i].point &&
+                       got[i].vehicle_id == expected[i].vehicle_id;
+            mismatches += same ? 0 : 1;
+            points += got.size();
+            ++scans;
+        }
+    }
+    CHECK(mismatches == 0);
+    CHECK(points > 10000);
+    std::printf("  %d scans, %zu points, %d mismatching scans\n", scans, points, mismatches);
+}
+
+// scanInto() writes the PointCloud2 records of exactly the points that
+// scanTagged() returns for the same scan index, in every mode.
+void testPackedCloudMatchesTagged() {
+    std::printf("scanInto: packed records equal scanTagged points\n");
+    std::mt19937 rng(77);
+    const std::vector<Obstacle> scene = randomScene(rng, 40, 10.0);
+    int mismatches = 0;
+    for (int mode = 0; mode < 3; ++mode) {
+        for (const bool with_id : {false, true}) {
+            SensorConfig c = lidar32(mode == 0   ? SensorConfig::kRaycast
+                                     : mode == 1 ? SensorConfig::kPenetrating
+                                                 : SensorConfig::kDepthFrustum);
+            c.range = 8.0;
+            c.noise_std = 0.02;
+            c.seed = 5;
+            if (mode == 2)
+                c.h_fov_deg = 90.0;
+            WorldLidar tagged(c), packed(c);
+            tagged.setScene(scene);
+            packed.setScene(tagged.scene());
+            std::vector<uint8_t> data(3, 0xab); // stale contents are replaced
+            for (int k = 0; k < 4; ++k) {
+                const Eigen::Vector3d p(1.0 * k - 2.0, 0.5, 0.3);
+                const std::vector<VehicleBody> others{{4, p + Eigen::Vector3d(1.2, 0, 0), 0.3}};
+                const auto expected = tagged.scanTagged(p, kI, others);
+                const std::size_t n = packed.scanInto(p, kI, others, with_id, &data);
+                const std::size_t stride = with_id ? 16 : 12;
+                bool same = n == expected.size() && data.size() == n * stride;
+                for (std::size_t i = 0; same && i < n; ++i) {
+                    float xyz[3];
+                    int32_t id = -1;
+                    std::memcpy(xyz, data.data() + i * stride, sizeof xyz);
+                    if (with_id)
+                        std::memcpy(&id, data.data() + i * stride + 12, sizeof id);
+                    same = xyz[0] == static_cast<float>(expected[i].point.x()) &&
+                           xyz[1] == static_cast<float>(expected[i].point.y()) &&
+                           xyz[2] == static_cast<float>(expected[i].point.z()) &&
+                           (!with_id || id == expected[i].vehicle_id);
+                }
+                mismatches += same ? 0 : 1;
+            }
+        }
+    }
+    CHECK(mismatches == 0);
+    std::printf("  %d mismatching scans\n", mismatches);
+}
+
 int main() {
+    testPenetratingMatchesBruteForce();
+    testPackedCloudMatchesTagged();
     testSharedSceneIndex();
     testRaycastOcclusion();
     testPenetratingBackFaces();
