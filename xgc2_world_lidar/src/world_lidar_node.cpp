@@ -376,8 +376,7 @@ public:
                 map_topic = "/xgc/scene/reference_cloud";
             }
             if ((sensor_specs.empty() && !reference) || sensor_specs.size() > 512)
-                throw std::invalid_argument(
-                    "fleet needs 1..512 robots or a scene reference cloud");
+                throw std::invalid_argument("fleet needs 1..512 robots or a scene reference cloud");
             ids.clear();
             for (std::size_t i = 0; i < sensor_specs.size(); ++i)
                 ids.push_back(static_cast<int>(i + 1));
