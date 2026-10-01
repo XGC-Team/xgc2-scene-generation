@@ -1,13 +1,12 @@
 """ROS transport projections of the simulator-independent scene document."""
 
-import copy
 import hashlib
 import json
 import threading
 
 import rospy
 import tf2_ros
-from geometry_msgs.msg import Point, TransformStamped
+from geometry_msgs.msg import Point, Pose, TransformStamped
 from std_msgs.msg import String
 from visualization_msgs.msg import Marker, MarkerArray
 from xgc2_geometry_msgs.msg import (
@@ -18,7 +17,8 @@ from xgc2_geometry_msgs.srv import ApplyScene, SceneCommand, SceneCommandRespons
 from .consumers import ConsumerRegistry
 from .document import SceneError
 from .generation import resolve
-from .store import MAX_DOCUMENT_BYTES, SceneStore, load, unique_object
+from .motion import rotate, state
+from .store import MAX_DOCUMENT_BYTES, EnvelopeJson, SceneStore, load, unique_object
 
 
 def set_pose(message, value):
@@ -26,32 +26,70 @@ def set_pose(message, value):
     message.orientation.x, message.orientation.y, message.orientation.z, message.orientation.w = value['orientation']
 
 
-def snapshot(document, epoch, revision):
+def obstacle_message(item):
+    body = SceneObstacle()
+    body.id, body.name = item['id'], item['name']
+    body.motion_type = item['motion']['type']
+    body.dynamic = body.motion_type != 'hold'
+    set_pose(body.pose, item['pose'])
+    for definition in item['parts']:
+        part = ScenePart()
+        part.id = definition['id']
+        set_pose(part.pose, definition['pose'])
+        geometry = definition['geometry']
+        part.geometry.type = geometry['type']
+        part.geometry.size.x, part.geometry.size.y, part.geometry.size.z = geometry.get('size', [0, 0, 0])
+        part.geometry.radius = geometry.get('radius', 0)
+        part.geometry.height = geometry.get('height', 0)
+        part.geometry.vertices = [Point(*p) for p in geometry.get('vertices', [])]
+        part.geometry.triangles = geometry.get('triangles', [])
+        part.color.r, part.color.g, part.color.b, part.color.a = definition['color']
+        body.parts.append(part)
+    return body
+
+
+class ObstacleMessages:
+    """SceneObstacle messages reused while their obstacle object is unchanged.
+
+    Documents are immutable and share unchanged obstacles between revisions,
+    so an edit builds the message of the edited obstacle only. Messages are
+    never modified after they are built.
+    """
+
+    def __init__(self):
+        self._items = {}
+
+    def bodies(self, obstacles):
+        items, bodies = {}, []
+        for item in obstacles:
+            cached = self._items.get(id(item))
+            if cached is None or cached[0] is not item:
+                cached = (item, obstacle_message(item))
+            items[id(item)] = cached
+            bodies.append(cached[1])
+        self._items = items
+        return bodies
+
+
+def snapshot(document, epoch, revision, messages=None):
     result = SceneSnapshot()
     result.header.stamp = rospy.Time.now()
     result.header.frame_id = document['frame']
     result.scene_id, result.epoch, result.revision = document['id'], epoch, revision
-    for item in document['obstacles']:
-        body = SceneObstacle()
-        body.id, body.name = item['id'], item['name']
-        body.motion_type = item['motion']['type']
-        body.dynamic = body.motion_type != 'hold'
-        set_pose(body.pose, item['pose'])
-        for definition in item['parts']:
-            part = ScenePart()
-            part.id = definition['id']
-            set_pose(part.pose, definition['pose'])
-            geometry = definition['geometry']
-            part.geometry.type = geometry['type']
-            part.geometry.size.x, part.geometry.size.y, part.geometry.size.z = geometry.get('size', [0, 0, 0])
-            part.geometry.radius = geometry.get('radius', 0)
-            part.geometry.height = geometry.get('height', 0)
-            part.geometry.vertices = [Point(*p) for p in geometry.get('vertices', [])]
-            part.geometry.triangles = geometry.get('triangles', [])
-            part.color.r, part.color.g, part.color.b, part.color.a = definition['color']
-            body.parts.append(part)
-        result.obstacles.append(body)
+    if messages is None:
+        result.obstacles.extend(obstacle_message(item) for item in document['obstacles'])
+    else:
+        result.obstacles.extend(messages.bodies(document['obstacles']))
     return result
+
+
+def state_message(value):
+    body = SceneObstacleState()
+    body.id = value['id']
+    set_pose(body.pose, value['pose'])
+    body.twist.linear.x, body.twist.linear.y, body.twist.linear.z = value['linear']
+    body.twist.angular.x, body.twist.angular.y, body.twist.angular.z = value['angular']
+    return body
 
 
 class SceneNode:
@@ -78,6 +116,12 @@ class SceneNode:
         # Consumer heartbeats republish the document only when its public
         # view changed; it is latched, so repeats carry no information.
         self._published_view = None
+        # Per document: obstacle messages and markers of unchanged obstacles,
+        # the encoded document, and the constant state of hold obstacles.
+        self._obstacle_messages = ObstacleMessages()
+        self._markers = {}
+        self._json = EnvelopeJson()
+        self._states = (None, [])
         self.apply_service = None
         if self.gazebo:
             rospy.wait_for_service('gazebo/apply', timeout=30.0)
@@ -95,7 +139,7 @@ class SceneNode:
         if self.apply_service is None:
             return
         try:
-            message = snapshot(document, epoch, revision)
+            message = snapshot(document, epoch, revision, self._obstacle_messages)
             self._applied_snapshot = ((epoch, revision), message)
             result = self.apply_service(message)
             if not result.success or result.epoch != epoch or result.applied_revision != revision:
@@ -151,7 +195,7 @@ class SceneNode:
             result = dict(status, sceneTime=self.store.scene_time(), document=self.store.document,
                           consumers=public['consumers'], online=self.online, synchronized=public['synchronized'],
                           syncRetryable=public['syncRetryable'])
-            self.document_pub.publish(String(json.dumps(result, ensure_ascii=False, allow_nan=False)))
+            self.document_pub.publish(String(self._json.dumps(result)))
             self._published_view = view
             return True
 
@@ -187,7 +231,7 @@ class SceneNode:
                 result.update(self.envelope())
         except (ValueError, TypeError, AttributeError) as error:
             result = dict(self.envelope(), success=False, error=str(error))
-        return SceneCommandResponse(success=result['success'], result_json=json.dumps(result, ensure_ascii=False, allow_nan=False))
+        return SceneCommandResponse(success=result['success'], result_json=self._json.dumps(result))
 
     def obstacle_frames(self):
         """TF child frame per obstacle ID, rebuilt once per document revision."""
@@ -218,7 +262,8 @@ class SceneNode:
         with self.store.lock:
             key, message = self._applied_snapshot
             if key != (self.store.epoch, self.store.revision):
-                message = snapshot(self.store.document, self.store.epoch, self.store.revision)
+                message = snapshot(self.store.document, self.store.epoch, self.store.revision,
+                                   self._obstacle_messages)
             self.snapshot_pub.publish(message)
             static = [self.transform(item['id'], item['pose'], message.header.stamp)
                       for item in self.store.document['obstacles'] if item['motion']['type'] == 'hold']
@@ -228,12 +273,22 @@ class SceneNode:
             delete = Marker()
             delete.action = Marker.DELETEALL
             markers.markers.append(delete)
-            for body in message.obstacles:
-                for part in body.parts:
-                    markers.markers.extend(self.part_markers(body.id, part))
+            cache = {}
+            for item, body in zip(self.store.document['obstacles'], message.obstacles):
+                markers.markers.extend(self.obstacle_markers(item, body, cache))
+            self._markers = cache
             self.marker_pub.publish(markers)
             self.tick(None)
             self.publish_document()
+
+    def obstacle_markers(self, item, body, cache):
+        """Markers of one obstacle, reused while the obstacle and its frame are."""
+        frame = self.obstacle_frame(body.id)
+        cached = self._markers.get(id(item))
+        if cached is None or cached[0] is not item or cached[1] != frame or item['id'] != body.id:
+            cached = (item, frame, [marker for part in body.parts for marker in self.part_markers(body.id, part)])
+        cache[id(item)] = cached
+        return cached[2]
 
     def part_markers(self, oid, part):
         geometry = part.geometry
@@ -258,18 +313,29 @@ class SceneNode:
             marker.scale.x = marker.scale.y = 2*geometry.radius
             marker.scale.z = geometry.height
             if geometry.type == 'capsule':
-                from .motion import rotate
                 result = [marker] if geometry.height > 0 else []
                 for index, direction in enumerate((-1, 1) if geometry.height else (1,)):
-                    cap = copy.deepcopy(marker)
-                    cap.id = index+1
-                    cap.type = Marker.SPHERE
-                    cap.scale.x = cap.scale.y = cap.scale.z = 2*geometry.radius
+                    # The cylinder marker with another id, a sphere shape and its
+                    # position moved to one end (built directly: a deep copy of a
+                    # marker per cap made definitions of ring-heavy scenes slow).
                     q = marker.pose.orientation
                     delta = rotate([q.x, q.y, q.z, q.w], [0, 0, direction*geometry.height/2])
-                    cap.pose.position.x += delta[0]
-                    cap.pose.position.y += delta[1]
-                    cap.pose.position.z += delta[2]
+                    cap = Marker()
+                    cap.header.frame_id = marker.header.frame_id
+                    cap.header.stamp = marker.header.stamp
+                    cap.ns = marker.ns
+                    cap.id = index+1
+                    cap.type = Marker.SPHERE
+                    cap.action = marker.action
+                    cap.pose = Pose()
+                    cap.pose.position.x = marker.pose.position.x + delta[0]
+                    cap.pose.position.y = marker.pose.position.y + delta[1]
+                    cap.pose.position.z = marker.pose.position.z + delta[2]
+                    cap.pose.orientation.x, cap.pose.orientation.y = q.x, q.y
+                    cap.pose.orientation.z, cap.pose.orientation.w = q.z, q.w
+                    cap.scale.x = cap.scale.y = cap.scale.z = 2*geometry.radius
+                    cap.color = marker.color
+                    cap.frame_locked = marker.frame_locked
                     result.append(cap)
                 return result
         elif geometry.type == 'convex':
@@ -289,19 +355,33 @@ class SceneNode:
             message.epoch, message.revision = self.store.epoch, self.store.revision
             message.playing, message.scene_time = self.store.playing, self.store.scene_time()
             transforms = []
-            dynamic = {item['id'] for item in self.store.document['obstacles'] if item['motion']['type'] != 'hold'}
-            for item in self.store.states():
-                body = SceneObstacleState()
-                body.id = item['id']
-                set_pose(body.pose, item['pose'])
-                body.twist.linear.x, body.twist.linear.y, body.twist.linear.z = item['linear']
-                body.twist.angular.x, body.twist.angular.y, body.twist.angular.z = item['angular']
-                message.obstacles.append(body)
-                if body.id in dynamic:
-                    transforms.append(self.transform(body.id, item['pose'], message.header.stamp))
+            entries = self.state_entries()
+            elapsed = self.store.scene_time()
+            for item, constant in entries:
+                if constant is not None:
+                    message.obstacles.append(constant)
+                    continue
+                value = state(item, elapsed, self.store.playing)
+                message.obstacles.append(state_message(value))
+                transforms.append(self.transform(value['id'], value['pose'], message.header.stamp))
             if transforms:
                 self.tf_dynamic.sendTransform(transforms)
             self.state_pub.publish(message)
+
+    def state_entries(self):
+        """Per document: each obstacle with its state message when it holds.
+
+        A hold obstacle's state is its initial pose with zero twist whether or
+        not the scene plays, so that message is built once per document and
+        only moving obstacles are evaluated per tick.
+        """
+        document, entries = self._states
+        if document is not self.store.document:
+            document = self.store.document
+            entries = [(item, state_message(state(item, 0.0, False)) if item['motion']['type'] == 'hold' else None)
+                       for item in document['obstacles']]
+            self._states = (document, entries)
+        return entries
 
     def shutdown(self):
         self.online = False
