@@ -33,7 +33,8 @@
  * snapshot with dynamic obstacles waits for a state of the same epoch and
  * revision; a state that lacks a dynamic obstacle is refused. Gazebo rules:
  * instances wait for the library; the scene is rebuilt only when an instance
- * changes. The sensor is rebuilt at most once per scan tick.
+ * changes. The sensor is rebuilt at most once per scan tick, from the installed
+ * scene: only obstacles that changed are converted, sampled and indexed again.
  */
 
 #include <geometry_msgs/PoseStamped.h>
@@ -85,6 +86,27 @@ Pose poseOf(const geometry_msgs::Pose& p) {
     out.orientation =
         Eigen::Quaterniond(p.orientation.w, p.orientation.x, p.orientation.y, p.orientation.z);
     return out;
+}
+
+uint64_t bitsOf(double v) {
+    uint64_t bits = 0;
+    std::memcpy(&bits, &v, sizeof bits);
+    return bits;
+}
+
+// Bitwise equality: an input converted before is reused only when identical.
+bool samePose(const geometry_msgs::Pose& a, const geometry_msgs::Pose& b) {
+    return bitsOf(a.position.x) == bitsOf(b.position.x) &&
+           bitsOf(a.position.y) == bitsOf(b.position.y) &&
+           bitsOf(a.position.z) == bitsOf(b.position.z) &&
+           bitsOf(a.orientation.x) == bitsOf(b.orientation.x) &&
+           bitsOf(a.orientation.y) == bitsOf(b.orientation.y) &&
+           bitsOf(a.orientation.z) == bitsOf(b.orientation.z) &&
+           bitsOf(a.orientation.w) == bitsOf(b.orientation.w);
+}
+
+bool sameVector(const geometry_msgs::Vector3& a, const geometry_msgs::Vector3& b) {
+    return bitsOf(a.x) == bitsOf(b.x) && bitsOf(a.y) == bitsOf(b.y) && bitsOf(a.z) == bitsOf(b.z);
 }
 
 // The layout of a PointCloud2 of `float_fields` float32 fields, then an
@@ -656,7 +678,10 @@ private:
         return true;
     }
 
-    std::vector<Obstacle> gazeboObstacles(bool* has_dynamic) const {
+    // Every converted entry is cached with what it was converted from, so an
+    // install converts and validates only entries that changed since the last
+    // one: a moving obstacle, not the static scene around it.
+    std::vector<Obstacle> gazeboObstacles(bool* has_dynamic) {
         std::vector<GeometryTemplateDescription> library;
         for (const auto& t : library_->templates) {
             GeometryTemplateDescription d;
@@ -665,18 +690,35 @@ private:
                 d.support_points.emplace_back(p.x, p.y, p.z);
             library.push_back(std::move(d));
         }
-        std::vector<ConvexBodyDescription> bodies;
-        *has_dynamic = false;
-        for (const auto& i : instances_->instances) {
-            ConvexBodyDescription d;
-            d.name = i.name;
-            d.geometry_type = i.geometry_type;
-            d.pose = poseOf(i.pose);
-            d.scale = Eigen::Vector3d(i.scale.x, i.scale.y, i.scale.z);
-            *has_dynamic = *has_dynamic || !i.is_static;
-            bodies.push_back(std::move(d));
+        const auto& instances = instances_->instances;
+        if (converted_library_ != library_ || converted_.size() != instances.size()) {
+            converted_.assign(instances.size(), Converted{});
+            converted_library_ = library_;
         }
-        return fromConvexBodies(library, bodies);
+        std::vector<Obstacle> obstacles;
+        *has_dynamic = false;
+        for (std::size_t k = 0; k < instances.size(); ++k) {
+            const auto& i = instances[k];
+            *has_dynamic = *has_dynamic || !i.is_static;
+            Converted& c = converted_[k];
+            if (!c.valid || c.name != i.name || c.geometry_type != i.geometry_type ||
+                !samePose(c.pose, i.pose) || !sameVector(c.scale, i.scale)) {
+                ConvexBodyDescription d;
+                d.name = i.name;
+                d.geometry_type = i.geometry_type;
+                d.pose = poseOf(i.pose);
+                d.scale = Eigen::Vector3d(i.scale.x, i.scale.y, i.scale.z);
+                c.valid = false;
+                c.obstacles = fromConvexBodies(library, {d});
+                c.name = i.name;
+                c.geometry_type = i.geometry_type;
+                c.pose = i.pose;
+                c.scale = i.scale;
+                c.valid = true;
+            }
+            obstacles.insert(obstacles.end(), c.obstacles.begin(), c.obstacles.end());
+        }
+        return obstacles;
     }
 
     // Builds the obstacle list from the selected scene source and installs
@@ -692,43 +734,67 @@ private:
         if (state_)
             for (const auto& s : state_->obstacles)
                 state_pose[s.id] = &s.pose;
-        std::vector<SceneObstacleDescription> scene;
+        const auto& items = snapshot_->obstacles;
+        std::vector<const geometry_msgs::Pose*> poses(items.size());
         bool has_dynamic = false;
-        for (const auto& o : snapshot_->obstacles) {
-            SceneObstacleDescription d;
-            d.id = o.id;
+        for (std::size_t k = 0; k < items.size(); ++k) {
+            const auto& o = items[k];
             const auto it = state_pose.find(o.id);
             if (o.dynamic && it == state_pose.end())
                 throw std::invalid_argument("state lacks dynamic obstacle '" + o.id + "'");
             has_dynamic = has_dynamic || o.dynamic;
-            d.pose = poseOf(it != state_pose.end() ? *it->second : o.pose);
-            for (const auto& p : o.parts) {
-                ScenePartDescription part;
-                part.type = p.geometry.type;
-                part.pose = poseOf(p.pose);
-                part.size =
-                    Eigen::Vector3d(p.geometry.size.x, p.geometry.size.y, p.geometry.size.z);
-                part.radius = p.geometry.radius;
-                part.height = p.geometry.height;
-                for (const auto& v : p.geometry.vertices)
-                    part.vertices.emplace_back(v.x, v.y, v.z);
-                d.parts.push_back(std::move(part));
-            }
-            scene.push_back(std::move(d));
+            poses[k] = it != state_pose.end() ? it->second : &o.pose;
         }
-        installObstacles(toObstacles(scene), has_dynamic, now);
+        if (converted_snapshot_ != snapshot_ || converted_.size() != items.size()) {
+            converted_.assign(items.size(), Converted{});
+            converted_snapshot_ = snapshot_;
+        }
+        std::vector<Obstacle> obstacles;
+        for (std::size_t k = 0; k < items.size(); ++k) {
+            const auto& o = items[k];
+            Converted& c = converted_[k];
+            if (!c.valid || !samePose(c.pose, *poses[k])) {
+                SceneObstacleDescription d;
+                d.id = o.id;
+                d.pose = poseOf(*poses[k]);
+                for (const auto& p : o.parts) {
+                    ScenePartDescription part;
+                    part.type = p.geometry.type;
+                    part.pose = poseOf(p.pose);
+                    part.size =
+                        Eigen::Vector3d(p.geometry.size.x, p.geometry.size.y, p.geometry.size.z);
+                    part.radius = p.geometry.radius;
+                    part.height = p.geometry.height;
+                    for (const auto& v : p.geometry.vertices)
+                        part.vertices.emplace_back(v.x, v.y, v.z);
+                    d.parts.push_back(std::move(part));
+                }
+                c.valid = false;
+                c.obstacles = toObstacles({d});
+                c.pose = *poses[k];
+                c.valid = true;
+            }
+            obstacles.insert(obstacles.end(), c.obstacles.begin(), c.obstacles.end());
+        }
+        installObstacles(obstacles, has_dynamic, now);
     }
 
     void installObstacles(const std::vector<Obstacle>& obstacles,
                           bool has_dynamic,
                           const ros::Time& now) {
-        using Key = std::pair<double, bool>;
-        std::map<Key, std::shared_ptr<const LidarScene>> scenes;
+        std::map<ScenePolicy, std::shared_ptr<const LidarScene>> scenes;
         auto compiled = [&](const SensorConfig& config) {
-            const Key key(config.surface_spacing, config.penetrating_keep_buried);
+            const ScenePolicy key(config.surface_spacing, config.penetrating_keep_buried);
             auto& scene = scenes[key];
-            if (!scene)
-                scene = std::make_shared<LidarScene>(obstacles, key.first, key.second);
+            if (!scene) {
+                // From the installed scene of this policy: only obstacles that
+                // changed are compiled, sampled and indexed again.
+                const auto installed = scenes_.find(key);
+                scene = installed == scenes_.end()
+                            ? std::make_shared<LidarScene>(obstacles, key.first, key.second)
+                            : std::make_shared<LidarScene>(
+                                  obstacles, key.first, key.second, *installed->second);
+            }
             return scene;
         };
         // Prepare every sampling policy before replacing the active revision.
@@ -740,6 +806,7 @@ private:
             v.lidar->setScene(compiled(v.lidar->config()));
         if (map_lidar_)
             map_lidar_->setScene(compiled(map_lidar_->config()));
+        scenes_ = std::move(scenes);
         scene_ready_ = true;
         map_has_dynamic_ = has_dynamic;
         map_dirty_ = true;
@@ -887,6 +954,21 @@ private:
     ros::Subscriber instances_sub_;
     xgc2_geometry_msgs::GeometryLibrary::ConstPtr library_;
     xgc2_geometry_msgs::ConvexBodyArray::ConstPtr instances_;
+    // One snapshot obstacle or Gazebo instance as last converted.
+    struct Converted {
+        bool valid = false;
+        geometry_msgs::Pose pose;
+        geometry_msgs::Vector3 scale;
+        std::string name, geometry_type;
+        std::vector<Obstacle> obstacles;
+    };
+    // The message the cache belongs to is held, so its address is not reused.
+    xgc2_geometry_msgs::SceneSnapshot::ConstPtr converted_snapshot_;
+    xgc2_geometry_msgs::GeometryLibrary::ConstPtr converted_library_;
+    std::vector<Converted> converted_;
+    // The installed scene of each sampling policy (spacing, buried samples).
+    using ScenePolicy = std::pair<double, bool>;
+    std::map<ScenePolicy, std::shared_ptr<const LidarScene>> scenes_;
     ros::Timer timer_;
     xgc2_geometry_msgs::SceneSnapshot::ConstPtr snapshot_;
     xgc2_geometry_msgs::SceneState::ConstPtr state_;

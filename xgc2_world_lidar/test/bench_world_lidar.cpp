@@ -4,7 +4,7 @@
 //
 //   bench_world_lidar [--parts FILE] [--robots N] [--ticks T]
 //                     [--mode penetrating|raycast] [--path tagged|into]
-//                     [--threads W] [--seed S]
+//                     [--threads W] [--moving K] [--seed S]
 //
 // Without --parts the scene is a synthetic stand-in for the native
 // Swarm-Formation forest (60 pillars, 20 rings of 126 thin capsules: 2580
@@ -27,6 +27,8 @@
 // writes them in place with scanInto() into a buffer reused across ticks.
 // --threads W scans the robots of a tick on a ScanPool of W threads, as the
 // node does (0: the node's default for this many robots on this host).
+// --moving K also times rebuilding the scene after its first K obstacles
+// moved, from scratch and from the previous scene (a dynamic scene revision).
 // The checksum covers every output byte, so two builds or paths that print
 // the same checksum produced identical clouds point for point.
 
@@ -169,7 +171,7 @@ void pack(const std::vector<TaggedPoint>& points, std::vector<uint8_t>* data) {
 
 int run(int argc, char** argv) {
     std::string parts, mode = "penetrating", path = "tagged";
-    int robots = 7, ticks = 40, threads = 1;
+    int robots = 7, ticks = 40, threads = 1, moving = 0;
     unsigned seed = 7;
     for (int i = 1; i + 1 < argc; i += 2) {
         const std::string key = argv[i], value = argv[i + 1];
@@ -181,6 +183,8 @@ int run(int argc, char** argv) {
             ticks = std::max(1, std::atoi(value.c_str()));
         else if (key == "--mode")
             mode = value;
+        else if (key == "--moving")
+            moving = std::max(0, std::atoi(value.c_str()));
         else if (key == "--threads")
             threads = std::max(0, std::atoi(value.c_str()));
         else if (key == "--path")
@@ -212,6 +216,31 @@ int run(int argc, char** argv) {
                     samples,
                     median(wall),
                     median(cpu));
+    }
+
+    if (moving > 0) {
+        for (const bool keep : {true, false}) {
+            std::vector<Obstacle> moved = obstacles;
+            auto previous = std::make_shared<const LidarScene>(moved, 0.1, keep);
+            std::vector<double> full, incremental;
+            for (int k = 0; k < 9; ++k) {
+                for (int i = 0; i < std::min<int>(moving, static_cast<int>(moved.size())); ++i)
+                    moved[i].position.x() += 0.05;
+                double start = cpuMs();
+                const LidarScene scratch(moved, 0.1, keep);
+                full.push_back(cpuMs() - start);
+                start = cpuMs();
+                auto rebuilt = std::make_shared<const LidarScene>(moved, 0.1, keep, *previous);
+                incremental.push_back(cpuMs() - start);
+                previous = rebuilt;
+            }
+            std::printf("scene rebuild after moving %d obstacles, keep_buried=%d, cpu median of "
+                        "9: %.2f ms from scratch, %.2f ms from the previous scene\n",
+                        moving,
+                        keep ? 1 : 0,
+                        median(full),
+                        median(incremental));
+        }
     }
 
     SensorConfig config;

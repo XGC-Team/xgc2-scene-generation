@@ -144,12 +144,24 @@ struct Scene;
 } // namespace detail
 
 // Immutable scene geometry and sampled-map index, shared by a fleet. Rebuild
-// once when scene contents change; per-robot scans never resample the map.
+// once when scene contents change (from the previous scene when only some
+// obstacles moved); per-robot scans never resample the map.
 class LidarScene {
 public:
     LidarScene(const std::vector<Obstacle>& obstacles,
                double spacing = 0.1,
                bool keep_buried = false);
+    // The scene LidarScene(obstacles, spacing, keep_buried) builds (the same
+    // samples in the same order), built from `previous`: the shapes, samples
+    // and sampled-map index of obstacles that are bitwise unchanged at the same
+    // position in the list are reused, so after some obstacles moved only they
+    // (and, without buried samples, the obstacles they touch) are compiled,
+    // sampled and indexed again. Builds from scratch when the spacing, the
+    // buried-sample policy or the number of obstacles differ.
+    LidarScene(const std::vector<Obstacle>& obstacles,
+               double spacing,
+               bool keep_buried,
+               const LidarScene& previous);
     ~LidarScene();
     LidarScene(const LidarScene&) = delete;
     LidarScene& operator=(const LidarScene&) = delete;

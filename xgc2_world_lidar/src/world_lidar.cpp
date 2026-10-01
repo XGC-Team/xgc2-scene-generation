@@ -669,6 +669,35 @@ struct Bvh {
     }
 };
 
+// Surface samples of shape i, without those strictly inside another shape
+// (unless keep_buried). `scratch` is reused between calls.
+std::vector<Eigen::Vector3d> shapeSamples(const std::vector<Shape>& shapes,
+                                          const Bvh& bvh,
+                                          std::size_t i,
+                                          double spacing,
+                                          bool keep_buried,
+                                          std::vector<const Shape*>* scratch) {
+    std::vector<Eigen::Vector3d> samples = sampleShape(shapes[i], spacing);
+    if (keep_buried)
+        return samples;
+    scratch->clear();
+    bvh.overlapping(shapes, shapes[i].bounds, static_cast<int>(i), scratch);
+    std::vector<Eigen::Vector3d> out;
+    out.reserve(samples.size());
+    for (const auto& p : samples) {
+        bool buried = false;
+        for (const Shape* other : *scratch) {
+            if (other->residual(p) < -1e-9) {
+                buried = true;
+                break;
+            }
+        }
+        if (!buried)
+            out.push_back(p);
+    }
+    return out;
+}
+
 // Surface samples of every shape, without those strictly inside another
 // shape (unless keep_buried): what remains lies on the boundary of the union
 // of the solids. `bvh` indexes `shapes` and finds the shapes that can bury a
@@ -676,26 +705,9 @@ struct Bvh {
 std::vector<std::vector<Eigen::Vector3d>>
 sampleScene(const std::vector<Shape>& shapes, const Bvh& bvh, double spacing, bool keep_buried) {
     std::vector<std::vector<Eigen::Vector3d>> out(shapes.size());
-    std::vector<const Shape*> overlapping;
-    for (std::size_t i = 0; i < shapes.size(); ++i) {
-        if (keep_buried) {
-            out[i] = sampleShape(shapes[i], spacing);
-            continue;
-        }
-        overlapping.clear();
-        bvh.overlapping(shapes, shapes[i].bounds, static_cast<int>(i), &overlapping);
-        for (const auto& p : sampleShape(shapes[i], spacing)) {
-            bool buried = false;
-            for (const Shape* other : overlapping) {
-                if (other->residual(p) < -1e-9) {
-                    buried = true;
-                    break;
-                }
-            }
-            if (!buried)
-                out[i].push_back(p);
-        }
-    }
+    std::vector<const Shape*> scratch;
+    for (std::size_t i = 0; i < shapes.size(); ++i)
+        out[i] = shapeSamples(shapes, bvh, i, spacing, keep_buried, &scratch);
     return out;
 }
 
@@ -721,13 +733,17 @@ struct PointIndex {
     std::vector<Eigen::Vector3d> leaf_points; // points in leaf order
     std::vector<uint32_t> leaf_ids;           // their scene indices
 
-    void build(const std::vector<Eigen::Vector3d>& points) {
+    // Indexes points[ids[k]] for every k (all points when `ids` is null).
+    void build(const std::vector<Eigen::Vector3d>& points,
+               const std::vector<uint32_t>* ids = nullptr) {
         if (points.size() > std::numeric_limits<uint32_t>::max())
             throw std::invalid_argument("too many scene samples");
         nodes.clear();
-        std::vector<Item> items(points.size());
-        for (std::size_t i = 0; i < points.size(); ++i)
-            items[i] = {points[i], static_cast<uint32_t>(i)};
+        std::vector<Item> items(ids ? ids->size() : points.size());
+        for (std::size_t i = 0; i < items.size(); ++i) {
+            const uint32_t id = ids ? (*ids)[i] : static_cast<uint32_t>(i);
+            items[i] = {points[id], id};
+        }
         if (!items.empty())
             buildNode(items, 0, items.size());
         leaf_points.resize(items.size());
@@ -802,14 +818,187 @@ std::vector<uint64_t>& scanBits(std::size_t samples) {
     return bits;
 }
 
+// The sampled map is indexed in two parts so that a scene rebuilt after some
+// obstacles moved re-indexes only their samples: `base` covers the samples of
+// every shape that has not changed since it was built (shared between scene
+// revisions), `overlay` those of the shapes that have (`overlaid`).
 struct Scene {
+    std::vector<Obstacle> obstacles; // definitions, to find what a rebuild changes
     std::vector<Shape> shapes;
     Bvh bvh;
     std::vector<Eigen::Vector3d> points;
-    PointIndex index;
+    std::vector<std::size_t> first; // samples of shape i: points[first[i], first[i + 1])
+    std::shared_ptr<const PointIndex> base;
+    std::shared_ptr<const PointIndex> overlay;
+    std::vector<char> overlaid;
     double spacing = 0.1;
     bool keep_buried = false;
+
+    std::size_t mark(const Eigen::Vector3d& center, double r2, uint64_t* bits) const {
+        return (base ? base->mark(center, r2, bits) : 0) +
+               (overlay ? overlay->mark(center, r2, bits) : 0);
+    }
+
+    // An index over the samples of the shapes with overlaid[i] == which.
+    std::shared_ptr<const PointIndex> indexOf(char which) const {
+        std::vector<uint32_t> ids;
+        for (std::size_t i = 0; i + 1 < first.size(); ++i)
+            if (overlaid[i] == which)
+                for (std::size_t k = first[i]; k < first[i + 1]; ++k)
+                    ids.push_back(static_cast<uint32_t>(k));
+        auto index = std::make_shared<PointIndex>();
+        index->build(points, &ids);
+        return index;
+    }
+
+    void indexAll() {
+        overlaid.assign(shapes.size(), 0);
+        auto index = std::make_shared<PointIndex>();
+        index->build(points);
+        base = std::move(index);
+        overlay.reset();
+    }
 };
+
+namespace {
+
+uint64_t bitsOf(double v) {
+    uint64_t bits = 0;
+    std::memcpy(&bits, &v, sizeof bits);
+    return bits;
+}
+
+bool sameBits(const double* a, const double* b, std::size_t n) {
+    for (std::size_t k = 0; k < n; ++k)
+        if (bitsOf(a[k]) != bitsOf(b[k]))
+            return false;
+    return true;
+}
+
+bool samePoints(const std::vector<Eigen::Vector3d>& a, const Eigen::Vector3d* b) {
+    for (std::size_t k = 0; k < a.size(); ++k)
+        if (!sameBits(a[k].data(), b[k].data(), 3))
+            return false;
+    return true;
+}
+
+// Bitwise equal definitions compile and sample to bitwise equal shapes.
+bool sameObstacle(const Obstacle& a, const Obstacle& b) {
+    if (a.type != b.type || a.vertices.size() != b.vertices.size() ||
+        !sameBits(a.position.data(), b.position.data(), 3) ||
+        !sameBits(a.orientation.coeffs().data(), b.orientation.coeffs().data(), 4) ||
+        !sameBits(a.size.data(), b.size.data(), 3) || !sameBits(&a.radius, &b.radius, 1) ||
+        !sameBits(&a.height, &b.height, 1))
+        return false;
+    for (std::size_t i = 0; i < a.vertices.size(); ++i)
+        if (!sameBits(a.vertices[i].data(), b.vertices[i].data(), 3))
+            return false;
+    return true;
+}
+
+} // namespace
+
+// Builds `s` for `obstacles`; with `prev` (the scene of the previous revision)
+// the shapes, samples and index of unchanged obstacles are reused. The result
+// equals a build without `prev`: the same samples in the same order.
+void buildScene(Scene& s,
+                const std::vector<Obstacle>& obstacles,
+                double spacing,
+                bool keep_buried,
+                const Scene* prev) {
+    if (!std::isfinite(spacing) || spacing <= 0.0)
+        throw std::invalid_argument("scene sample spacing must be finite and > 0");
+    s.spacing = spacing;
+    s.keep_buried = keep_buried;
+    if (prev && (prev->spacing != spacing || prev->keep_buried != keep_buried ||
+                 prev->obstacles.size() != obstacles.size()))
+        prev = nullptr;
+    const std::size_t n = obstacles.size();
+    std::vector<char> changed(n, 1);
+    s.shapes.reserve(n);
+    for (std::size_t i = 0; i < n; ++i) {
+        if (prev && sameObstacle(obstacles[i], prev->obstacles[i])) {
+            changed[i] = 0;
+            s.shapes.push_back(prev->shapes[i]);
+        } else {
+            s.shapes.push_back(compile(obstacles[i]));
+        }
+    }
+    s.obstacles = obstacles;
+    s.bvh.build(s.shapes);
+    // Shapes sampled again: the changed ones and, when buried samples are
+    // dropped, every shape that a changed one overlapped before or overlaps now.
+    std::vector<char> resample = changed;
+    std::vector<const Shape*> scratch;
+    if (prev && !keep_buried) {
+        for (std::size_t j = 0; j < n; ++j) {
+            if (!changed[j])
+                continue;
+            scratch.clear();
+            s.bvh.overlapping(s.shapes, prev->shapes[j].bounds, -1, &scratch);
+            s.bvh.overlapping(s.shapes, s.shapes[j].bounds, -1, &scratch);
+            for (const Shape* k : scratch)
+                resample[static_cast<std::size_t>(k - s.shapes.data())] = 1;
+        }
+    }
+    std::vector<std::vector<Eigen::Vector3d>> fresh(n);
+    s.first.assign(n + 1, 0);
+    for (std::size_t i = 0; i < n; ++i) {
+        std::size_t count = 0;
+        if (prev && !resample[i]) {
+            count = prev->first[i + 1] - prev->first[i];
+        } else {
+            fresh[i] = shapeSamples(s.shapes, s.bvh, i, spacing, keep_buried, &scratch);
+            count = fresh[i].size();
+        }
+        s.first[i + 1] = s.first[i] + count;
+    }
+    s.points.resize(s.first[n]);
+    std::vector<char> dirty(n, 0); // samples differ from prev
+    for (std::size_t i = 0; i < n; ++i) {
+        const auto out = s.points.begin() + static_cast<std::ptrdiff_t>(s.first[i]);
+        if (prev && !resample[i]) {
+            std::copy(prev->points.begin() + static_cast<std::ptrdiff_t>(prev->first[i]),
+                      prev->points.begin() + static_cast<std::ptrdiff_t>(prev->first[i + 1]),
+                      out);
+            continue;
+        }
+        std::copy(fresh[i].begin(), fresh[i].end(), out);
+        const bool same = prev && prev->first[i + 1] - prev->first[i] == fresh[i].size() &&
+                          samePoints(fresh[i], prev->points.data() + prev->first[i]);
+        dirty[i] = same ? 0 : 1;
+    }
+    // Every sample keeps its scene index unless a shape's sample count changed;
+    // then the whole map is indexed again.
+    if (!prev || prev->first != s.first) {
+        s.indexAll();
+        return;
+    }
+    s.overlaid = prev->overlaid;
+    bool any = false, grew = false;
+    for (std::size_t i = 0; i < n; ++i) {
+        if (!dirty[i])
+            continue;
+        any = true;
+        grew = grew || !s.overlaid[i];
+        s.overlaid[i] = 1;
+    }
+    if (!any) {
+        s.base = prev->base;
+        s.overlay = prev->overlay;
+        return;
+    }
+    std::size_t moving = 0;
+    for (std::size_t i = 0; i < n; ++i)
+        if (s.overlaid[i])
+            moving += s.first[i + 1] - s.first[i];
+    if (2 * moving > s.points.size()) {
+        s.indexAll();
+        return;
+    }
+    s.base = grew ? s.indexOf(0) : prev->base;
+    s.overlay = s.indexOf(1);
+}
 
 } // namespace detail
 
@@ -952,17 +1141,14 @@ WorldLidar::~WorldLidar() = default;
 
 LidarScene::LidarScene(const std::vector<Obstacle>& obstacles, double spacing, bool keep_buried)
     : data_(new detail::Scene) {
-    if (!std::isfinite(spacing) || spacing <= 0.0)
-        throw std::invalid_argument("scene sample spacing must be finite and > 0");
-    data_->spacing = spacing;
-    data_->keep_buried = keep_buried;
-    data_->shapes.reserve(obstacles.size());
-    for (const auto& o : obstacles)
-        data_->shapes.push_back(detail::compile(o));
-    data_->bvh.build(data_->shapes);
-    for (const auto& samples : detail::sampleScene(data_->shapes, data_->bvh, spacing, keep_buried))
-        data_->points.insert(data_->points.end(), samples.begin(), samples.end());
-    data_->index.build(data_->points);
+    detail::buildScene(*data_, obstacles, spacing, keep_buried, nullptr);
+}
+LidarScene::LidarScene(const std::vector<Obstacle>& obstacles,
+                       double spacing,
+                       bool keep_buried,
+                       const LidarScene& previous)
+    : data_(new detail::Scene) {
+    detail::buildScene(*data_, obstacles, spacing, keep_buried, previous.data_.get());
 }
 LidarScene::~LidarScene() = default;
 std::size_t LidarScene::sampleCount() const {
@@ -1188,7 +1374,7 @@ void WorldLidar::samplePenetrating(const Eigen::Vector3d& position,
     };
     const auto& scene = *scene_->data_;
     std::vector<uint64_t>& bits = detail::scanBits(scene.points.size());
-    std::size_t bound = scene.index.mark(position, r2, bits.data());
+    std::size_t bound = scene.mark(position, r2, bits.data());
     std::vector<int> body_samples(others.size(), 0);
     for (std::size_t i = 0; i < others.size(); ++i) {
         const VehicleBody& b = others[i];

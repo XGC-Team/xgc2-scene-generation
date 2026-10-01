@@ -922,7 +922,74 @@ void testParallelFleetEqualsSerial() {
     std::printf("  %d mismatching clouds\n", mismatches);
 }
 
+// A scene rebuilt from the previous revision equals a scene built from
+// scratch: same samples in the same order, same scans. Revisions move a few
+// obstacles, many, none, push one into another (burial changes), change a
+// size, change the obstacle count, then keep moving the same two (the dynamic
+// case).
+void testIncrementalSceneEqualsFull() {
+    std::printf("scene rebuilt from the previous revision equals a full build\n");
+    using xgc2_world_lidar::LidarScene;
+    int mismatches = 0, revisions = 0;
+    for (const bool keep : {true, false}) {
+        for (const double spacing : {0.1, 0.25}) {
+            std::mt19937 rng(keep ? 101 : 202);
+            std::vector<Obstacle> obstacles = randomScene(rng, 80, 7.0);
+            auto previous = std::make_shared<const LidarScene>(obstacles, spacing, keep);
+            std::uniform_real_distribution<double> step(-0.6, 0.6);
+            std::uniform_int_distribution<int> pick(0, 79);
+            for (int rev = 0; rev < 14; ++rev) {
+                const int moves[] = {1, 3, 0, 1, 10, 50, 3, 1};
+                if (rev < 8) {
+                    for (int k = 0; k < moves[rev]; ++k)
+                        obstacles[rev == 3 ? 7 : pick(rng)].position +=
+                            Eigen::Vector3d(step(rng), step(rng), step(rng));
+                } else if (rev == 8) {
+                    obstacles[5].position = obstacles[6].position; // overlap: burial changes
+                } else if (rev == 9) {
+                    obstacles[11].radius *= 1.3;
+                    obstacles[12].orientation = randomQuat(rng);
+                } else if (rev == 10) {
+                    obstacles.push_back(Obstacle::sphere(Eigen::Vector3d(1, 1, 1), 0.7));
+                } else {
+                    // The same two obstacles keep moving: their samples stay in
+                    // the overlay and the rest of the index is shared.
+                    obstacles[3].position.x() += 0.25;
+                    obstacles[4].position.y() -= 0.25;
+                }
+                const auto rebuilt =
+                    std::make_shared<const LidarScene>(obstacles, spacing, keep, *previous);
+                const auto full = std::make_shared<const LidarScene>(obstacles, spacing, keep);
+                SensorConfig c;
+                c.mode = SensorConfig::kPenetrating;
+                c.range = 6.0;
+                c.surface_spacing = spacing;
+                c.penetrating_keep_buried = keep;
+                SensorConfig r = lidar32(SensorConfig::kRaycast);
+                r.range = 9.0;
+                WorldLidar a(c), b(c), ra(r), rb(r);
+                a.setScene(rebuilt);
+                b.setScene(full);
+                ra.setScene(rebuilt);
+                rb.setScene(full);
+                bool same = rebuilt->sampleCount() == full->sampleCount() &&
+                            a.globalMap(spacing) == b.globalMap(spacing);
+                for (int k = 0; same && k < 4; ++k) {
+                    const Eigen::Vector3d p(step(rng) * 8, step(rng) * 8, step(rng));
+                    same = a.scan(p, kI) == b.scan(p, kI) && ra.scan(p, kI) == rb.scan(p, kI);
+                }
+                mismatches += same ? 0 : 1;
+                ++revisions;
+                previous = rebuilt;
+            }
+        }
+    }
+    CHECK(mismatches == 0);
+    std::printf("  %d revisions, %d mismatching\n", revisions, mismatches);
+}
+
 int main() {
+    testIncrementalSceneEqualsFull();
     testPenetratingMatchesBruteForce();
     testPackedCloudMatchesTagged();
     testScanPool();
