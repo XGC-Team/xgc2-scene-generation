@@ -134,3 +134,38 @@ pose subscriptions or sensor topics are invented. Local sensors retain their
 own range/FOV and sampling policy. The reference shares compiled scene data
 where policies match and is published latched when consumed. Replacing,
 removing, or waiting for a dynamic scene revision clears the old reference.
+
+## World-model body roster (raycast P1)
+
+The existing fleet manifest schema version 1 accepts a separate `bodies` array.
+`robots` remains only the sensor roster. A body is an explicit sphere envelope
+centered at its world-model truth pose (not a certified robot mesh):
+
+```json
+{"schemaVersion":1,"robots":[{"namespace":"/A","bodyId":41,"mode":"raycast"}],
+ "bodies":[{"id":41,"namespace":"/A","poseTopic":"/xgc/simulation/body/A/pose",
+            "geometry":{"type":"sphere","radiusMeters":0.3}},
+           {"id":7,"namespace":"/B","poseTopic":"/xgc/simulation/body/B/pose",
+            "geometry":{"type":"sphere","radiusMeters":0.3}}]}
+```
+
+Core provides every simulated world member, including B without a sensor, with
+stable body IDs, explicit sphere geometry, and world-frame PoseStamped truth
+from the same model that produces motion. The sphere and the pose use the same
+origin; radius is supplied from that model's geometry boundary, never guessed
+by this node. Unsupported geometry is rejected. No second world is created.
+
+Raycast/depth sensors include that roster and exclude their own bodyId. Walls
+still select the nearest first return. Their default scan origin and exact
+output stamp come from their own body truth topic; an explicit sensor poseTopic
+remains available in the manifest. Body-free penetrating/crop keeps its existing
+VRPN source, three XYZ fields and observation baseline; `vehicle_bodies` remains
+its explicit opt-in. Legacy manifests without bodies retain their behavior.
+
+The body roster is frozen for the run/world instance. Algorithm/provider stop
+cannot remove a model or its body: model-owned truth publication must continue.
+A missing, invalid, future or stale truth sample fails closed for body-aware
+scans, rather than turning that member into observed-free space. The roster is
+replaced only with the owning world model lifecycle, never with sensor demand.
+`test/body_roster.test` exercises unsensed-body hits, wall occlusion, self IDs,
+provider stop, interrupted/resumed truth and unchanged penetrating baseline.

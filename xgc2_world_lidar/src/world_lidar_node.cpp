@@ -406,6 +406,7 @@ public:
                 throw std::invalid_argument("fleet manifest must contain 1..1048576 bytes");
         }
         std::vector<boost::property_tree::ptree> sensor_specs;
+        const std::regex namespace_pattern("/[A-Za-z_][A-Za-z0-9_]*(/[A-Za-z_][A-Za-z0-9_]*)*");
         if (!fleet_json.empty()) {
             std::istringstream input(fleet_json);
             boost::property_tree::read_json(input, fleet);
@@ -413,6 +414,47 @@ public:
                 throw std::invalid_argument("unsupported fleet sensor schema");
             for (const auto& item : fleet.get_child("robots"))
                 sensor_specs.push_back(item.second);
+            const auto body_specs = fleet.get_child_optional("bodies");
+            if (body_specs) {
+                body_roster_ = true;
+                if (body_specs->size() > 512)
+                    throw std::invalid_argument("body roster exceeds 512 simulated members");
+                std::set<int> body_ids;
+                std::set<std::string> body_namespaces;
+                for (const auto& entry : *body_specs) {
+                    const auto& spec = entry.second;
+                    Body body;
+                    body.id = spec.get<int>("id");
+                    body.ns = spec.get<std::string>("namespace");
+                    body.topic = spec.get<std::string>("poseTopic");
+                    body.radius = spec.get<double>("geometry.radiusMeters");
+                    if (body.id < 0 || !body_ids.insert(body.id).second ||
+                        !std::regex_match(body.ns, namespace_pattern) ||
+                        !body_namespaces.insert(body.ns).second ||
+                        !std::regex_match(body.topic, namespace_pattern) ||
+                        spec.get<std::string>("geometry.type") != "sphere" ||
+                        !std::isfinite(body.radius) || body.radius <= 0.0)
+                        throw std::invalid_argument(
+                            "invalid body id/namespace/truth topic/sphere geometry");
+                    bodies_.push_back(std::move(body));
+                }
+                for (std::size_t k = 0; k < bodies_.size(); ++k) {
+                    bodies_[k].sub = nh_.subscribe<geometry_msgs::PoseStamped>(
+                        bodies_[k].topic,
+                        1,
+                        [this, k](const geometry_msgs::PoseStamped::ConstPtr& msg) {
+                            // Membership is a world-model fact, independent of providers.
+                            // Invalid truth suppresses scans, never turns an extant body
+                            // into an absent obstacle or observed-free space.
+                            if (!validObservationPose(
+                                    poseOf(msg->pose), msg->header.frame_id, frame_id_)) {
+                                bodies_[k].pose.reset();
+                                return;
+                            }
+                            bodies_[k].pose = msg;
+                        });
+                }
+            }
             const auto reference = fleet.get_child_optional("referenceCloud");
             if (reference) {
                 publish_map = true;
@@ -459,6 +501,21 @@ public:
                     !namespaces.insert(ns).second)
                     throw std::invalid_argument("invalid or duplicated fleet namespace");
                 pose_topic = "/vrpn_client_node" + ns + "/pose";
+                if (body_roster_) {
+                    const auto body = std::find_if(
+                        bodies_.begin(), bodies_.end(), [&](const Body& b) { return b.ns == ns; });
+                    if (body == bodies_.end())
+                        throw std::invalid_argument("sensor namespace is not a world body member");
+                    v.body_id = spec.get<int>("bodyId", body->id);
+                    if (v.body_id != body->id)
+                        throw std::invalid_argument(
+                            "sensor bodyId disagrees with its world member");
+                    // Body-free penetrating/crop retains its original measurement
+                    // source unless the run explicitly supplies poseTopic.
+                    if (spec.get<std::string>("mode", "raycast") != "penetrating")
+                        pose_topic = body->topic;
+                }
+                pose_topic = spec.get<std::string>("poseTopic", pose_topic);
                 points_topic = ns + "/simple_lidar/points";
                 beams_topic = ns + "/simple_lidar/beams";
                 const std::string mode = spec.get<std::string>("mode", "raycast");
@@ -491,6 +548,10 @@ public:
                     throw std::invalid_argument("invalid fleet sensor rate");
                 v.publish_beams = spec.get<bool>("publishBeams", false);
             }
+            if (!body_roster_)
+                v.body_id = v.id;
+            v.with_bodies =
+                vehicle_bodies_ || (body_roster_ && config.mode != SensorConfig::kPenetrating);
             v.lidar = std::make_unique<WorldLidar>(config);
             v.publish_beams = v.publish_beams && config.mode != SensorConfig::kPenetrating;
             rate = std::max(rate, v.rate);
@@ -498,7 +559,7 @@ public:
                 v.pub = nh_.advertise<sensor_msgs::PointCloud2>(points_topic, 1);
                 if (v.publish_beams)
                     v.beams_pub = nh_.advertise<sensor_msgs::PointCloud2>(beams_topic, 1);
-                v.cloud = cloudLayout({"x", "y", "z"}, vehicle_bodies_, frame_id_);
+                v.cloud = cloudLayout({"x", "y", "z"}, v.with_bodies, frame_id_);
             }
             // Poses of every served vehicle (a vehicle without a sensor is still a body for the
             // others).
@@ -581,8 +642,17 @@ public:
     }
 
 private:
+    struct Body {
+        int id = 0;
+        std::string ns, topic;
+        double radius = 0.0;
+        ros::Subscriber sub;
+        geometry_msgs::PoseStamped::ConstPtr pose;
+    };
     struct Vehicle {
         int id = 0;
+        int body_id = 0;
+        bool with_bodies = false;
         ros::Subscriber sub;
         ros::Publisher pub;
         ros::Publisher beams_pub;
@@ -908,11 +978,32 @@ private:
                 active.push_back(k);
         // Bodies of the other served vehicles with a fresh pose (tagged returns).
         std::vector<VehicleBody> bodies;
-        if (vehicle_bodies_)
+        bool body_truth_ready = true;
+        if (body_roster_) {
+            for (const auto& body : bodies_) {
+                if (!body.pose || !freshObservationTime(body.pose->header.stamp.toSec(),
+                                                        now.toSec(),
+                                                        pose_timeout_)) {
+                    body_truth_ready = false;
+                    break;
+                }
+                bodies.push_back({body.id, poseOf(body.pose->pose).position, body.radius});
+            }
+            if (!body_truth_ready) {
+                // Fail closed for body-aware scans, while preserving the original
+                // body-free penetrating/crop experiment and its scan counters.
+                active.erase(
+                    std::remove_if(active.begin(),
+                                   active.end(),
+                                   [&](std::size_t k) { return vehicles_[k].with_bodies; }),
+                    active.end());
+            }
+        } else if (vehicle_bodies_) {
             for (std::size_t k : fresh)
                 bodies.push_back({vehicles_[k].id,
                                   poseOf(vehicles_[k].pose->pose).position,
                                   vehicle_body_radius_});
+        }
         for (std::size_t k : active) {
             Vehicle& v = vehicles_[k];
             if (v.next_scan.isZero())
@@ -935,20 +1026,20 @@ private:
         }
         std::vector<VehicleBody> others;
         for (const auto& b : bodies)
-            if (b.id != v.id)
+            if (v.with_bodies && b.id != v.body_id)
                 others.push_back(b);
         const ros::Time stamp = v.pose->header.stamp;
         if (!v.publish_beams) {
             const std::size_t count =
-                v.lidar->scanInto(p.position, q, others, vehicle_bodies_, &v.cloud.data);
+                v.lidar->scanInto(p.position, q, others, v.with_bodies, &v.cloud.data);
             finishCloud(&v.cloud, count, stamp);
             v.pub.publish(v.cloud);
             return;
         }
         const std::vector<Beam> beams = v.lidar->scanWithBeams(p.position, q, others);
-        finishCloud(&v.cloud, packHits(beams, vehicle_bodies_, &v.cloud.data), stamp);
+        finishCloud(&v.cloud, packHits(beams, v.with_bodies, &v.cloud.data), stamp);
         v.pub.publish(v.cloud);
-        v.beams_pub.publish(toBeamCloud(beams, vehicle_bodies_, stamp, frame_id_));
+        v.beams_pub.publish(toBeamCloud(beams, v.with_bodies, stamp, frame_id_));
     }
 
     Pose sensor_mount_;
@@ -984,6 +1075,8 @@ private:
     xgc2_geometry_msgs::SceneSnapshot::ConstPtr snapshot_;
     xgc2_geometry_msgs::SceneState::ConstPtr state_;
     std::vector<Vehicle> vehicles_;
+    std::vector<Body> bodies_;
+    bool body_roster_ = false;
     std::string frame_id_;
     ros::NodeHandle nh_;
     std::unique_ptr<ScanPool> pool_;

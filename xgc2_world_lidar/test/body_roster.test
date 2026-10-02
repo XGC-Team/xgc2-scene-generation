@@ -1,0 +1,3 @@
+<launch>
+  <test test-name="body_roster" pkg="xgc2_world_lidar" type="body_roster_test.py" time-limit="50"/>
+</launch>
