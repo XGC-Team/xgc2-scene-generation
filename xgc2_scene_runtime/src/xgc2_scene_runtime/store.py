@@ -79,6 +79,59 @@ class DocumentYaml:
         return header + 'obstacles:\n' + ''.join(texts)
 
 
+class EnvelopeJson:
+    """JSON text of envelopes and command results, encoding a document once.
+
+    An envelope of a 2580-part scene is about 0.8 MB of JSON, but between
+    publishes only its status, consumer and time fields change. Documents and
+    their obstacles are immutable values shared between revisions, so the
+    text of the current document is reused, and a new revision encodes only
+    the obstacles it changed. The output equals json.dumps(value,
+    ensure_ascii=False, allow_nan=False): a dict is written as that function
+    writes it, '{' + ', '.join('"key": value') + '}', a list as
+    '[' + ', '.join(items) + ']', every part encoded by the same function.
+    """
+
+    def __init__(self):
+        # Each cache is replaced as one value: ROS callback threads share it.
+        self._document = (None, None)
+        self._obstacles = {}
+
+    @staticmethod
+    def _dumps(value):
+        return json.dumps(value, ensure_ascii=False, allow_nan=False)
+
+    def _object(self, value, encode):
+        return '{' + ', '.join(self._dumps(key) + ': ' + encode(key, item) for key, item in value.items()) + '}'
+
+    def document(self, document):
+        cached = self._document
+        if cached[0] is document:
+            return cached[1]
+        obstacles = document.get('obstacles')
+        if not isinstance(obstacles, list) or not all(isinstance(key, str) for key in document):
+            text = self._dumps(document)
+        else:
+            previous, items, texts = self._obstacles, {}, []
+            for item in obstacles:
+                hit = previous.get(id(item))
+                if hit is None or hit[0] is not item:
+                    hit = (item, self._dumps(item))
+                items[id(item)] = hit
+                texts.append(hit[1])
+            self._obstacles = items
+            listed = '[' + ', '.join(texts) + ']'
+            text = self._object(document, lambda key, item: listed if key == 'obstacles' else self._dumps(item))
+        self._document = (document, text)
+        return text
+
+    def dumps(self, value):
+        if (not isinstance(value, dict) or not isinstance(value.get('document'), dict)
+                or not all(isinstance(key, str) for key in value)):
+            return self._dumps(value)
+        return self._object(value, lambda key, item: self.document(item) if key == 'document' else self._dumps(item))
+
+
 def yaml_object(loader, node):
     loader.flatten_mapping(node)
     return unique_object(loader.construct_pairs(node, deep=True))

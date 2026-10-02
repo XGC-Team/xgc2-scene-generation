@@ -6,6 +6,7 @@ introduced this file: run this module directly to print them.
 """
 
 import json
+import math
 from pathlib import Path
 import sys
 import tempfile
@@ -21,6 +22,8 @@ recorder = ros_stubs.install()
 from xgc2_scene_runtime import ros_node  # noqa: E402
 
 SIZES = (50, 200, 500)
+# measure(FOREST): the native forest shape (80 obstacles, 2580 parts).
+FOREST = 'forest'
 
 
 class CountingList(list):
@@ -57,13 +60,35 @@ def obstacle(index, moving):
     return item
 
 
+def forest_obstacles():
+    """Native Swarm-Formation forest shape: 60 pillars and 20 rings of 126
+    capsule segments, 80 obstacles and 2580 parts, all held still."""
+    items = [{'id': 'pillar-{}'.format(i), 'pose': {'position': [(i % 12) * 2.5 - 15.0, (i // 12) * 3.0 - 7.0, 1.0]},
+              'parts': [{'id': 'body', 'geometry': {'type': 'cylinder', 'radius': 0.25, 'height': 4.0}}]}
+             for i in range(60)]
+    for r in range(20):
+        parts = []
+        for k in range(126):
+            a0, a1 = 2*math.pi*k/126, 2*math.pi*(k+1)/126
+            half = (a0+a1)/2
+            parts.append({'id': 'segment-{}'.format(k),
+                          'pose': {'position': [math.cos(half), math.sin(half), 0.0],
+                                   'orientation': [math.cos(half)*math.sin(math.pi/4), math.sin(half)*math.sin(math.pi/4),
+                                                   0.0, math.cos(math.pi/4)]},
+                          'geometry': {'type': 'capsule', 'radius': 0.05, 'height': 2*math.sin((a1-a0)/2)}})
+        items.append({'id': 'ring-{}'.format(r), 'pose': {'position': [(r % 5) * 6.0 - 12.0, (r // 5) * 3.5 - 6.0, 1.5]},
+                      'parts': parts})
+    return items
+
+
 def build_node(directory, count):
     recorder.__init__()
     gazebo = FakeGazeboApply()
     recorder.proxies['gazebo/apply'] = gazebo
     source = Path(directory)/'scene.yaml'
+    obstacles = forest_obstacles() if count == FOREST else [obstacle(i, i % 2 == 1) for i in range(count)]
     source.write_text(yaml.safe_dump({'schema': 'xgc2.scene.v1', 'id': 'bench', 'frame': 'world',
-                                      'obstacles': [obstacle(i, i % 2 == 1) for i in range(count)]}))
+                                      'obstacles': obstacles}))
     recorder.params.update({'~scene_file': str(source), '~gazebo': True, '~frozen': False,
                             '~save_directory': str(directory)})
     started = time.perf_counter()
@@ -90,6 +115,9 @@ def measure(count, consumers=10, rounds=10):
         startup_applies = gazebo.calls
         tick = average_seconds(lambda: node.tick(None), 20)
         definition = average_seconds(node.publish_definition, 5)
+        document = average_seconds(node.publish_document, 5)
+        get = ros_stubs.Msg(command_json=json.dumps({'operation': 'get'}))
+        get_seconds = average_seconds(lambda: node.command(get), 5)
 
         published = recorder.publishes.get('document', 0)
         published_bytes = recorder.published_bytes.get('document', 0)
@@ -119,6 +147,8 @@ def measure(count, consumers=10, rounds=10):
             'startup_applies': startup_applies,
             'tick_ms': tick*1e3,
             'definition_ms': definition*1e3,
+            'document_ms': document*1e3,
+            'get_ms': get_seconds*1e3,
             'heartbeats': consumers*rounds,
             'heartbeat_ms': heartbeat_seconds*1e3,
             'heartbeat_document_publishes': heartbeat_publishes,
@@ -189,10 +219,10 @@ class SceneScalingTest(unittest.TestCase):
 
 
 def main():
-    columns = ('obstacles', 'startup_s', 'tick_ms', 'definition_ms', 'heartbeat_ms', 'heartbeat_document_publishes',
-               'heartbeat_document_mb', 'update_ms', 'next_update_ms', 'update_applies')
+    columns = ('obstacles', 'startup_s', 'tick_ms', 'definition_ms', 'document_ms', 'get_ms', 'heartbeat_ms',
+               'heartbeat_document_publishes', 'heartbeat_document_mb', 'update_ms', 'next_update_ms', 'update_applies')
     print(' '.join('{:>14}'.format(column) for column in columns))
-    for count in SIZES:
+    for count in SIZES + (FOREST,):
         result = measure(count)
         print(' '.join('{:>14.4g}'.format(result[column]) if isinstance(result[column], float)
                        else '{:>14}'.format(result[column]) for column in columns))

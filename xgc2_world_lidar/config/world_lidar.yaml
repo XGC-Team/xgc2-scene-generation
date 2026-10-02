@@ -27,7 +27,7 @@ rate: 10.0               # Hz, per vehicle
 yaw_only: false          # true: sensor keeps level (yaw from the vehicle attitude only)
 frame_id: world
 pose_timeout: 0.5        # s; stale poses are not scanned
-worker_threads: 1        # >1 scans vehicles in parallel
+worker_threads: 0        # 0: one thread per sensed vehicle, up to half the hardware threads; 1: serial
 
 # Per-beam records (raycast / depth_frustum): x y z dx dy dz range hit
 publish_beams: false

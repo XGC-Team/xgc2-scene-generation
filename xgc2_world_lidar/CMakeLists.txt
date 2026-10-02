@@ -10,6 +10,7 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 find_package(Eigen3 REQUIRED)
+find_package(Threads REQUIRED)
 find_package(catkin QUIET COMPONENTS
   roscpp roslib geometry_msgs sensor_msgs std_srvs xgc2_geometry_msgs
 )
@@ -19,7 +20,9 @@ if(catkin_FOUND)
 endif()
 include_directories(include ${EIGEN3_INCLUDE_DIR})
 add_library(${PROJECT_NAME} STATIC
-  src/world_lidar.cpp src/scene_conversion.cpp src/convex_body_conversion.cpp)
+  src/world_lidar.cpp src/scene_conversion.cpp src/convex_body_conversion.cpp
+  src/scan_pool.cpp)
+target_link_libraries(${PROJECT_NAME} PUBLIC Threads::Threads)
 if(TARGET Eigen3::Eigen)
   target_link_libraries(${PROJECT_NAME} PUBLIC Eigen3::Eigen)
 else()
@@ -31,6 +34,9 @@ foreach(suite world_lidar scene_sources observation_contract)
   target_link_libraries(test_${suite} PRIVATE ${PROJECT_NAME})
   add_test(NAME test_${suite} COMMAND test_${suite})
 endforeach()
+# Fleet scan benchmark (not a test): see the usage at the top of the source.
+add_executable(bench_world_lidar test/bench_world_lidar.cpp)
+target_link_libraries(bench_world_lidar PRIVATE ${PROJECT_NAME})
 
 if(catkin_FOUND)
   include_directories(${catkin_INCLUDE_DIRS})

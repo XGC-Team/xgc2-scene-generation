@@ -144,12 +144,24 @@ struct Scene;
 } // namespace detail
 
 // Immutable scene geometry and sampled-map index, shared by a fleet. Rebuild
-// once when scene contents change; per-robot scans never resample the map.
+// once when scene contents change (from the previous scene when only some
+// obstacles moved); per-robot scans never resample the map.
 class LidarScene {
 public:
     LidarScene(const std::vector<Obstacle>& obstacles,
                double spacing = 0.1,
                bool keep_buried = false);
+    // The scene LidarScene(obstacles, spacing, keep_buried) builds (the same
+    // samples in the same order), built from `previous`: the shapes, samples
+    // and sampled-map index of obstacles that are bitwise unchanged at the same
+    // position in the list are reused, so after some obstacles moved only they
+    // (and, without buried samples, the obstacles they touch) are compiled,
+    // sampled and indexed again. Builds from scratch when the spacing, the
+    // buried-sample policy or the number of obstacles differ.
+    LidarScene(const std::vector<Obstacle>& obstacles,
+               double spacing,
+               bool keep_buried,
+               const LidarScene& previous);
     ~LidarScene();
     LidarScene(const LidarScene&) = delete;
     LidarScene& operator=(const LidarScene&) = delete;
@@ -195,6 +207,16 @@ public:
     std::vector<TaggedPoint> scanTagged(const Eigen::Vector3d& position,
                                         const Eigen::Quaterniond& attitude,
                                         const std::vector<VehicleBody>& others = {}) const;
+    // The points scanTagged() returns, written straight into `data` as the
+    // records of a sensor_msgs/PointCloud2: float32 x y z in host byte order,
+    // then int32 vehicle_id (-1 static geometry) when `with_id` (point_step 12
+    // or 16). `data` is resized to exactly the records; its capacity is kept,
+    // so a buffer reused across scans does not reallocate. Returns the count.
+    std::size_t scanInto(const Eigen::Vector3d& position,
+                         const Eigen::Quaterniond& attitude,
+                         const std::vector<VehicleBody>& others,
+                         bool with_id,
+                         std::vector<uint8_t>* data) const;
     // Distance along unit `direction` to the first surface within max_range,
     // or +infinity. A ray starting inside a solid returns its exit surface.
     double castRay(const Eigen::Vector3d& origin,
@@ -220,12 +242,18 @@ private:
                     uint64_t scan_index,
                     const std::vector<VehicleBody>& others,
                     Sink&& sink) const;
-    template <class Sink>
+    // Out: reserve(upper bound of the points to come), push(point, vehicle id).
+    template <class Out>
     void samplePenetrating(const Eigen::Vector3d& position,
                            const Eigen::Matrix3d& rotation,
                            uint64_t scan_index,
                            const std::vector<VehicleBody>& others,
-                           Sink&& sink) const;
+                           Out& out) const;
+    template <class Out>
+    void scanPoints(const Eigen::Vector3d& position,
+                    const Eigen::Quaterniond& attitude,
+                    const std::vector<VehicleBody>& others,
+                    Out& out) const;
     bool insideFov(const Eigen::Vector3d& sensor_frame_vector) const;
     bool insideCrop(const Eigen::Vector3d& world_offset, const Eigen::Matrix3d& rotation) const;
 

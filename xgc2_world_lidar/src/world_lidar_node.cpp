@@ -33,7 +33,8 @@
  * snapshot with dynamic obstacles waits for a state of the same epoch and
  * revision; a state that lacks a dynamic obstacle is refused. Gazebo rules:
  * instances wait for the library; the scene is rebuilt only when an instance
- * changes. The sensor is rebuilt at most once per scan tick.
+ * changes. The sensor is rebuilt at most once per scan tick, from the installed
+ * scene: only obstacles that changed are converted, sampled and indexed again.
  */
 
 #include <geometry_msgs/PoseStamped.h>
@@ -55,16 +56,17 @@
 #include <cmath>
 #include <cstring>
 #include <fstream>
-#include <future>
 #include <map>
 #include <memory>
 #include <regex>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "xgc2_world_lidar/convex_body_conversion.h"
 #include "xgc2_world_lidar/observation_contract.h"
+#include "xgc2_world_lidar/scan_pool.h"
 #include "xgc2_world_lidar/scene_conversion.h"
 #include "xgc2_world_lidar/world_lidar.h"
 
@@ -86,20 +88,35 @@ Pose poseOf(const geometry_msgs::Pose& p) {
     return out;
 }
 
-// A PointCloud2 of `count` records: `float_fields` float32 fields, then an
-// int32 `vehicle_id` when `with_id`. `write(i, floats, id)` fills record i.
-template <class Write>
-sensor_msgs::PointCloud2 makeCloud(std::size_t count,
-                                   const std::vector<std::string>& float_fields,
-                                   bool with_id,
-                                   const ros::Time& stamp,
-                                   const std::string& frame_id,
-                                   Write&& write) {
+uint64_t bitsOf(double v) {
+    uint64_t bits = 0;
+    std::memcpy(&bits, &v, sizeof bits);
+    return bits;
+}
+
+// Bitwise equality: an input converted before is reused only when identical.
+bool samePose(const geometry_msgs::Pose& a, const geometry_msgs::Pose& b) {
+    return bitsOf(a.position.x) == bitsOf(b.position.x) &&
+           bitsOf(a.position.y) == bitsOf(b.position.y) &&
+           bitsOf(a.position.z) == bitsOf(b.position.z) &&
+           bitsOf(a.orientation.x) == bitsOf(b.orientation.x) &&
+           bitsOf(a.orientation.y) == bitsOf(b.orientation.y) &&
+           bitsOf(a.orientation.z) == bitsOf(b.orientation.z) &&
+           bitsOf(a.orientation.w) == bitsOf(b.orientation.w);
+}
+
+bool sameVector(const geometry_msgs::Vector3& a, const geometry_msgs::Vector3& b) {
+    return bitsOf(a.x) == bitsOf(b.x) && bitsOf(a.y) == bitsOf(b.y) && bitsOf(a.z) == bitsOf(b.z);
+}
+
+// The layout of a PointCloud2 of `float_fields` float32 fields, then an
+// int32 `vehicle_id` when `with_id`; no records yet.
+sensor_msgs::PointCloud2 cloudLayout(const std::vector<std::string>& float_fields,
+                                     bool with_id,
+                                     const std::string& frame_id) {
     sensor_msgs::PointCloud2 msg;
-    msg.header.stamp = stamp;
     msg.header.frame_id = frame_id;
     msg.height = 1;
-    msg.width = static_cast<uint32_t>(count);
     uint32_t offset = 0;
     for (const auto& name : float_fields) {
         sensor_msgs::PointField f;
@@ -121,8 +138,28 @@ sensor_msgs::PointCloud2 makeCloud(std::size_t count,
     }
     msg.is_bigendian = false;
     msg.point_step = offset;
-    msg.row_step = msg.point_step * msg.width;
     msg.is_dense = true;
+    return msg;
+}
+
+// Sets the record count and stamp of a cloud whose `data` holds the records.
+void finishCloud(sensor_msgs::PointCloud2* msg, std::size_t count, const ros::Time& stamp) {
+    msg->header.stamp = stamp;
+    msg->width = static_cast<uint32_t>(count);
+    msg->row_step = msg->point_step * msg->width;
+}
+
+// A PointCloud2 of `count` records: `float_fields` float32 fields, then an
+// int32 `vehicle_id` when `with_id`. `write(i, floats, id)` fills record i.
+template <class Write>
+sensor_msgs::PointCloud2 makeCloud(std::size_t count,
+                                   const std::vector<std::string>& float_fields,
+                                   bool with_id,
+                                   const ros::Time& stamp,
+                                   const std::string& frame_id,
+                                   Write&& write) {
+    sensor_msgs::PointCloud2 msg = cloudLayout(float_fields, with_id, frame_id);
+    finishCloud(&msg, count, stamp);
     msg.data.resize(msg.row_step);
     std::vector<float> floats(float_fields.size());
     uint8_t* out = msg.data.data();
@@ -153,21 +190,29 @@ sensor_msgs::PointCloud2 toCloud(const std::vector<Eigen::Vector3d>& points,
                      });
 }
 
-sensor_msgs::PointCloud2 toTaggedCloud(const std::vector<TaggedPoint>& points,
-                                       bool with_id,
-                                       const ros::Time& stamp,
-                                       const std::string& frame_id) {
-    return makeCloud(points.size(),
-                     {"x", "y", "z"},
-                     with_id,
-                     stamp,
-                     frame_id,
-                     [&](std::size_t i, float* f, int32_t* id) {
-                         f[0] = static_cast<float>(points[i].point.x());
-                         f[1] = static_cast<float>(points[i].point.y());
-                         f[2] = static_cast<float>(points[i].point.z());
-                         *id = points[i].vehicle_id;
-                     });
+// The beam hits as /points records (x y z float32, + vehicle_id), in beam
+// order: one scan feeds both topics, so /points are exactly the beam hits.
+std::size_t packHits(const std::vector<Beam>& beams, bool with_id, std::vector<uint8_t>* data) {
+    const std::size_t stride = with_id ? 16 : 12;
+    std::size_t count = 0;
+    for (const auto& b : beams)
+        count += b.hit ? 1 : 0;
+    data->resize(count * stride);
+    uint8_t* out = data->data();
+    for (const auto& b : beams) {
+        if (!b.hit)
+            continue;
+        const Eigen::Vector3d p = b.origin + b.range * b.direction;
+        const float xyz[3] = {
+            static_cast<float>(p.x()), static_cast<float>(p.y()), static_cast<float>(p.z())};
+        std::memcpy(out, xyz, sizeof xyz);
+        if (with_id) {
+            const int32_t id = b.vehicle_id;
+            std::memcpy(out + sizeof xyz, &id, sizeof id);
+        }
+        out += stride;
+    }
+    return count;
 }
 
 // Free-segment records: origin, unit direction, range, hit (1/0).
@@ -299,7 +344,7 @@ public:
         frame_id_ = pnh.param<std::string>("frame_id", "world");
         yaw_only_ = pnh.param("yaw_only", false);
         pose_timeout_ = pnh.param("pose_timeout", 0.5);
-        worker_threads_ = std::max(1, pnh.param("worker_threads", 1));
+        const int worker_threads = pnh.param("worker_threads", 0); // <= 0: automatic
         double rate = pnh.param("rate", 10.0);
         if (!std::isfinite(rate) || !(rate > 0.0))
             throw std::invalid_argument("~rate must be finite and > 0");
@@ -453,6 +498,7 @@ public:
                 v.pub = nh_.advertise<sensor_msgs::PointCloud2>(points_topic, 1);
                 if (v.publish_beams)
                     v.beams_pub = nh_.advertise<sensor_msgs::PointCloud2>(beams_topic, 1);
+                v.cloud = cloudLayout({"x", "y", "z"}, vehicle_bodies_, frame_id_);
             }
             // Poses of every served vehicle (a vehicle without a sensor is still a body for the
             // others).
@@ -472,6 +518,16 @@ public:
                      v.sensed ? points_topic.c_str() : "(no sensor)",
                      v.rate);
         }
+        // Scans are independent: every robot has its own sensor and scan
+        // counter, and the shared scene is immutable. They run on a pool sized
+        // from the sensed robots and the hardware; ~worker_threads overrides.
+        const std::size_t sensed = static_cast<std::size_t>(std::count_if(
+            vehicles_.begin(), vehicles_.end(), [](const Vehicle& v) { return v.sensed; }));
+        const std::size_t threads =
+            worker_threads > 0 ? std::min<std::size_t>(static_cast<std::size_t>(worker_threads),
+                                                       std::max<std::size_t>(sensed, 1))
+                               : defaultScanThreads(sensed, std::thread::hardware_concurrency());
+        pool_ = std::make_unique<ScanPool>(threads);
         enable_srv_ = pnh.advertiseService("set_enabled", &WorldLidarNode::setEnabled, this);
 
         const std::string scene_source = pnh.param<std::string>("scene_source", "snapshot");
@@ -518,6 +574,7 @@ public:
                  rate,
                  publish_beams_ ? "on" : "off",
                  vehicle_bodies_ ? "on" : "off");
+        ROS_INFO("world_lidar: %zu sensors on %zu scan threads", sensed, pool_->threads());
         ROS_INFO("world_lidar: %s (toggle with %s)",
                  enabled_ ? "enabled" : "disabled: publishing nothing",
                  enable_srv_.getService().c_str());
@@ -535,6 +592,9 @@ private:
         double rate = 10.0;
         bool publish_beams = false;
         ros::Time next_scan;
+        // The /points message, reused: its records keep their capacity, and
+        // publish() serializes before it returns.
+        sensor_msgs::PointCloud2 cloud;
     };
 
     bool setEnabled(std_srvs::SetBool::Request& req, std_srvs::SetBool::Response& res) {
@@ -618,7 +678,10 @@ private:
         return true;
     }
 
-    std::vector<Obstacle> gazeboObstacles(bool* has_dynamic) const {
+    // Every converted entry is cached with what it was converted from, so an
+    // install converts and validates only entries that changed since the last
+    // one: a moving obstacle, not the static scene around it.
+    std::vector<Obstacle> gazeboObstacles(bool* has_dynamic) {
         std::vector<GeometryTemplateDescription> library;
         for (const auto& t : library_->templates) {
             GeometryTemplateDescription d;
@@ -627,18 +690,35 @@ private:
                 d.support_points.emplace_back(p.x, p.y, p.z);
             library.push_back(std::move(d));
         }
-        std::vector<ConvexBodyDescription> bodies;
-        *has_dynamic = false;
-        for (const auto& i : instances_->instances) {
-            ConvexBodyDescription d;
-            d.name = i.name;
-            d.geometry_type = i.geometry_type;
-            d.pose = poseOf(i.pose);
-            d.scale = Eigen::Vector3d(i.scale.x, i.scale.y, i.scale.z);
-            *has_dynamic = *has_dynamic || !i.is_static;
-            bodies.push_back(std::move(d));
+        const auto& instances = instances_->instances;
+        if (converted_library_ != library_ || converted_.size() != instances.size()) {
+            converted_.assign(instances.size(), Converted{});
+            converted_library_ = library_;
         }
-        return fromConvexBodies(library, bodies);
+        std::vector<Obstacle> obstacles;
+        *has_dynamic = false;
+        for (std::size_t k = 0; k < instances.size(); ++k) {
+            const auto& i = instances[k];
+            *has_dynamic = *has_dynamic || !i.is_static;
+            Converted& c = converted_[k];
+            if (!c.valid || c.name != i.name || c.geometry_type != i.geometry_type ||
+                !samePose(c.pose, i.pose) || !sameVector(c.scale, i.scale)) {
+                ConvexBodyDescription d;
+                d.name = i.name;
+                d.geometry_type = i.geometry_type;
+                d.pose = poseOf(i.pose);
+                d.scale = Eigen::Vector3d(i.scale.x, i.scale.y, i.scale.z);
+                c.valid = false;
+                c.obstacles = fromConvexBodies(library, {d});
+                c.name = i.name;
+                c.geometry_type = i.geometry_type;
+                c.pose = i.pose;
+                c.scale = i.scale;
+                c.valid = true;
+            }
+            obstacles.insert(obstacles.end(), c.obstacles.begin(), c.obstacles.end());
+        }
+        return obstacles;
     }
 
     // Builds the obstacle list from the selected scene source and installs
@@ -654,43 +734,67 @@ private:
         if (state_)
             for (const auto& s : state_->obstacles)
                 state_pose[s.id] = &s.pose;
-        std::vector<SceneObstacleDescription> scene;
+        const auto& items = snapshot_->obstacles;
+        std::vector<const geometry_msgs::Pose*> poses(items.size());
         bool has_dynamic = false;
-        for (const auto& o : snapshot_->obstacles) {
-            SceneObstacleDescription d;
-            d.id = o.id;
+        for (std::size_t k = 0; k < items.size(); ++k) {
+            const auto& o = items[k];
             const auto it = state_pose.find(o.id);
             if (o.dynamic && it == state_pose.end())
                 throw std::invalid_argument("state lacks dynamic obstacle '" + o.id + "'");
             has_dynamic = has_dynamic || o.dynamic;
-            d.pose = poseOf(it != state_pose.end() ? *it->second : o.pose);
-            for (const auto& p : o.parts) {
-                ScenePartDescription part;
-                part.type = p.geometry.type;
-                part.pose = poseOf(p.pose);
-                part.size =
-                    Eigen::Vector3d(p.geometry.size.x, p.geometry.size.y, p.geometry.size.z);
-                part.radius = p.geometry.radius;
-                part.height = p.geometry.height;
-                for (const auto& v : p.geometry.vertices)
-                    part.vertices.emplace_back(v.x, v.y, v.z);
-                d.parts.push_back(std::move(part));
-            }
-            scene.push_back(std::move(d));
+            poses[k] = it != state_pose.end() ? it->second : &o.pose;
         }
-        installObstacles(toObstacles(scene), has_dynamic, now);
+        if (converted_snapshot_ != snapshot_ || converted_.size() != items.size()) {
+            converted_.assign(items.size(), Converted{});
+            converted_snapshot_ = snapshot_;
+        }
+        std::vector<Obstacle> obstacles;
+        for (std::size_t k = 0; k < items.size(); ++k) {
+            const auto& o = items[k];
+            Converted& c = converted_[k];
+            if (!c.valid || !samePose(c.pose, *poses[k])) {
+                SceneObstacleDescription d;
+                d.id = o.id;
+                d.pose = poseOf(*poses[k]);
+                for (const auto& p : o.parts) {
+                    ScenePartDescription part;
+                    part.type = p.geometry.type;
+                    part.pose = poseOf(p.pose);
+                    part.size =
+                        Eigen::Vector3d(p.geometry.size.x, p.geometry.size.y, p.geometry.size.z);
+                    part.radius = p.geometry.radius;
+                    part.height = p.geometry.height;
+                    for (const auto& v : p.geometry.vertices)
+                        part.vertices.emplace_back(v.x, v.y, v.z);
+                    d.parts.push_back(std::move(part));
+                }
+                c.valid = false;
+                c.obstacles = toObstacles({d});
+                c.pose = *poses[k];
+                c.valid = true;
+            }
+            obstacles.insert(obstacles.end(), c.obstacles.begin(), c.obstacles.end());
+        }
+        installObstacles(obstacles, has_dynamic, now);
     }
 
     void installObstacles(const std::vector<Obstacle>& obstacles,
                           bool has_dynamic,
                           const ros::Time& now) {
-        using Key = std::pair<double, bool>;
-        std::map<Key, std::shared_ptr<const LidarScene>> scenes;
+        std::map<ScenePolicy, std::shared_ptr<const LidarScene>> scenes;
         auto compiled = [&](const SensorConfig& config) {
-            const Key key(config.surface_spacing, config.penetrating_keep_buried);
+            const ScenePolicy key(config.surface_spacing, config.penetrating_keep_buried);
             auto& scene = scenes[key];
-            if (!scene)
-                scene = std::make_shared<LidarScene>(obstacles, key.first, key.second);
+            if (!scene) {
+                // From the installed scene of this policy: only obstacles that
+                // changed are compiled, sampled and indexed again.
+                const auto installed = scenes_.find(key);
+                scene = installed == scenes_.end()
+                            ? std::make_shared<LidarScene>(obstacles, key.first, key.second)
+                            : std::make_shared<LidarScene>(
+                                  obstacles, key.first, key.second, *installed->second);
+            }
             return scene;
         };
         // Prepare every sampling policy before replacing the active revision.
@@ -702,6 +806,7 @@ private:
             v.lidar->setScene(compiled(v.lidar->config()));
         if (map_lidar_)
             map_lidar_->setScene(compiled(map_lidar_->config()));
+        scenes_ = std::move(scenes);
         scene_ready_ = true;
         map_has_dynamic_ = has_dynamic;
         map_dirty_ = true;
@@ -797,56 +902,42 @@ private:
                 bodies.push_back({vehicles_[k].id,
                                   poseOf(vehicles_[k].pose->pose).position,
                                   vehicle_body_radius_});
-        std::vector<std::vector<TaggedPoint>> clouds(active.size());
-        std::vector<std::vector<Beam>> beams(active.size());
-        auto scanOne = [&](std::size_t i) {
-            const Vehicle& v = vehicles_[active[i]];
-            const Pose p = sensorWorldPose(poseOf(v.pose->pose), sensor_mount_);
-            Eigen::Quaterniond q = p.orientation.normalized();
-            if (yaw_only_) {
-                const Eigen::Vector3d x = q * Eigen::Vector3d::UnitX();
-                q = Eigen::AngleAxisd(std::atan2(x.y(), x.x()), Eigen::Vector3d::UnitZ());
-            }
-            std::vector<VehicleBody> others;
-            for (const auto& b : bodies)
-                if (b.id != v.id)
-                    others.push_back(b);
-            if (!v.publish_beams) {
-                clouds[i] = v.lidar->scanTagged(p.position, q, others);
-                return;
-            }
-            // One scan feeds both topics, so /points are exactly the beam hits.
-            beams[i] = v.lidar->scanWithBeams(p.position, q, others);
-            for (const auto& b : beams[i])
-                if (b.hit)
-                    clouds[i].push_back({b.origin + b.range * b.direction, b.vehicle_id});
-        };
-        if (worker_threads_ <= 1 || active.size() <= 1) {
-            for (std::size_t i = 0; i < active.size(); ++i)
-                scanOne(i);
-        } else {
-            std::vector<std::future<void>> jobs;
-            const std::size_t workers = std::min<std::size_t>(worker_threads_, active.size());
-            for (std::size_t w = 0; w < workers; ++w)
-                jobs.push_back(std::async(std::launch::async, [&, w] {
-                    for (std::size_t i = w; i < active.size(); i += workers)
-                        scanOne(i);
-                }));
-            for (auto& j : jobs)
-                j.get();
-        }
-        for (std::size_t i = 0; i < active.size(); ++i) {
-            Vehicle& v = vehicles_[active[i]];
+        for (std::size_t k : active) {
+            Vehicle& v = vehicles_[k];
             if (v.next_scan.isZero())
                 v.next_scan = scheduled;
             v.next_scan += ros::Duration(1.0 / v.rate);
             if (v.next_scan <= scheduled)
                 v.next_scan = scheduled + ros::Duration(1.0 / v.rate);
-            const ros::Time stamp = v.pose->header.stamp;
-            v.pub.publish(toTaggedCloud(clouds[i], vehicle_bodies_, stamp, frame_id_));
-            if (v.publish_beams)
-                v.beams_pub.publish(toBeamCloud(beams[i], vehicle_bodies_, stamp, frame_id_));
         }
+        // Each job scans one robot into its reused message and publishes it.
+        pool_->run(active.size(),
+                   [&](std::size_t i) { scanAndPublish(vehicles_[active[i]], bodies); });
+    }
+
+    void scanAndPublish(Vehicle& v, const std::vector<VehicleBody>& bodies) {
+        const Pose p = sensorWorldPose(poseOf(v.pose->pose), sensor_mount_);
+        Eigen::Quaterniond q = p.orientation.normalized();
+        if (yaw_only_) {
+            const Eigen::Vector3d x = q * Eigen::Vector3d::UnitX();
+            q = Eigen::AngleAxisd(std::atan2(x.y(), x.x()), Eigen::Vector3d::UnitZ());
+        }
+        std::vector<VehicleBody> others;
+        for (const auto& b : bodies)
+            if (b.id != v.id)
+                others.push_back(b);
+        const ros::Time stamp = v.pose->header.stamp;
+        if (!v.publish_beams) {
+            const std::size_t count =
+                v.lidar->scanInto(p.position, q, others, vehicle_bodies_, &v.cloud.data);
+            finishCloud(&v.cloud, count, stamp);
+            v.pub.publish(v.cloud);
+            return;
+        }
+        const std::vector<Beam> beams = v.lidar->scanWithBeams(p.position, q, others);
+        finishCloud(&v.cloud, packHits(beams, vehicle_bodies_, &v.cloud.data), stamp);
+        v.pub.publish(v.cloud);
+        v.beams_pub.publish(toBeamCloud(beams, vehicle_bodies_, stamp, frame_id_));
     }
 
     Pose sensor_mount_;
@@ -863,13 +954,28 @@ private:
     ros::Subscriber instances_sub_;
     xgc2_geometry_msgs::GeometryLibrary::ConstPtr library_;
     xgc2_geometry_msgs::ConvexBodyArray::ConstPtr instances_;
+    // One snapshot obstacle or Gazebo instance as last converted.
+    struct Converted {
+        bool valid = false;
+        geometry_msgs::Pose pose;
+        geometry_msgs::Vector3 scale;
+        std::string name, geometry_type;
+        std::vector<Obstacle> obstacles;
+    };
+    // The message the cache belongs to is held, so its address is not reused.
+    xgc2_geometry_msgs::SceneSnapshot::ConstPtr converted_snapshot_;
+    xgc2_geometry_msgs::GeometryLibrary::ConstPtr converted_library_;
+    std::vector<Converted> converted_;
+    // The installed scene of each sampling policy (spacing, buried samples).
+    using ScenePolicy = std::pair<double, bool>;
+    std::map<ScenePolicy, std::shared_ptr<const LidarScene>> scenes_;
     ros::Timer timer_;
     xgc2_geometry_msgs::SceneSnapshot::ConstPtr snapshot_;
     xgc2_geometry_msgs::SceneState::ConstPtr state_;
     std::vector<Vehicle> vehicles_;
     std::string frame_id_;
     ros::NodeHandle nh_;
-    int worker_threads_ = 1;
+    std::unique_ptr<ScanPool> pool_;
     ros::Time map_stamp_;
     ros::Time last_tick_;
     bool yaw_only_ = false;

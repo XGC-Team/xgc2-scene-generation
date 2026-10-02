@@ -2,12 +2,16 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <limits>
 #include <memory>
 #include <random>
 #include <stdexcept>
+#include <vector>
 
+#include "xgc2_world_lidar/scan_pool.h"
 #include "xgc2_world_lidar/scene_conversion.h"
 #include "xgc2_world_lidar/world_lidar.h"
 
@@ -677,7 +681,319 @@ void testSharedSceneIndex() {
     CHECK(b.scene().get() == scene.get());
 }
 
+// The penetrating model, written as the plain loop it specifies: every scene
+// sample in scene order (then every vehicle-body sample), kept when it lies in
+// (0, range], at or beyond min_range, inside the field of view and the heading
+// crop, with seeded range noise drawn per kept sample in that order. The
+// indexed scan must return exactly these points in exactly this order.
+std::vector<xgc2_world_lidar::TaggedPoint>
+bruteForcePenetrating(const WorldLidar& lidar,
+                      const Eigen::Vector3d& position,
+                      const Eigen::Quaterniond& attitude,
+                      const std::vector<VehicleBody>& others,
+                      uint64_t scan_index) {
+    const SensorConfig& c = lidar.config();
+    const double pi = 3.14159265358979323846;
+    const Eigen::Matrix3d rotation =
+        Eigen::Quaterniond(attitude.coeffs() / attitude.norm()).toRotationMatrix();
+    const Eigen::Matrix3d to_sensor = rotation.transpose();
+    const double r2 = c.range * c.range, rmin2 = c.min_range * c.min_range;
+    const bool noisy = c.noise_std > 0.0;
+    std::seed_seq seq{static_cast<uint32_t>(c.seed),
+                      static_cast<uint32_t>(scan_index),
+                      static_cast<uint32_t>(scan_index >> 32)};
+    std::mt19937_64 rng(seq);
+    std::normal_distribution<double> noise(0.0, noisy ? c.noise_std : 1.0);
+    std::vector<xgc2_world_lidar::TaggedPoint> out;
+    auto consider = [&](const Eigen::Vector3d& p, int vehicle) {
+        const Eigen::Vector3d v = p - position;
+        const double d2 = v.squaredNorm();
+        if (d2 > r2 || d2 == 0.0 || d2 < rmin2)
+            return;
+        const Eigen::Vector3d s = to_sensor * v;
+        if (c.h_fov_deg < 360.0 &&
+            std::abs(std::atan2(s.y(), s.x())) > 0.5 * c.h_fov_deg * pi / 180.0 + 1e-9)
+            return;
+        if (c.v_fov_deg < 180.0 && std::abs(std::atan2(s.z(), std::hypot(s.x(), s.y()))) >
+                                       0.5 * c.v_fov_deg * pi / 180.0 + 1e-9)
+            return;
+        if (c.penetrating_heading_crop &&
+            (v.normalized().dot(rotation.col(0)) < c.heading_cos_min ||
+             std::abs(v.z()) > c.vertical_slab_tan * c.range))
+            return;
+        if (!noisy) {
+            out.push_back({p, vehicle});
+            return;
+        }
+        const double dist = std::sqrt(d2);
+        const double t = dist + noise(rng);
+        if (t <= 0.0 || t > c.range || t < c.min_range)
+            return;
+        out.push_back({position + v * (t / dist), vehicle});
+    };
+    for (const auto& p : lidar.globalMap(c.surface_spacing))
+        consider(p, -1);
+    for (const auto& b : others) {
+        if ((b.position - position).norm() - b.radius > c.range)
+            continue;
+        const int n =
+            std::max(12,
+                     static_cast<int>(std::ceil(4.0 * pi * b.radius * b.radius /
+                                                (c.surface_spacing * c.surface_spacing))));
+        const double golden = pi * (3.0 - std::sqrt(5.0));
+        for (int i = 0; i < n; ++i) {
+            const double z = 1.0 - 2.0 * (i + 0.5) / n;
+            const double rho = std::sqrt(std::max(0.0, 1.0 - z * z));
+            const double phi = golden * i;
+            consider(b.position +
+                         b.radius * Eigen::Vector3d(rho * std::cos(phi), rho * std::sin(phi), z),
+                     b.id);
+        }
+    }
+    return out;
+}
+
+void testPenetratingMatchesBruteForce() {
+    std::printf("penetrating: indexed scans equal the brute-force model point for point\n");
+    std::mt19937 rng(2024);
+    const std::vector<Obstacle> scene = randomScene(rng, 60, 12.0);
+    std::uniform_real_distribution<double> pos(-12.0, 12.0), z(-2.0, 2.0);
+    int scans = 0, mismatches = 0;
+    std::size_t points = 0;
+    for (int variant = 0; variant < 8; ++variant) {
+        SensorConfig c;
+        c.mode = SensorConfig::kPenetrating;
+        c.range = variant % 2 ? 5.0 : 9.0;
+        c.surface_spacing = variant < 4 ? 0.1 : 0.25;
+        c.h_fov_deg = variant == 2 ? 120.0 : 360.0;
+        c.v_fov_deg = variant == 2 ? 40.0 : 180.0;
+        c.min_range = variant == 3 ? 1.5 : 0.0;
+        c.penetrating_keep_buried = variant % 3 != 0;
+        c.penetrating_heading_crop = variant == 5 || variant == 6;
+        c.heading_cos_min = variant == 5 ? 0.5 : 0.0;
+        c.noise_std = variant == 7 ? 0.05 : 0.0;
+        c.seed = 11;
+        WorldLidar lidar(c);
+        lidar.setScene(scene);
+        for (uint64_t k = 0; k < 6; ++k) {
+            const Eigen::Vector3d p(pos(rng), pos(rng), z(rng));
+            const Eigen::Quaterniond q = randomQuat(rng);
+            std::vector<VehicleBody> others;
+            if (k % 2)
+                others = {{3, p + Eigen::Vector3d(1.0, 0.5, 0.0), 0.3},
+                          {9, p + Eigen::Vector3d(-2.0, 0.0, 0.4), 0.25}};
+            const auto expected = bruteForcePenetrating(lidar, p, q, others, k);
+            const auto got = lidar.scanTagged(p, q, others);
+            bool same = got.size() == expected.size();
+            for (std::size_t i = 0; same && i < got.size(); ++i)
+                same = got[i].point == expected[i].point &&
+                       got[i].vehicle_id == expected[i].vehicle_id;
+            mismatches += same ? 0 : 1;
+            points += got.size();
+            ++scans;
+        }
+    }
+    CHECK(mismatches == 0);
+    CHECK(points > 10000);
+    std::printf("  %d scans, %zu points, %d mismatching scans\n", scans, points, mismatches);
+}
+
+// scanInto() writes the PointCloud2 records of exactly the points that
+// scanTagged() returns for the same scan index, in every mode.
+void testPackedCloudMatchesTagged() {
+    std::printf("scanInto: packed records equal scanTagged points\n");
+    std::mt19937 rng(77);
+    const std::vector<Obstacle> scene = randomScene(rng, 40, 10.0);
+    int mismatches = 0;
+    for (int mode = 0; mode < 3; ++mode) {
+        for (const bool with_id : {false, true}) {
+            const SensorConfig::Mode modes[] = {
+                SensorConfig::kRaycast, SensorConfig::kPenetrating, SensorConfig::kDepthFrustum};
+            SensorConfig c = lidar32(modes[mode]);
+            c.range = 8.0;
+            c.noise_std = 0.02;
+            c.seed = 5;
+            if (mode == 2)
+                c.h_fov_deg = 90.0;
+            WorldLidar tagged(c), packed(c);
+            tagged.setScene(scene);
+            packed.setScene(tagged.scene());
+            std::vector<uint8_t> data(3, 0xab); // stale contents are replaced
+            for (int k = 0; k < 4; ++k) {
+                const Eigen::Vector3d p(1.0 * k - 2.0, 0.5, 0.3);
+                const std::vector<VehicleBody> others{{4, p + Eigen::Vector3d(1.2, 0, 0), 0.3}};
+                const auto expected = tagged.scanTagged(p, kI, others);
+                const std::size_t n = packed.scanInto(p, kI, others, with_id, &data);
+                const std::size_t stride = with_id ? 16 : 12;
+                bool same = n == expected.size() && data.size() == n * stride;
+                for (std::size_t i = 0; same && i < n; ++i) {
+                    float xyz[3];
+                    int32_t id = -1;
+                    std::memcpy(xyz, data.data() + i * stride, sizeof xyz);
+                    if (with_id)
+                        std::memcpy(&id, data.data() + i * stride + 12, sizeof id);
+                    same = xyz[0] == static_cast<float>(expected[i].point.x()) &&
+                           xyz[1] == static_cast<float>(expected[i].point.y()) &&
+                           xyz[2] == static_cast<float>(expected[i].point.z()) &&
+                           (!with_id || id == expected[i].vehicle_id);
+                }
+                mismatches += same ? 0 : 1;
+            }
+        }
+    }
+    CHECK(mismatches == 0);
+    std::printf("  %d mismatching scans\n", mismatches);
+}
+
+void testScanPool() {
+    std::printf("scan pool: every job once, errors after the batch, sizing\n");
+    using xgc2_world_lidar::ScanPool;
+    for (const std::size_t threads :
+         {std::size_t{0}, std::size_t{1}, std::size_t{3}, std::size_t{8}}) {
+        ScanPool pool(threads);
+        CHECK(pool.threads() == std::max<std::size_t>(threads, 1));
+        for (const std::size_t count :
+             {std::size_t{0}, std::size_t{1}, std::size_t{2}, std::size_t{37}}) {
+            for (int batch = 0; batch < 20; ++batch) {
+                std::vector<int> runs(count, 0);
+                pool.run(count, [&](std::size_t i) { ++runs[i]; });
+                CHECK(std::all_of(runs.begin(), runs.end(), [](int n) { return n == 1; }));
+            }
+        }
+        std::vector<int> runs(10, 0);
+        bool rethrown = false;
+        try {
+            pool.run(runs.size(), [&](std::size_t i) {
+                ++runs[i];
+                if (i == 4)
+                    throw std::runtime_error("job 4");
+            });
+        } catch (const std::runtime_error&) {
+            rethrown = true;
+        }
+        CHECK(rethrown);
+        CHECK(std::all_of(runs.begin(), runs.end(), [](int n) { return n == 1; }));
+    }
+    CHECK(xgc2_world_lidar::defaultScanThreads(7, 8) == 4);
+    CHECK(xgc2_world_lidar::defaultScanThreads(3, 8) == 3);
+    CHECK(xgc2_world_lidar::defaultScanThreads(100, 16) == 8);
+    CHECK(xgc2_world_lidar::defaultScanThreads(0, 8) == 1);
+    CHECK(xgc2_world_lidar::defaultScanThreads(5, 0) == 1);
+    CHECK(xgc2_world_lidar::defaultScanThreads(5, 1) == 1);
+}
+
+// A fleet scanned on the pool publishes exactly the clouds of a serial pass:
+// each robot has its own sensor and scan counter over one shared scene.
+void testParallelFleetEqualsSerial() {
+    std::printf("fleet: pooled scans equal serial scans\n");
+    std::mt19937 rng(31);
+    const auto scene =
+        std::make_shared<const xgc2_world_lidar::LidarScene>(randomScene(rng, 50, 10.0), 0.1, true);
+    SensorConfig c;
+    c.mode = SensorConfig::kPenetrating;
+    c.range = 8.0;
+    c.h_fov_deg = 360.0;
+    c.v_fov_deg = 180.0;
+    c.penetrating_keep_buried = true;
+    c.noise_std = 0.01;
+    c.seed = 3;
+    const int robots = 12;
+    std::vector<std::unique_ptr<WorldLidar>> serial, pooled;
+    for (int i = 0; i < robots; ++i) {
+        serial.push_back(std::make_unique<WorldLidar>(c));
+        pooled.push_back(std::make_unique<WorldLidar>(c));
+        serial.back()->setScene(scene);
+        pooled.back()->setScene(scene);
+    }
+    xgc2_world_lidar::ScanPool pool(4);
+    std::vector<std::vector<uint8_t>> a(robots), b(robots);
+    int mismatches = 0;
+    for (int tick = 0; tick < 5; ++tick) {
+        auto at = [&](int i) { return Eigen::Vector3d(-6.0 + i, 0.3 * tick, 0.5); };
+        for (int i = 0; i < robots; ++i)
+            serial[i]->scanInto(at(i), kI, {}, false, &a[i]);
+        pool.run(robots, [&](std::size_t i) {
+            pooled[i]->scanInto(at(static_cast<int>(i)), kI, {}, false, &b[i]);
+        });
+        for (int i = 0; i < robots; ++i)
+            mismatches += a[i] == b[i] ? 0 : 1;
+    }
+    CHECK(mismatches == 0);
+    std::printf("  %d mismatching clouds\n", mismatches);
+}
+
+// A scene rebuilt from the previous revision equals a scene built from
+// scratch: same samples in the same order, same scans. Revisions move a few
+// obstacles, many, none, push one into another (burial changes), change a
+// size, change the obstacle count, then keep moving the same two (the dynamic
+// case).
+void testIncrementalSceneEqualsFull() {
+    std::printf("scene rebuilt from the previous revision equals a full build\n");
+    using xgc2_world_lidar::LidarScene;
+    int mismatches = 0, revisions = 0;
+    for (const bool keep : {true, false}) {
+        for (const double spacing : {0.1, 0.25}) {
+            std::mt19937 rng(keep ? 101 : 202);
+            std::vector<Obstacle> obstacles = randomScene(rng, 80, 7.0);
+            auto previous = std::make_shared<const LidarScene>(obstacles, spacing, keep);
+            std::uniform_real_distribution<double> step(-0.6, 0.6);
+            std::uniform_int_distribution<int> pick(0, 79);
+            for (int rev = 0; rev < 14; ++rev) {
+                const int moves[] = {1, 3, 0, 1, 10, 50, 3, 1};
+                if (rev < 8) {
+                    for (int k = 0; k < moves[rev]; ++k)
+                        obstacles[rev == 3 ? 7 : pick(rng)].position +=
+                            Eigen::Vector3d(step(rng), step(rng), step(rng));
+                } else if (rev == 8) {
+                    obstacles[5].position = obstacles[6].position; // overlap: burial changes
+                } else if (rev == 9) {
+                    obstacles[11].radius *= 1.3;
+                    obstacles[12].orientation = randomQuat(rng);
+                } else if (rev == 10) {
+                    obstacles.push_back(Obstacle::sphere(Eigen::Vector3d(1, 1, 1), 0.7));
+                } else {
+                    // The same two obstacles keep moving: their samples stay in
+                    // the overlay and the rest of the index is shared.
+                    obstacles[3].position.x() += 0.25;
+                    obstacles[4].position.y() -= 0.25;
+                }
+                const auto rebuilt =
+                    std::make_shared<const LidarScene>(obstacles, spacing, keep, *previous);
+                const auto full = std::make_shared<const LidarScene>(obstacles, spacing, keep);
+                SensorConfig c;
+                c.mode = SensorConfig::kPenetrating;
+                c.range = 6.0;
+                c.surface_spacing = spacing;
+                c.penetrating_keep_buried = keep;
+                SensorConfig r = lidar32(SensorConfig::kRaycast);
+                r.range = 9.0;
+                WorldLidar a(c), b(c), ra(r), rb(r);
+                a.setScene(rebuilt);
+                b.setScene(full);
+                ra.setScene(rebuilt);
+                rb.setScene(full);
+                bool same = rebuilt->sampleCount() == full->sampleCount() &&
+                            a.globalMap(spacing) == b.globalMap(spacing);
+                for (int k = 0; same && k < 4; ++k) {
+                    const Eigen::Vector3d p(step(rng) * 8, step(rng) * 8, step(rng));
+                    same = a.scan(p, kI) == b.scan(p, kI) && ra.scan(p, kI) == rb.scan(p, kI);
+                }
+                mismatches += same ? 0 : 1;
+                ++revisions;
+                previous = rebuilt;
+            }
+        }
+    }
+    CHECK(mismatches == 0);
+    std::printf("  %d revisions, %d mismatching\n", revisions, mismatches);
+}
+
 int main() {
+    testIncrementalSceneEqualsFull();
+    testPenetratingMatchesBruteForce();
+    testPackedCloudMatchesTagged();
+    testScanPool();
+    testParallelFleetEqualsSerial();
     testSharedSceneIndex();
     testRaycastOcclusion();
     testPenetratingBackFaces();

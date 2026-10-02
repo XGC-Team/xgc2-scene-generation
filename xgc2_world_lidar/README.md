@@ -99,10 +99,17 @@ range/FOV/resolution and rate. Every robot publishes world-frame XYZ at
 `~sensor_pose` is refused. Real mounted sensors keep their separate models.
 
 Geometry and surface samples are compiled once per changed scene and sampling
-policy, then shared by the fleet. Penetrating queries use a spatial index before
+policy, then shared by the fleet. A changed revision (moving obstacles) is built
+from the installed one: only obstacles that changed, and without buried samples
+the obstacles they touch, are converted, compiled, sampled and indexed again;
+the result equals a build from scratch. Penetrating queries use a spatial index before
 applying per-robot FOV/crops; nonpenetrating rays use the shared geometry BVH.
 Unsubscribed sensors do no scan work. Each configured rate has its own simulation
 clock schedule, avoiding wall callback jitter that silently reduces scan rates.
+The robots due in a tick are scanned in parallel on a fixed thread pool (one
+thread per sensed robot, up to half the hardware threads; `~worker_threads`
+overrides), each into its own reused cloud message. Scans are independent, so
+the clouds are those of a serial pass.
 A scene replacement invalidates old observations, and removed obstacles cannot
 remain in the sampled map. The ROS fleet regression covers these boundaries.
 
