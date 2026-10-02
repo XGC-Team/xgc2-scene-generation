@@ -616,8 +616,8 @@ private:
         map_stamp_ = ros::Time();
         // A pending or refused revision must not leave a latched previous map
         // visible. Local scans still wait for the matching scene/state pair.
-        if (map_lidar_)
-            map_pub_.publish(toCloud({}, ros::Time::now(), frame_id_));
+        map_clear_pending_ = bool(map_lidar_);
+        clearMap(ros::Time::now());
         state_.reset();
         if (msg->header.frame_id != frame_id_) {
             snapshot_.reset();
@@ -815,6 +815,13 @@ private:
 
     // Publishes the global map of the installed scene when it changed (rate
     // limited while obstacles move). Never while disabled: the map waits.
+    void clearMap(const ros::Time& now) {
+        if (enabled_ && map_clear_pending_) {
+            map_pub_.publish(toCloud({}, now, frame_id_));
+            map_clear_pending_ = false;
+        }
+    }
+
     void publishMap(const ros::Time& now) {
         if (!enabled_ || !scene_ready_ || !map_dirty_ || !map_lidar_ ||
             !map_pub_.getNumSubscribers())
@@ -844,6 +851,10 @@ private:
         last_tick_ = now;
         if (!enabled_)
             return;
+        // A snapshot received while disabled must not publish observed-free
+        // space. Clear its previous latched map on enable, even if the new
+        // dynamic revision is still waiting for state.
+        clearMap(now);
         const bool subscribed =
             std::any_of(vehicles_.begin(), vehicles_.end(), [this](const Vehicle& v) {
                 return v.sensed && (v.pub.getNumSubscribers() ||
@@ -984,6 +995,7 @@ private:
     bool vehicle_bodies_ = false;
     bool map_has_dynamic_ = false;
     bool map_dirty_ = false;
+    bool map_clear_pending_ = false;
     bool enabled_ = true;
     bool gazebo_source_ = false;
     bool pending_ = false;
