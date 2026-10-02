@@ -1,0 +1,6 @@
+<launch>
+  <arg name="baseline_executable"/>
+  <test test-name="original_comparison" pkg="xgc2_world_lidar" type="original_comparison_test.py" time-limit="75">
+    <env name="XGC_PR6_BASE_NODE" value="$(arg baseline_executable)"/>
+  </test>
+</launch>

@@ -83,6 +83,19 @@ catkin_make run_tests_xgc2_world_lidar      # core, both scene sources, topic co
 - `test/topic_contract.test`: three robots on one master (lightweight source,
   Gazebo source, sensor off) give the same topic contract and clouds for the
   first two and no node or topic for the third.
+- `test/cache_lifecycle.test`: disabled reference invalidation and reenable,
+  unsubscribed seeded scans, serial/pool byte equality, exact pose stamps,
+  optional neighbor returns, self exclusion and unsensed neighbor bodies.
+
+With the local PR6 base object and the installed Noetic build image, run
+`xgc2_world_lidar/test/run_pr6_validation.sh [evidence-directory]` from the
+repository. This uses read-only source mounts in offline containers (2 CPUs
+for compilation, 1 CPU for tests), keeps logs and XML results, compares the
+original and incremental cores byte for byte across all modes and scene edits,
+compares real original/candidate ROS nodes on dynamic scene edits, and runs
+the lifecycle tests with the installed executable. It does not start a station
+or fetch dependencies. These are sensor and installation checks, not a complete
+planning/control experiment or a Gazebo surface-sensor acceptance run.
 
 ## Provenance
 

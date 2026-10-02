@@ -18,7 +18,7 @@ from xgc2_geometry_msgs.msg import SceneSnapshot
 from topic_contract_test import snapshot
 
 
-class CacheLifecycle(unittest.TestCase):
+class NodeFixture(unittest.TestCase):
     def setUp(self):
         self.processes = []
         self.subscribers = []
@@ -52,8 +52,8 @@ class CacheLifecycle(unittest.TestCase):
                 self.fail(detail + '\n' + '\n'.join(outputs))
             time.sleep(0.02)
 
-    def start(self, name, **parameters):
-        executable = roslib.packages.find_node('xgc2_world_lidar', 'world_lidar_node')[0]
+    def start(self, name, executable=None, **parameters):
+        executable = executable or roslib.packages.find_node('xgc2_world_lidar', 'world_lidar_node')[0]
         parameters.setdefault('scene_namespace', '/pr6_cache')
         args = [executable, '__name:=' + name]
         # roscpp private CLI arguments are scalars; arrays must be real
@@ -77,6 +77,8 @@ class CacheLifecycle(unittest.TestCase):
         self.publishers.append(pub)
         return pub
 
+
+class CacheLifecycle(NodeFixture):
     def test_disabled_reference_invalidation_waits_for_enable(self):
         toggle = self.start('pr6_map', publish_global_map=True,
                             global_map_topic='/pr6_map/cloud', num_vehicles=0)
