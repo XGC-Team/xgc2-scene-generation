@@ -1,7 +1,7 @@
 schema: xgc2.product.v1
 id: xgc2-scene-generation
 name: XGC2 Scene Generation
-version: 1.2.0-9
+version: 1.2.0-10
 kind: ros1-apt
 summary: ROS1 scene-generation tools for convex obstacle scenarios and procedural
   point-cloud maps.
@@ -80,5 +80,7 @@ ownership:
   - /opt/ros/noetic/include/mockamap
   - /opt/ros/noetic/lib/mockamap
 release:
+  apt_versions:
+    focal: 1.2.0-10
   dependency_policy:
     libxgc2-math-dev: rebuild
