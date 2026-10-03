@@ -37,7 +37,9 @@ void SharedCloudCpu::scanInto(const Eigen::Vector3d& position,
                world_slab = m.vertical_slab_tan.has_value();
     const Eigen::Matrix3d rotation = orientation.toRotationMatrix();
     const Eigen::Vector3d body_x = rotation.col(0);
-    pcl::PointXYZ search(position.x(), position.y(), position.z());
+    pcl::PointXYZ search(static_cast<float>(position.x()),
+                         static_cast<float>(position.y()),
+                         static_cast<float>(position.z()));
     tree_.radiusSearch(search, m.range_m, result->indices, result->squared_distances);
     result->radius_candidates = result->indices.size();
     for (auto index : result->indices) {
