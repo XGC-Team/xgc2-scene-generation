@@ -14,7 +14,8 @@ void SharedCloudGpu::load(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& cloud,
                           const SensorMetadata& metadata) {
     if (loaded_ || !cloud || cloud->empty())
         throw std::invalid_argument("GPU requires one nonempty static cloud");
-    const float polar_res = static_cast<float>(metadata.h_fov_deg) / metadata.h_res;
+    const float polar_res =
+        static_cast<float>(metadata.h_fov_deg) / static_cast<float>(metadata.h_res);
     renderer_->setParameters(metadata.h_res,
                              metadata.v_res,
                              250.0f,

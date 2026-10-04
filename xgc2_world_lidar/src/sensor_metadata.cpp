@@ -34,8 +34,8 @@ void validateGpuSensorMetadata(const SensorMetadata& m) {
         m.v_fov_deg > 180 || m.h_res > std::numeric_limits<int>::max() / m.v_res)
         throw std::invalid_argument(
             "finite positive GPU range/spacing/rate and spherical grid required");
-    const float h_step = static_cast<float>(m.h_fov_deg) / m.h_res;
-    const float v_step = static_cast<float>(m.v_fov_deg) / m.v_res;
+    const float h_step = static_cast<float>(m.h_fov_deg) / static_cast<float>(m.h_res);
+    const float v_step = static_cast<float>(m.v_fov_deg) / static_cast<float>(m.v_res);
     if (!std::isfinite(h_step) || h_step <= 0 || h_step != v_step)
         throw std::invalid_argument(
             "original GPU kernel requires equal horizontal/vertical angular steps");
