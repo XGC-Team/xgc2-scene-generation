@@ -7,6 +7,7 @@
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl/search/kdtree.h>
+#include <utility>
 #include <vector>
 namespace xgc2_world_lidar {
 struct CropResult {
@@ -14,6 +15,7 @@ struct CropResult {
     std::vector<int> indices;
     std::vector<float> squared_distances;
     std::size_t radius_candidates = 0;
+    std::vector<std::pair<float, int>> kept; // (squared distance, index) of the kept points
 };
 // One sensor pose of a scan batch (world frame, the body pose the crop reads).
 struct ScanPose {
@@ -45,7 +47,9 @@ public:
 private:
     SensorMetadata metadata_;
     pcl::PointCloud<pcl::PointXYZ>::Ptr voxels_{new pcl::PointCloud<pcl::PointXYZ>};
-    pcl::search::KdTree<pcl::PointXYZ> tree_;
+    // Unsorted: scanInto() orders the kept points itself, which is much cheaper than ordering
+    // every candidate of the radius (most of which the crop then discards).
+    pcl::search::KdTree<pcl::PointXYZ> tree_{false};
     std::size_t inputs_ = 0, loads_ = 0;
     std::vector<CropResult> worker_scratch_; // one per pool thread, grown by scanBatch
 };

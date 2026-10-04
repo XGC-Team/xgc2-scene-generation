@@ -1,4 +1,5 @@
 #include "xgc2_world_lidar/shared_cloud_cpu.hpp"
+#include <algorithm>
 #include <pcl/filters/voxel_grid.h>
 #include <stdexcept>
 namespace xgc2_world_lidar {
@@ -26,6 +27,7 @@ void SharedCloudCpu::scanInto(const Eigen::Vector3d& position,
     result->cloud.points.clear();
     result->indices.clear();
     result->squared_distances.clear();
+    result->kept.clear();
     result->radius_candidates = 0;
     result->cloud.width = 0;
     result->cloud.height = 1;
@@ -42,8 +44,8 @@ void SharedCloudCpu::scanInto(const Eigen::Vector3d& position,
                          static_cast<float>(position.z()));
     tree_.radiusSearch(search, m.range_m, result->indices, result->squared_distances);
     result->radius_candidates = result->indices.size();
-    for (auto index : result->indices) {
-        const auto& p = voxels_->points[index];
+    for (std::size_t n = 0; n < result->indices.size(); ++n) {
+        const auto& p = voxels_->points[result->indices[n]];
         // Preserve the fixed original division/order, including floating boundaries.
         if (world_slab && std::abs(p.z - position.z()) / m.range_m > *m.vertical_slab_tan)
             continue;
@@ -52,8 +54,16 @@ void SharedCloudCpu::scanInto(const Eigen::Vector3d& position,
             if (delta.normalized().dot(body_x) < *m.heading_cos_min)
                 continue;
         }
-        result->cloud.points.push_back(p);
+        result->kept.emplace_back(result->squared_distances[n], result->indices[n]);
     }
+    // The original search returned its radius sorted by FLANN's total order: squared distance,
+    // then index (a strict order, since indices are distinct). Sorting only the kept points by
+    // that same order gives the same sequence: removing elements from a sorted list keeps it
+    // sorted. The map index holds no NaN, so no index mapping separates the two index spaces.
+    std::sort(result->kept.begin(), result->kept.end());
+    result->cloud.points.reserve(result->kept.size());
+    for (const auto& entry : result->kept)
+        result->cloud.points.push_back(voxels_->points[entry.second]);
     result->cloud.width = result->cloud.points.size();
 }
 void SharedCloudCpu::scanBatch(ScanPool& pool,

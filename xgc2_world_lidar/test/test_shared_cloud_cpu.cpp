@@ -13,6 +13,9 @@
 #include <stdexcept>
 #include <vector>
 
+#include <pcl/filters/voxel_grid.h>
+#include <pcl/search/kdtree.h>
+
 #include "xgc2_world_lidar/scan_pool.h"
 #include "xgc2_world_lidar/shared_cloud_cpu.hpp"
 
@@ -227,6 +230,117 @@ void testBatchBeforeLoad() {
     CHECK(with_candidates == 0);
 }
 
+// The crop as it was before the unsorted search: PCL's sorted radius search over the voxelized
+// map, then the crop predicates in candidate order. Independent of SharedCloudCpu's code.
+class SortedSearchReference {
+public:
+    SortedSearchReference(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& world,
+                          const SensorMetadata& metadata)
+        : m_(metadata), tree_(true) {
+        pcl::VoxelGrid<pcl::PointXYZ> voxel;
+        voxel.setLeafSize(m_.prevoxel_leaf_m[0], m_.prevoxel_leaf_m[1], m_.prevoxel_leaf_m[2]);
+        voxel.setInputCloud(world);
+        voxel.filter(*voxels_);
+        tree_.setInputCloud(voxels_);
+    }
+    std::vector<uint8_t> scan(const ScanPose& pose, std::size_t* candidates, bool* ties) const {
+        std::vector<int> indices;
+        std::vector<float> squared;
+        const Eigen::Vector3d body_x = pose.orientation.toRotationMatrix().col(0);
+        const pcl::PointXYZ search(static_cast<float>(pose.position.x()),
+                                   static_cast<float>(pose.position.y()),
+                                   static_cast<float>(pose.position.z()));
+        tree_.radiusSearch(search, m_.range_m, indices, squared);
+        *candidates = indices.size();
+        for (std::size_t n = 1; n < squared.size(); ++n)
+            *ties = *ties || squared[n] == squared[n - 1];
+        std::vector<uint8_t> out;
+        for (int index : indices) {
+            const auto& p = voxels_->points[index];
+            if (m_.vertical_slab_tan &&
+                std::abs(p.z - pose.position.z()) / m_.range_m > *m_.vertical_slab_tan)
+                continue;
+            if (m_.heading_cos_min) {
+                const Eigen::Vector3d delta(
+                    p.x - pose.position.x(), p.y - pose.position.y(), p.z - pose.position.z());
+                if (delta.normalized().dot(body_x) < *m_.heading_cos_min)
+                    continue;
+            }
+            const auto* bytes = reinterpret_cast<const uint8_t*>(&p);
+            out.insert(out.end(), bytes, bytes + sizeof(pcl::PointXYZ));
+        }
+        return out;
+    }
+
+private:
+    SensorMetadata m_;
+    pcl::PointCloud<pcl::PointXYZ>::Ptr voxels_{new pcl::PointCloud<pcl::PointXYZ>};
+    pcl::search::KdTree<pcl::PointXYZ> tree_;
+};
+
+// Sorting only the kept points must give the sequence the sorted search gave, byte for byte,
+// including among points at exactly equal distance (the index breaks those ties).
+void testOrderEqualsSortedSearch() {
+    const SensorMetadata swarm = swarmMetadata();
+    SensorMetadata ego = swarmMetadata();
+    ego.heading_cos_min = 0.0; // EGO-Planner-v2 half-space
+    SensorMetadata ball = swarmMetadata();
+    ball.heading_cos_min.reset(); // Primitive: ball only
+    ball.vertical_slab_tan.reset();
+    ball.range_m = 5.0;
+    for (const SensorMetadata& metadata : {swarm, ego, ball}) {
+        const auto world = forest(5, 60);
+        SharedCloudCpu cpu;
+        cpu.load(world, metadata);
+        const SortedSearchReference reference(world, metadata);
+        CropResult scratch;
+        bool ties = false;
+        std::size_t compared = 0, nonempty = 0;
+        for (const auto& pose : randomPoses(23, 1500)) {
+            std::size_t candidates = 0;
+            const auto expected = reference.scan(pose, &candidates, &ties);
+            cpu.scanInto(pose.position, pose.orientation, &scratch);
+            CHECK(bytesOf(scratch) == expected);
+            CHECK(scratch.radius_candidates == candidates);
+            ++compared;
+            nonempty += expected.empty() ? 0 : 1;
+        }
+        CHECK(compared == 1500);
+        CHECK(nonempty > 300);
+        CHECK(ties); // the forest's columns are symmetric, so equal distances do occur
+    }
+    // A lattice with integer coordinates and sensors on lattice points: the equal squared
+    // distances are exact, so most of the radius is tied and only the index orders it.
+    pcl::PointCloud<pcl::PointXYZ>::Ptr lattice(new pcl::PointCloud<pcl::PointXYZ>);
+    for (int x = -8; x <= 8; ++x)
+        for (int y = -8; y <= 8; ++y)
+            for (int z = -3; z <= 3; ++z)
+                lattice->push_back(
+                    {static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)});
+    SensorMetadata grid = swarmMetadata();
+    grid.prevoxel_leaf_m = {0.5f, 0.5f, 0.5f};
+    grid.heading_cos_min = -1.0; // keep every direction: the crop must not hide a tie
+    grid.vertical_slab_tan = 10.0;
+    SharedCloudCpu cpu;
+    cpu.load(lattice, grid);
+    const SortedSearchReference reference(lattice, grid);
+    CropResult scratch;
+    bool ties = false;
+    std::mt19937 rng(7);
+    for (int q = 0; q < 200; ++q) {
+        const ScanPose pose = {{static_cast<double>(static_cast<int>(rng() % 9) - 4),
+                                static_cast<double>(static_cast<int>(rng() % 9) - 4),
+                                static_cast<double>(static_cast<int>(rng() % 3) - 1)},
+                               Eigen::Quaterniond::Identity()};
+        std::size_t candidates = 0;
+        const auto expected = reference.scan(pose, &candidates, &ties);
+        cpu.scanInto(pose.position, pose.orientation, &scratch);
+        CHECK(!expected.empty());
+        CHECK(bytesOf(scratch) == expected);
+    }
+    CHECK(ties);
+}
+
 } // namespace
 
 int main() try {
@@ -234,6 +348,7 @@ int main() try {
     testPoolWorkerIndex();
     testBatchEqualsSerial();
     testBatchBeforeLoad();
+    testOrderEqualsSortedSearch();
     std::printf("%d checks, %d failures\n", g_checks, g_failures);
     return g_failures ? 1 : 0;
 } catch (const std::exception& error) {

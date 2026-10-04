@@ -53,6 +53,8 @@ endforeach()
 add_executable(test_shared_cloud_cpu test/test_shared_cloud_cpu.cpp)
 target_link_libraries(test_shared_cloud_cpu PRIVATE ${PROJECT_NAME}_cloud_cpu)
 add_test(NAME test_shared_cloud_cpu COMMAND test_shared_cloud_cpu)
+add_executable(bench_shared_cloud_cpu test/bench_shared_cloud_cpu.cpp)
+target_link_libraries(bench_shared_cloud_cpu PRIVATE ${PROJECT_NAME}_cloud_cpu)
 # Fleet scan benchmark (not a test): see the usage at the top of the source.
 add_executable(bench_world_lidar test/bench_world_lidar.cpp)
 target_link_libraries(bench_world_lidar PRIVATE ${PROJECT_NAME})
