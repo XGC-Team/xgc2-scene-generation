@@ -156,6 +156,19 @@ class SharedCloudCpu(unittest.TestCase):
         # Robots with no map point in range publish nothing (the original no-publication rule),
         # so most, not necessarily all, of the twelve have a cloud.
         self.assertGreaterEqual(published, 6)
+        # Publishing does not wait for a subscriber: a topic that has been running for a while
+        # greets a new subscriber with a sequence number above zero (roscpp counts every
+        # publish() call, connected or not).
+        index = next(i for i in range(1, ROBOTS + 1) if received[('scc_t1', i)])
+        late = []
+        subscriber = rospy.Subscriber('/scc_t1/sensor/uav%d/points' % index, PointCloud2,
+                                      late.append, queue_size=5)
+        deadline = time.monotonic() + 10
+        while not late:
+            self.assertLess(time.monotonic(), deadline, 'no cloud for the late subscriber')
+            time.sleep(0.05)
+        subscriber.unregister()
+        self.assertGreaterEqual(late[0].header.seq, 3)
         self.assertGreater(window_points, 0, 'the window keeps no points anywhere')
         self.assertLess(window_points, default_points, 'the window removes nothing')
 

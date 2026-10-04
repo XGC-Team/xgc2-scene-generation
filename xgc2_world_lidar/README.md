@@ -191,8 +191,9 @@ catkin_make run_tests_xgc2_world_lidar      # core, both scene sources, topic co
   Gazebo source, sensor off) give the same topic contract and clouds for the
   first two and no node or topic for the third.
 - `test/cache_lifecycle.test`: disabled reference invalidation and reenable,
-  unsubscribed seeded scans, serial/pool byte equality, exact pose stamps,
-  optional neighbor returns, self exclusion and unsensed neighbor bodies.
+  seeded scans from the first scan, serial/pool byte equality, scans (and the latched
+  map) published with no subscriber, exact pose stamps, optional neighbor returns, self
+  exclusion and unsensed neighbor bodies.
 
 With the local PR6 base object and the installed Noetic build image, run
 `xgc2_world_lidar/test/run_pr6_validation.sh [evidence-directory]` from the
@@ -224,8 +225,9 @@ from the installed one: only obstacles that changed, and without buried samples
 the obstacles they touch, are converted, compiled, sampled and indexed again;
 the result equals a build from scratch. Penetrating queries use a spatial index before
 applying per-robot FOV/crops; nonpenetrating rays use the shared geometry BVH.
-Unsubscribed sensors do no scan work. Each configured rate has its own simulation
-clock schedule, avoiding wall callback jitter that silently reduces scan rates.
+Scans run and publish at the configured rate whether or not anything subscribes: publishing
+never depends on subscription. Each configured rate has its own simulation clock schedule,
+avoiding wall callback jitter that silently reduces scan rates.
 The robots due in a tick are scanned in parallel on a fixed thread pool (one
 thread per sensed robot, up to half the hardware threads; `~worker_threads`
 overrides), each into its own reused cloud message. Scans are independent, so

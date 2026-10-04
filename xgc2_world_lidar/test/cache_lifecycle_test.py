@@ -119,7 +119,7 @@ class CacheLifecycle(NodeFixture):
         self.wait(lambda: len(seen) > before and seen[-1].width == 0,
                   'pending revision retained old reference map')
 
-    def test_unsubscribed_noise_pool_and_neighbor_exclusion(self):
+    def test_pool_noise_and_neighbor_exclusion(self):
         common = dict(vehicle_ids=[1, 2, 3], enabled_vehicles=[1, 2],
                       pose_topic_pattern='/pr6_pose/{id}', mode='penetrating',
                       noise_std=0.01, seed=42, surface_spacing=0.2,
@@ -131,10 +131,17 @@ class CacheLifecycle(NodeFixture):
                    output_topic_pattern='/pr6_pool/{id}/points', **common)
         self.start('pr6_no_bodies', worker_threads=2, vehicle_bodies=False,
                    output_topic_pattern='/pr6_no_bodies/{id}/points', **common)
+        # Scans publish whether or not anything subscribes, and the noise is seeded by the scan
+        # index, so compare streams from their first scan: connect every listener first.
+        serial = [self.listen('/pr6_serial/%d/points' % i) for i in (1, 2)]
+        pooled = [self.listen('/pr6_pool/%d/points' % i) for i in (1, 2)]
+        absent = self.listen('/pr6_no_bodies/1/points')
         source = self.publisher('/pr6_cache/snapshot', SceneSnapshot)
         poses = [self.publisher('/pr6_pose/%d' % i, PoseStamped) for i in (1, 2, 3)]
         self.wait(lambda: source.get_num_connections() == 3 and
-                  all(p.get_num_connections() == 3 for p in poses), 'fleet inputs did not connect')
+                  all(p.get_num_connections() == 3 for p in poses) and
+                  all(sub.get_num_connections() == 1 for sub in self.subscribers),
+                  'fleet inputs and outputs did not connect')
         empty = snapshot()
         empty.obstacles = []
         source.publish(empty)
@@ -145,16 +152,11 @@ class CacheLifecycle(NodeFixture):
             pose.header.stamp = stamp
             pose.pose = Pose(Point(*position), Quaternion(0, 0, 0, 1))
             pub.publish(pose)
-        # The pool node remains unsubscribed while serial consumes four scans.
-        # Its first seeded cloud must still equal serial's first cloud.
-        serial = [self.listen('/pr6_serial/%d/points' % i) for i in (1, 2)]
-        self.wait(lambda: all(len(values) >= 4 for values in serial), 'serial scans absent')
-        pooled = [self.listen('/pr6_pool/%d/points' % i) for i in (1, 2)]
-        absent = self.listen('/pr6_no_bodies/1/points')
-        self.wait(lambda: all(len(values) >= 4 for values in pooled) and absent, 'pooled scans absent')
+        self.wait(lambda: all(len(values) >= 4 for values in serial + pooled) and absent,
+                  'scans absent')
         for index, (a, b) in enumerate(zip(serial, pooled)):
             for left, right in zip(a[:4], b[:4]):
-                self.assertEqual(left.data, right.data, 'unsubscribed node consumed scan noise')
+                self.assertEqual(left.data, right.data, 'pooled scan differs from serial')
                 self.assertEqual(left.header.stamp, stamp)
                 self.assertEqual(right.header.stamp, stamp)
                 self.assertEqual(right.header.frame_id, 'world')
@@ -169,6 +171,36 @@ class CacheLifecycle(NodeFixture):
         before = [len(values) for values in serial]
         time.sleep(0.3)
         self.assertEqual([len(values) for values in serial], before, 'disabled sensor published')
+
+    def test_scans_publish_without_subscribers(self):
+        # Publishing never depends on subscription: the sensor scans and publishes at its rate
+        # with nothing connected. roscpp numbers every publish() call in header.seq even when no
+        # one listens, so a subscriber that connects late first sees a sequence number above
+        # zero. A sensor that waited for a subscriber would deliver seq 0 first.
+        self.start('pr6_nosub', vehicle_ids=[1], pose_topic_pattern='/pr6_pose/{id}',
+                   output_topic_pattern='/pr6_nosub/{id}/points', mode='penetrating',
+                   surface_spacing=0.2, v_fov_deg=180.0, h_fov_deg=360.0, range=5.0,
+                   pose_timeout=30.0, rate=10.0, publish_global_map=True,
+                   global_map_topic='/pr6_nosub/map')
+        source = self.publisher('/pr6_cache/snapshot', SceneSnapshot)
+        pose_pub = self.publisher('/pr6_pose/1', PoseStamped)
+        self.wait(lambda: source.get_num_connections() == 1 and pose_pub.get_num_connections() == 1,
+                  'sensor inputs did not connect')
+        source.publish(snapshot())
+        pose = PoseStamped()
+        pose.header.frame_id = 'world'
+        pose.header.stamp = rospy.Time.now()
+        pose.pose = Pose(Point(0, 0, 1), Quaternion(0, 0, 0, 1))
+        pose_pub.publish(pose)
+        time.sleep(1.0)  # about ten scan periods with no subscriber on any output
+        scans = self.listen('/pr6_nosub/1/points')
+        self.wait(lambda: scans, 'no scan after the late subscription')
+        self.assertGreaterEqual(scans[0].header.seq, 3, 'no scan was published before subscribing')
+        # The latched global map is not held back for a subscriber either: it was published
+        # once at install, and a late subscriber receives that message.
+        maps = self.listen('/pr6_nosub/map')
+        self.wait(lambda: maps, 'latched map missing for the late subscriber')
+        self.assertGreater(maps[0].width, 0)
 
 
 if __name__ == '__main__':

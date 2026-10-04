@@ -893,8 +893,7 @@ private:
     }
 
     void publishMap(const ros::Time& now) {
-        if (!enabled_ || !scene_ready_ || !map_dirty_ || !map_lidar_ ||
-            !map_pub_.getNumSubscribers())
+        if (!enabled_ || !scene_ready_ || !map_dirty_ || !map_lidar_)
             return;
         const bool has_dynamic = map_has_dynamic_;
         if (map_lidar_ &&
@@ -925,13 +924,6 @@ private:
         // space. Clear its previous latched map on enable, even if the new
         // dynamic revision is still waiting for state.
         clearMap(now);
-        const bool subscribed =
-            std::any_of(vehicles_.begin(), vehicles_.end(), [this](const Vehicle& v) {
-                return v.sensed && (v.pub.getNumSubscribers() ||
-                                    (v.publish_beams && v.beams_pub.getNumSubscribers()));
-            });
-        if (!subscribed && !(map_lidar_ && map_pub_.getNumSubscribers()))
-            return;
         if (pending_) {
             pending_ = false;
             try {
@@ -970,11 +962,8 @@ private:
         }
         std::vector<std::size_t> active;
         for (std::size_t k : fresh)
-            if (vehicles_[k].sensed &&
-                (vehicles_[k].pub.getNumSubscribers() ||
-                 (vehicles_[k].publish_beams && vehicles_[k].beams_pub.getNumSubscribers())) &&
-                (vehicles_[k].next_scan.isZero() ||
-                 scheduled >= vehicles_[k].next_scan - ros::Duration(1e-6)))
+            if (vehicles_[k].sensed && (vehicles_[k].next_scan.isZero() ||
+                                        scheduled >= vehicles_[k].next_scan - ros::Duration(1e-6)))
                 active.push_back(k);
         // Bodies of the other served vehicles with a fresh pose (tagged returns).
         std::vector<VehicleBody> bodies;
