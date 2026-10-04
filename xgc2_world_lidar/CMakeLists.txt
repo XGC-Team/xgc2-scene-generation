@@ -87,3 +87,6 @@ if(catkin_FOUND)
     endif()
   endif()
 endif()
+
+# Optional adapter on the existing shared entry; no new ROS executable or alias.
+include(cmake/world_lidar_gpu.cmake)

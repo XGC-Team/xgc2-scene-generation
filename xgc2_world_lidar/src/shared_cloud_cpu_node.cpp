@@ -1,4 +1,7 @@
 #include "xgc2_world_lidar/shared_cloud_cpu.hpp"
+#ifdef XGC_WORLD_LIDAR_GPU
+#include "xgc2_world_lidar/shared_cloud_gpu.hpp"
+#endif
 #include <cstring>
 #include <geometry_msgs/PoseStamped.h>
 #include <nav_msgs/Odometry.h>
@@ -23,19 +26,27 @@ class SharedCloudNode {
     ros::Timer timer_;
     xgc2_world_lidar::SensorMetadata metadata_;
     xgc2_world_lidar::SharedCloudCpu world_;
+#ifdef XGC_WORLD_LIDAR_GPU
+    std::unique_ptr<xgc2_world_lidar::SharedCloudGpu> gpu_world_;
+#endif
     std::vector<Sensor> sensors_;
-    bool loaded_ = false, zero_stamp_ = false;
+    bool loaded_ = false, zero_stamp_ = false, gpu_ = false;
 
 public:
     SharedCloudNode() {
         auto& m = metadata_;
         nh_.getParam("observation_model", m.observation_model);
         nh_.getParam("backend", m.backend);
-        std::vector<double> leaf;
-        if (!nh_.getParam("prevoxel_leaf_m", leaf) || leaf.size() != 3)
-            throw std::runtime_error("prevoxel XYZ required");
-        for (int i = 0; i < 3; ++i)
-            m.prevoxel_leaf_m[i] = leaf[i];
+        if (m.backend != "cpu" && m.backend != "gpu")
+            throw std::invalid_argument("unsupported explicit sensor backend; no fallback");
+        gpu_ = m.backend == "gpu";
+        if (!gpu_) {
+            std::vector<double> leaf;
+            if (!nh_.getParam("prevoxel_leaf_m", leaf) || leaf.size() != 3)
+                throw std::runtime_error("prevoxel XYZ required");
+            for (int i = 0; i < 3; ++i)
+                m.prevoxel_leaf_m[i] = leaf[i];
+        }
         nh_.getParam("range_m", m.range_m);
         double value;
         if (nh_.getParam("heading_cos_min", value))
@@ -47,7 +58,26 @@ public:
         nh_.getParam("stamp_policy", m.stamp_policy);
         nh_.getParam("input_cloud_topic", m.input_cloud_topic);
         nh_.getParam("pose_type", m.pose_type);
-        xgc2_world_lidar::validateSensorMetadata(m);
+        if (gpu_) {
+#ifdef XGC_WORLD_LIDAR_GPU
+            XmlRpc::XmlRpcValue gpu_prevoxel;
+            if (nh_.getParam("prevoxel_leaf_m", gpu_prevoxel))
+                throw std::invalid_argument("GPU does not implement CPU prevoxel_leaf_m");
+            if (!nh_.getParam("min_range_m", m.min_range_m) ||
+                !nh_.getParam("h_fov_deg", m.h_fov_deg) ||
+                !nh_.getParam("v_fov_deg", m.v_fov_deg) || !nh_.getParam("h_res", m.h_res) ||
+                !nh_.getParam("v_res", m.v_res) ||
+                !nh_.getParam("point_cover_spacing_m", m.point_cover_spacing_m))
+                throw std::invalid_argument(
+                    "explicit GPU spherical grid/near/point-cover required");
+            xgc2_world_lidar::validateGpuSensorMetadata(m);
+            gpu_world_ = std::make_unique<xgc2_world_lidar::SharedCloudGpu>();
+#else
+            throw std::invalid_argument("GPU is unsupported by this CPU-only build; no fallback");
+#endif
+        } else {
+            xgc2_world_lidar::validateSensorMetadata(m);
+        }
         zero_stamp_ = m.stamp_policy == "zero";
         std::vector<std::string> poses, outputs;
         if (!nh_.getParam("pose_topics", poses) || !nh_.getParam("output_topics", outputs) ||
@@ -58,10 +88,20 @@ public:
         sensors_.resize(poses.size());
         for (std::size_t i = 0; i < poses.size(); ++i) {
             sensors_[i].pub = nh_.advertise<sensor_msgs::PointCloud2>(outputs[i], 10);
-            pcl::PointCloud<pcl::PointXYZ> empty;
-            pcl::toROSMsg(empty, sensors_[i].output);
-            if (sensors_[i].output.point_step != sizeof(pcl::PointXYZ))
-                throw std::runtime_error("actual PCL XYZ layout required");
+#ifdef XGC_WORLD_LIDAR_GPU
+            if (gpu_) {
+                pcl::PointCloud<pcl::PointXYZI> empty;
+                pcl::toROSMsg(empty, sensors_[i].output);
+                if (sensors_[i].output.point_step != sizeof(pcl::PointXYZI))
+                    throw std::runtime_error("actual original GPU XYZ/intensity layout required");
+            } else
+#endif
+            {
+                pcl::PointCloud<pcl::PointXYZ> empty;
+                pcl::toROSMsg(empty, sensors_[i].output);
+                if (sensors_[i].output.point_step != sizeof(pcl::PointXYZ))
+                    throw std::runtime_error("actual PCL XYZ layout required");
+            }
             if (m.pose_type == "nav_msgs/Odometry")
                 sensors_[i].pose = nh_.subscribe<nav_msgs::Odometry>(
                     poses[i], 50, [this, i](const nav_msgs::Odometry::ConstPtr& p) {
@@ -79,7 +119,17 @@ public:
                     return;
                 pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
                 pcl::fromROSMsg(*msg, *cloud);
-                world_.load(cloud, metadata_);
+#ifdef XGC_WORLD_LIDAR_GPU
+                if (gpu_) {
+                    if (msg->header.frame_id != metadata_.frame_id)
+                        throw std::invalid_argument(
+                            "GPU cloud must already use the declared world frame");
+                    gpu_world_->load(cloud, metadata_);
+                } else
+#endif
+                {
+                    world_.load(cloud, metadata_);
+                }
                 loaded_ = true;
                 input_.shutdown(); // original static first-cloud contract
             });
@@ -99,17 +149,28 @@ public:
         for (auto& s : sensors_) {
             if (!s.ready)
                 continue;
-            world_.scanInto(s.p, s.q, &s.scratch);
-            if (!s.scratch.radius_candidates)
-                continue; // original zero-neighbour no-publication behavior
-            s.output.width = s.scratch.cloud.size();
+            const void* points = nullptr;
+#ifdef XGC_WORLD_LIDAR_GPU
+            if (gpu_) {
+                const auto& scan = gpu_world_->scan(s.p, s.q, s.stamp.toSec());
+                s.output.width = scan.size();
+                s.output.is_dense = scan.is_dense;
+                points = scan.points.data(); // one renderer buffer, serialize before the next pose
+            } else
+#endif
+            {
+                world_.scanInto(s.p, s.q, &s.scratch);
+                if (!s.scratch.radius_candidates)
+                    continue; // original CPU zero-neighbour no-publication behavior
+                s.output.width = s.scratch.cloud.size();
+                s.output.is_dense = true;
+                points = s.scratch.cloud.points.data();
+            }
             s.output.height = 1;
             s.output.row_step = s.output.width * s.output.point_step;
-            s.output.is_dense = true;
             s.output.data.resize(s.output.row_step); // retain per-sensor serialization capacity
             if (!s.output.data.empty())
-                std::memcpy(
-                    s.output.data.data(), s.scratch.cloud.points.data(), s.output.data.size());
+                std::memcpy(s.output.data.data(), points, s.output.data.size());
             s.output.header.frame_id = metadata_.frame_id;
             s.output.header.stamp = zero_stamp_ ? ros::Time(0) : s.stamp;
             s.pub.publish(s.output);

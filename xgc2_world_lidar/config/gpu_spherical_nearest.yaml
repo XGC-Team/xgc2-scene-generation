@@ -1,0 +1,20 @@
+# Example parameterized shared entry; never substituted for paper crop_through/cpu.
+# h_fov_deg/h_res must equal v_fov_deg/v_res in the original native float grid.
+# Original readback retains only depth > near && depth < far-0.1 (not an inclusive range).
+observation_model: lidar_scan
+backend: gpu
+range_m: 5.0
+min_range_m: 0.1
+h_fov_deg: 360.0
+v_fov_deg: 90.0
+h_res: 360
+v_res: 90
+point_cover_spacing_m: 0.1 # original GPU point cover, not CPU prevoxel
+publish_rate_hz: 12.0
+stamp_policy: pose
+# Authoring must bind the actual same-world source/poses; empty values reject.
+frame_id: ""
+input_cloud_topic: ""
+pose_type: geometry_msgs/PoseStamped
+pose_topics: []
+output_topics: []

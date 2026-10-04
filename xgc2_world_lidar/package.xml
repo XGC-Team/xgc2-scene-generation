@@ -10,6 +10,7 @@
   </description>
   <maintainer email="lxk@todo.todo">lxk</maintainer>
   <license>MIT</license>
+  <license>GPL-2.0-only</license> <!-- optional original-core GPU linkage -->
 
   <buildtool_depend>catkin</buildtool_depend>
 

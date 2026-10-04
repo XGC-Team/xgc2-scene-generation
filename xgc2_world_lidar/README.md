@@ -1,5 +1,76 @@
 # xgc2_world_lidar
 
+## Shared static-cloud entry
+
+`shared_cloud_cpu_node` is the existing shared entry; its target and ROS name
+remain unchanged. It consumes one initial `sensor_msgs/PointCloud2` world cloud,
+then unsubscribes. The same pose subscriptions, timer, roster output publishers
+and ROS shutdown serve the selected backend. There is no `set_enabled` service
+in this entry. `world_lidar_node` remains the separate existing Scene-geometry
+and ScanPool entry; its services are not imported here.
+
+Select `observation_model` and `backend` explicitly:
+
+| Model / backend | Observation |
+| --- | --- |
+| `crop_through` / `cpu` | Original PCL voxel/radius/full-quaternion body-X and optional world-Z crop; no occlusion. Caller values, rate, frame and zero/pose stamp policy stay unchanged. |
+| `lidar_scan` / `gpu` | Original MARSIM spherical angular projection with nearest projected/splatted depth. One renderer/context on the ROS owner thread uploads the static world once and scans all roster poses sequentially. |
+
+The GPU model is not a CPU-through equivalent or a pinhole camera. It reads
+`range_m`, `min_range_m`, `h_fov_deg`, `v_fov_deg`, `h_res`, `v_res`,
+`point_cover_spacing_m` and `publish_rate_hz`. The original kernel requires
+equal native-float angular steps (`h_fov_deg/h_res == v_fov_deg/v_res`). The
+point-cover/near ratio must be within the original `asin` domain. Near/far,
+spacing and rate must be finite and positive; far must exceed near. Original
+readback still keeps **`depth > near && depth < far - 0.1`**, rather than an
+inclusive range. `point_cover_spacing_m` controls the original GPU point cover,
+not CPU prevoxel. Supplied GPU `prevoxel_leaf_m` is explicitly rejected.
+
+Both backends use `input_cloud_topic`, `pose_type`, `pose_topics`, `output_topics`,
+`frame_id` and `stamp_policy`. Poses must already be in the input cloud's world
+coordinates; this entry performs no TF/extrinsic conversion. The GPU output
+retains original XYZ/intensity fields, with a legitimate empty scan allowed.
+Unknown model/backend combinations and a GPU request in a CPU-only build fail
+without fallback. Pinhole/through GPU, moving-body sensing, dynamic world
+replacement and pose-loss invalidation are not implemented by this entry.
+Legacy camera/noise/pattern declarations are not mapped to GPU sensor behavior.
+
+CPU compilation is the default. To include the original GPU adapter, enable
+`XGC_WORLD_LIDAR_GPU=ON`; optional CMake then finds GLFW, GLM, OpenGL/Khronos,
+OpenCV, PCL and OpenMP. These dependencies are external: GPU dependencies are
+not added to the default CPU package closure. With the ordinary ROS and scene
+message underlays sourced, a normal source checkout uses the bundled
+`vendored/MARSIM` by default; `XGC_WORLD_LIDAR_GPU_SOURCE_ROOT` remains an
+explicit override. No `/tmp` source path is required.
+
+```bash
+prefix=/var/lib/xgc2-local-swarm/user-project-build/ws_world_lidar/install
+cmake -S . -B build -DCATKIN_ENABLE_TESTING=OFF \
+  -DXGC_WORLD_LIDAR_GPU=ON -DCMAKE_INSTALL_PREFIX="$prefix"
+cmake --build build --target shared_cloud_cpu_node -- -j1
+DESTDIR=/private/stage cmake --install build --component cloud_cpu
+DESTDIR=/private/stage cmake --install build --component cloud_gpu
+```
+
+`cloud_cpu` retains the existing node/library/header install; `cloud_gpu`
+adds the original shader bytes, license, corresponding fixed source, package
+metadata and example GPU parameters. The kernel's compiled `ROOT_DIR` embeds
+the ordinary install prefix above. `DESTDIR` stages that prefix; it does not
+change the embedded path. Consume the staged tree at the same prefix, or build
+for the intended ordinary prefix. The absolute executable remains
+`$prefix/lib/xgc2_world_lidar/shared_cloud_cpu_node`; no target alias is added.
+The example GPU YAML deliberately leaves world/pose/output bindings unbound.
+Normal source builds and staged installation do not establish installed ROS,
+hardware or geometric correctness; those require their separately authorized
+ordinary consumption.
+
+`vendored/MARSIM` retains the fixed ubuntu20 commit
+`2a287bb196eb35375636c3aa6ac6c6be45ebb1f3`, original GPL-2.0 license,
+upstream header and approved memory-entry patch. Its original renderer and
+shader bytes are retained. The optional GPU-linked executable has GPL-2.0
+obligations; the existing MIT CPU/Scene source remains separately licensed.
+No maps, results, GLM/GLFW copies, dynamics or new renderer are vendored.
+
 Optional world-frame LiDAR / point-cloud sensor for simulated robots. It is
 the shared scene sampler for lightweight sensing and explicit sampled modes on
 Gazebo: one ROS-free core and a world-owned fleet node. Gazebo's native surface

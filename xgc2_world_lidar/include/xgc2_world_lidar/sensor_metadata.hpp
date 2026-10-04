@@ -14,8 +14,14 @@ struct SensorMetadata {
     double publish_rate_hz = 0;
     std::string frame_id, stamp_policy; // explicit caller map/world and zero/pose
     std::string input_cloud_topic, pose_topic, output_topic, pose_type;
+    // lidar_scan/gpu only: original spherical-nearest grid and point-cover input.
+    // CPU crop does not read these fields or acquire camera/pinhole semantics.
+    double min_range_m = 0, h_fov_deg = 0, v_fov_deg = 0;
+    int h_res = 0, v_res = 0;
+    double point_cover_spacing_m = 0;
 };
 // First slice: CPU crop_through. Projection/occlusion follow that model;
 // camera declarations remain caller provenance and do not enter this crop.
 void validateSensorMetadata(const SensorMetadata& m);
+void validateGpuSensorMetadata(const SensorMetadata& m);
 } // namespace xgc2_world_lidar
