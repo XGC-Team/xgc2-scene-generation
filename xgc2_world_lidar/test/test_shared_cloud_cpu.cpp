@@ -52,10 +52,12 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr forest(unsigned seed, int columns) {
         for (int i = -2; i < 3; ++i)
             for (int j = -2; j < 3; ++j)
                 for (int k = 0; k < 35; ++k)
-                    cloud->push_back({x + 0.1f * i, y + 0.1f * j, -1.0f + 0.1f * k});
+                    cloud->push_back({x + 0.1f * static_cast<float>(i),
+                                      y + 0.1f * static_cast<float>(j),
+                                      -1.0f + 0.1f * static_cast<float>(k)});
     }
     for (int r = 0; r < 6; ++r) {
-        const float x = ux(rng), y = uy(rng), z = 1.0f + 0.2f * r;
+        const float x = ux(rng), y = uy(rng), z = 1.0f + 0.2f * static_cast<float>(r);
         for (int k = 0; k < 126; ++k) {
             const float a = 0.05f * static_cast<float>(k);
             cloud->push_back({x + std::cos(a), y + 0.1f * std::sin(a), z + std::sin(a)});
