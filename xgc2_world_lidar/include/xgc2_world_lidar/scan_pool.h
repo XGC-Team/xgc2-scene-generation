@@ -25,6 +25,11 @@ namespace xgc2_world_lidar {
 // and the robots' software. `hardware` 0 means unknown and counts as 2.
 std::size_t defaultScanThreads(std::size_t scans, unsigned hardware);
 
+// Threads for the shared static-cloud entry: a quarter of the hardware threads
+// (at least one, at most one per sensor). That host also runs the plant, Core
+// and the viewer. `hardware` 0 means unknown and counts as 1.
+std::size_t defaultCloudScanThreads(std::size_t scans, unsigned hardware);
+
 class ScanPool {
 public:
     // `threads` is the parallelism including the calling thread; threads - 1
@@ -42,15 +47,21 @@ public:
     // reentrant: one batch at a time.
     void run(std::size_t count, const std::function<void(std::size_t)>& job);
 
+    // As run(), and job(i, worker) also gets the index of the thread that runs
+    // it, in [0, threads()): the calling thread is 0. A job may use state owned
+    // by its worker index without locking, because one thread runs one job at a
+    // time. With one thread (or one job) every job runs in order on worker 0.
+    void runWithWorker(std::size_t count, const std::function<void(std::size_t, std::size_t)>& job);
+
 private:
-    void work();
-    void drain();
+    void work(std::size_t worker);
+    void drain(std::size_t worker);
 
     std::vector<std::thread> workers_;
     std::mutex mutex_;
     std::condition_variable start_;
     std::condition_variable done_;
-    const std::function<void(std::size_t)>* job_ = nullptr;
+    const std::function<void(std::size_t, std::size_t)>* job_ = nullptr;
     std::size_t count_ = 0;
     std::atomic<std::size_t> next_{0};
     std::size_t busy_ = 0; // workers that have not finished the current batch

@@ -32,10 +32,12 @@ else()
 endif()
 # Shared point-cloud CPU crop uses this world owner's point source and one index.
 # Other observation models keep their existing implementation and sampling policy.
+# scan_pool.cpp is compiled here too so this archive stays self-contained for its installed
+# consumers; an executable that links both archives takes the pool from whichever comes first.
 add_library(${PROJECT_NAME}_cloud_cpu STATIC
-  src/sensor_metadata.cpp src/shared_cloud_cpu.cpp)
+  src/sensor_metadata.cpp src/shared_cloud_cpu.cpp src/scan_pool.cpp)
 target_include_directories(${PROJECT_NAME}_cloud_cpu PUBLIC include ${PCL_INCLUDE_DIRS})
-target_link_libraries(${PROJECT_NAME}_cloud_cpu PUBLIC ${PCL_LIBRARIES})
+target_link_libraries(${PROJECT_NAME}_cloud_cpu PUBLIC ${PCL_LIBRARIES} Threads::Threads)
 if(TARGET Eigen3::Eigen)
   target_link_libraries(${PROJECT_NAME}_cloud_cpu PUBLIC Eigen3::Eigen)
 else()
@@ -48,6 +50,9 @@ foreach(suite world_lidar scene_sources observation_contract)
   target_link_libraries(test_${suite} PRIVATE ${PROJECT_NAME})
   add_test(NAME test_${suite} COMMAND test_${suite})
 endforeach()
+add_executable(test_shared_cloud_cpu test/test_shared_cloud_cpu.cpp)
+target_link_libraries(test_shared_cloud_cpu PRIVATE ${PROJECT_NAME}_cloud_cpu)
+add_test(NAME test_shared_cloud_cpu COMMAND test_shared_cloud_cpu)
 # Fleet scan benchmark (not a test): see the usage at the top of the source.
 add_executable(bench_world_lidar test/bench_world_lidar.cpp)
 target_link_libraries(bench_world_lidar PRIVATE ${PROJECT_NAME})
@@ -64,14 +69,15 @@ if(catkin_FOUND)
   install(DIRECTORY include/${PROJECT_NAME}/ DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION})
   install(DIRECTORY launch/ DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch)
   install(DIRECTORY config/ DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/config)
-  add_executable(shared_cloud_cpu_node src/shared_cloud_cpu_node.cpp src/scan_pool.cpp)
+  add_executable(shared_cloud_cpu_node src/shared_cloud_cpu_node.cpp)
   add_dependencies(shared_cloud_cpu_node ${catkin_EXPORTED_TARGETS})
-  target_link_libraries(shared_cloud_cpu_node PRIVATE ${PROJECT_NAME}_cloud_cpu ${catkin_LIBRARIES} Threads::Threads)
+  target_link_libraries(shared_cloud_cpu_node PRIVATE ${PROJECT_NAME}_cloud_cpu ${catkin_LIBRARIES})
   install(TARGETS shared_cloud_cpu_node
     RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION} COMPONENT cloud_cpu)
   install(TARGETS ${PROJECT_NAME}_cloud_cpu
     ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION} COMPONENT cloud_cpu)
   install(FILES include/xgc2_world_lidar/sensor_metadata.hpp
+    include/xgc2_world_lidar/scan_pool.h
     include/xgc2_world_lidar/shared_cloud_cpu.hpp
     DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION} COMPONENT cloud_cpu)
   if(CATKIN_ENABLE_TESTING)
@@ -81,9 +87,10 @@ if(catkin_FOUND)
     add_rostest(test/fleet_contract.test)
     add_rostest(test/cache_lifecycle.test)
     add_rostest(test/body_roster.test)
+    add_rostest(test/shared_cloud_cpu.test)
     catkin_add_gtest(${PROJECT_NAME}_core_test test/core_gtest.cpp)
     if(TARGET ${PROJECT_NAME}_core_test)
-      target_link_libraries(${PROJECT_NAME}_core_test ${PROJECT_NAME})
+      target_link_libraries(${PROJECT_NAME}_core_test ${PROJECT_NAME} ${PROJECT_NAME}_cloud_cpu)
     endif()
   endif()
 endif()

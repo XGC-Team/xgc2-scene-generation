@@ -1,0 +1,45 @@
+{
+  "observation_model": "crop_through",
+  "backend": "cpu",
+  "prevoxel_leaf_m": [
+    0.1,
+    0.1,
+    0.1
+  ],
+  "range_m": 5.0,
+  "heading_cos_min": 0.5,
+  "vertical_slab_tan": 0.5773502691896257,
+  "publish_rate_hz": 20.0,
+  "frame_id": "map",
+  "stamp_policy": "zero",
+  "input_cloud_topic": "/scc_world",
+  "pose_type": "geometry_msgs/PoseStamped",
+  "pose_topics": [
+    "/scc_pose/uav1",
+    "/scc_pose/uav2",
+    "/scc_pose/uav3",
+    "/scc_pose/uav4",
+    "/scc_pose/uav5",
+    "/scc_pose/uav6",
+    "/scc_pose/uav7",
+    "/scc_pose/uav8",
+    "/scc_pose/uav9",
+    "/scc_pose/uav10",
+    "/scc_pose/uav11",
+    "/scc_pose/uav12"
+  ],
+  "output_topics": [
+    "uav1/points",
+    "uav2/points",
+    "uav3/points",
+    "uav4/points",
+    "uav5/points",
+    "uav6/points",
+    "uav7/points",
+    "uav8/points",
+    "uav9/points",
+    "uav10/points",
+    "uav11/points",
+    "uav12/points"
+  ]
+}

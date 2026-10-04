@@ -9,10 +9,15 @@ std::size_t defaultScanThreads(std::size_t scans, unsigned hardware) {
     return std::max<std::size_t>(1, std::min(scans, half));
 }
 
+std::size_t defaultCloudScanThreads(std::size_t scans, unsigned hardware) {
+    const std::size_t quarter = std::max<std::size_t>(1, hardware / 4);
+    return std::max<std::size_t>(1, std::min(scans, quarter));
+}
+
 ScanPool::ScanPool(std::size_t threads) {
     try {
         for (std::size_t i = 1; i < threads; ++i)
-            workers_.emplace_back([this] { work(); });
+            workers_.emplace_back([this, i] { work(i); });
     } catch (...) {
         {
             std::lock_guard<std::mutex> lock(mutex_);
@@ -35,13 +40,13 @@ ScanPool::~ScanPool() {
         worker.join();
 }
 
-void ScanPool::drain() {
+void ScanPool::drain(std::size_t worker) {
     for (;;) {
         const std::size_t i = next_.fetch_add(1, std::memory_order_relaxed);
         if (i >= count_)
             return;
         try {
-            (*job_)(i);
+            (*job_)(i, worker);
         } catch (...) {
             std::lock_guard<std::mutex> lock(mutex_);
             if (!error_)
@@ -50,7 +55,7 @@ void ScanPool::drain() {
     }
 }
 
-void ScanPool::work() {
+void ScanPool::work(std::size_t worker) {
     uint64_t seen = 0;
     std::unique_lock<std::mutex> lock(mutex_);
     for (;;) {
@@ -59,7 +64,7 @@ void ScanPool::work() {
             return;
         seen = batch_;
         lock.unlock();
-        drain();
+        drain(worker);
         lock.lock();
         if (--busy_ == 0)
             done_.notify_one();
@@ -67,13 +72,18 @@ void ScanPool::work() {
 }
 
 void ScanPool::run(std::size_t count, const std::function<void(std::size_t)>& job) {
+    runWithWorker(count, [&job](std::size_t i, std::size_t) { job(i); });
+}
+
+void ScanPool::runWithWorker(std::size_t count,
+                             const std::function<void(std::size_t, std::size_t)>& job) {
     if (count == 0)
         return;
     if (workers_.empty() || count == 1) {
         std::exception_ptr error;
         for (std::size_t i = 0; i < count; ++i) {
             try {
-                job(i);
+                job(i, 0);
             } catch (...) {
                 if (!error)
                     error = std::current_exception();
@@ -93,7 +103,7 @@ void ScanPool::run(std::size_t count, const std::function<void(std::size_t)>& jo
         ++batch_;
     }
     start_.notify_all();
-    drain();
+    drain(0);
     std::exception_ptr error;
     {
         // Every worker leaves the batch before the job goes out of scope.

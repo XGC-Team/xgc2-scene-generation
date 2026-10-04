@@ -1,11 +1,10 @@
-#include "xgc2_world_lidar/scan_pool.h"
 #include "xgc2_world_lidar/shared_cloud_cpu.hpp"
 #ifdef XGC_WORLD_LIDAR_GPU
 #include "xgc2_world_lidar/shared_cloud_gpu.hpp"
-#include <cstring>
 #endif
 #include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <geometry_msgs/PoseStamped.h>
 #include <memory>
 #include <nav_msgs/Odometry.h>
@@ -13,6 +12,7 @@
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <string>
+#include <thread>
 #include <vector>
 class SharedCloudNode {
     struct Sensor {
@@ -22,7 +22,10 @@ class SharedCloudNode {
         Eigen::Vector3d p;
         Eigen::Quaterniond q;
         ros::Time stamp;
-        xgc2_world_lidar::CropResult scratch;
+    };
+    // State owned by one scan thread (index = ScanPool worker): the serialization buffer is
+    // reused by every sensor that thread scans, because publish() serializes before it returns.
+    struct Worker {
         sensor_msgs::PointCloud2 output;
     };
     ros::NodeHandle nh_{"~"};
@@ -34,7 +37,10 @@ class SharedCloudNode {
     std::unique_ptr<xgc2_world_lidar::SharedCloudGpu> gpu_world_;
 #endif
     std::vector<Sensor> sensors_;
-    std::unique_ptr<xgc2_world_lidar::ScanPool> cpu_pool_;
+    std::vector<Worker> workers_;
+    std::unique_ptr<xgc2_world_lidar::ScanPool> pool_;
+    std::vector<std::size_t> active_; // sensors with a pose in this tick, in sensor order
+    std::vector<xgc2_world_lidar::ScanPose> poses_;
     bool loaded_ = false, zero_stamp_ = false, gpu_ = false;
 
 public:
@@ -90,33 +96,40 @@ public:
             throw std::runtime_error("actual cloud/pose/output bindings required");
         if (m.pose_type != "nav_msgs/Odometry" && m.pose_type != "geometry_msgs/PoseStamped")
             throw std::runtime_error("unsupported explicit pose type");
-        sensors_.resize(poses.size());
-        if (!gpu_) {
-            // Total parallelism includes the caller: 1 is serial; 0 is invalid, not auto.
-            const int worker_threads = nh_.param("worker_threads", 1);
-            if (worker_threads < 1)
-                throw std::invalid_argument("CPU worker_threads must be positive");
-            const std::size_t threads = std::min<std::size_t>(
-                static_cast<std::size_t>(worker_threads), sensors_.size());
-            if (threads > 1)
-                cpu_pool_ = std::make_unique<xgc2_world_lidar::ScanPool>(threads);
-        }
-        for (std::size_t i = 0; i < poses.size(); ++i) {
-            sensors_[i].pub = nh_.advertise<sensor_msgs::PointCloud2>(outputs[i], 10);
+        // 0 (default): automatic, a quarter of the hardware threads up to one per sensor;
+        // 1: serial in sensor order on the spin thread; n: n threads up to one per sensor.
+        // The GL context belongs to the spin thread, so the GPU backend always scans there.
+        int requested_threads = 0;
+        nh_.getParam("worker_threads", requested_threads);
+        if (requested_threads < 0)
+            throw std::invalid_argument("worker_threads must be >= 0 (0 = automatic)");
+        const std::size_t threads =
+            gpu_ ? 1
+            : requested_threads == 0
+                ? xgc2_world_lidar::defaultCloudScanThreads(poses.size(),
+                                                            std::thread::hardware_concurrency())
+                : std::min<std::size_t>(static_cast<std::size_t>(requested_threads), poses.size());
+        pool_ = std::make_unique<xgc2_world_lidar::ScanPool>(threads);
+        workers_.resize(pool_->threads());
+        for (auto& worker : workers_) {
 #ifdef XGC_WORLD_LIDAR_GPU
             if (gpu_) {
                 pcl::PointCloud<pcl::PointXYZI> empty;
-                pcl::toROSMsg(empty, sensors_[i].output);
-                if (sensors_[i].output.point_step != sizeof(pcl::PointXYZI))
+                pcl::toROSMsg(empty, worker.output);
+                if (worker.output.point_step != sizeof(pcl::PointXYZI))
                     throw std::runtime_error("actual original GPU XYZ/intensity layout required");
             } else
 #endif
             {
                 pcl::PointCloud<pcl::PointXYZ> empty;
-                pcl::toROSMsg(empty, sensors_[i].output);
-                if (sensors_[i].output.point_step != sizeof(pcl::PointXYZ))
+                pcl::toROSMsg(empty, worker.output);
+                if (worker.output.point_step != sizeof(pcl::PointXYZ))
                     throw std::runtime_error("actual PCL XYZ layout required");
             }
+        }
+        sensors_.resize(poses.size());
+        for (std::size_t i = 0; i < poses.size(); ++i) {
+            sensors_[i].pub = nh_.advertise<sensor_msgs::PointCloud2>(outputs[i], 10);
             if (m.pose_type == "nav_msgs/Odometry")
                 sensors_[i].pose = nh_.subscribe<nav_msgs::Odometry>(
                     poses[i], 50, [this, i](const nav_msgs::Odometry::ConstPtr& p) {
@@ -158,61 +171,65 @@ public:
         s.stamp = stamp;
         s.ready = true;
     }
+    // Fills the worker's reused message with `count` records at `points` and publishes it for
+    // sensor `s`. publish() serializes before it returns, so the buffer is free again after.
+    void publishCloud(const Sensor& s, Worker& worker, const void* points, std::size_t count) {
+        auto& output = worker.output;
+        output.width = count;
+        output.is_dense = true;
+        output.height = 1;
+        output.row_step = output.width * output.point_step;
+        // One owned payload copy into the per-thread buffer (capacity retained); assign avoids
+        // resize's initialization of a grown tail that the copy then overwrites.
+        const auto* bytes = static_cast<const std::uint8_t*>(points);
+        output.data.assign(bytes, bytes + output.row_step);
+        output.header.frame_id = metadata_.frame_id;
+        output.header.stamp = zero_stamp_ ? ros::Time(0) : s.stamp;
+        s.pub.publish(output);
+    }
     void tick() {
         if (!loaded_)
             return;
-        if (cpu_pool_) {
-            // Single ROS spin keeps poses and the installed index unchanged until join.
-            // One complete query per sensor; only its reusable scratch is written.
-            cpu_pool_->run(sensors_.size(), [this](std::size_t i) {
-                auto& s = sensors_[i];
-                if (s.ready)
-                    world_.scanInto(s.p, s.q, &s.scratch);
-            });
-        }
-        for (auto& s : sensors_) {
-            if (!s.ready)
+        active_.clear();
+        poses_.clear();
+        for (std::size_t i = 0; i < sensors_.size(); ++i) {
+            if (!sensors_[i].ready)
                 continue;
-            const void* points = nullptr;
-#ifdef XGC_WORLD_LIDAR_GPU
-            if (gpu_) {
-                const auto& scan = gpu_world_->scan(s.p, s.q, s.stamp.toSec());
-                s.output.width = scan.size();
-                s.output.is_dense = scan.is_dense;
-                points = scan.points.data(); // one renderer buffer, serialize before the next pose
-            } else
-#endif
-            {
-                if (!cpu_pool_)
-                    world_.scanInto(s.p, s.q, &s.scratch);
-                if (!s.scratch.radius_candidates)
-                    continue; // original CPU zero-neighbour no-publication behavior
-                s.output.width = s.scratch.cloud.size();
-                s.output.is_dense = true;
-                points = s.scratch.cloud.points.data();
-            }
-            s.output.height = 1;
-            s.output.row_step = s.output.width * s.output.point_step;
-#ifdef XGC_WORLD_LIDAR_GPU
-            if (gpu_) {
-                s.output.data.resize(s.output.row_step);
-                if (!s.output.data.empty())
-                    std::memcpy(s.output.data.data(), points, s.output.data.size());
-            } else
-#endif
-            {
-                // Keep one owned payload copy; avoid resize's redundant tail initialization.
-                if (s.output.row_step == 0) {
-                    s.output.data.clear();
-                } else {
-                    const auto* bytes = static_cast<const std::uint8_t*>(points);
-                    s.output.data.assign(bytes, bytes + s.output.row_step);
-                }
-            }
-            s.output.header.frame_id = metadata_.frame_id;
-            s.output.header.stamp = zero_stamp_ ? ros::Time(0) : s.stamp;
-            s.pub.publish(s.output);
+            active_.push_back(i);
+            poses_.push_back({sensors_[i].p, sensors_[i].q});
         }
+#ifdef XGC_WORLD_LIDAR_GPU
+        if (gpu_) {
+            for (std::size_t k = 0; k < active_.size(); ++k) {
+                const auto& s = sensors_[active_[k]];
+                const auto& scan = gpu_world_->scan(s.p, s.q, s.stamp.toSec());
+                auto& output = workers_[0].output;
+                output.width = scan.size();
+                output.is_dense = scan.is_dense;
+                output.height = 1;
+                output.row_step = output.width * output.point_step;
+                output.data.resize(output.row_step);
+                // one renderer buffer, serialize before the next pose
+                if (!output.data.empty())
+                    std::memcpy(output.data.data(), scan.points.data(), output.data.size());
+                output.header.frame_id = metadata_.frame_id;
+                output.header.stamp = zero_stamp_ ? ros::Time(0) : s.stamp;
+                s.pub.publish(output);
+            }
+            return;
+        }
+#endif
+        world_.scanBatch(
+            *pool_,
+            poses_,
+            [this](std::size_t k, std::size_t worker, const xgc2_world_lidar::CropResult& scan) {
+                if (!scan.radius_candidates)
+                    return; // original CPU zero-neighbour no-publication behavior
+                publishCloud(sensors_[active_[k]],
+                             workers_[worker],
+                             scan.cloud.points.data(),
+                             scan.cloud.size());
+            });
     }
 };
 int main(int argc, char** argv) {

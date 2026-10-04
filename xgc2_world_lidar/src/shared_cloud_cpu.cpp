@@ -56,4 +56,15 @@ void SharedCloudCpu::scanInto(const Eigen::Vector3d& position,
     }
     result->cloud.width = result->cloud.points.size();
 }
+void SharedCloudCpu::scanBatch(ScanPool& pool,
+                               const std::vector<ScanPose>& poses,
+                               const ScanSink& sink) {
+    if (worker_scratch_.size() < pool.threads())
+        worker_scratch_.resize(pool.threads());
+    pool.runWithWorker(poses.size(), [&](std::size_t index, std::size_t worker) {
+        CropResult& scratch = worker_scratch_[worker];
+        scanInto(poses[index].position, poses[index].orientation, &scratch);
+        sink(index, worker, scratch);
+    });
+}
 } // namespace xgc2_world_lidar

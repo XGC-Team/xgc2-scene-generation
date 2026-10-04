@@ -1,0 +1,23 @@
+<launch>
+  <!-- The same world cloud and poses go to one node per worker_threads setting: serial (1),
+       four threads, and automatic (0, the default). Every node must publish the same bytes. -->
+  <arg name="rate" value="20"/>
+  <group ns="scc_t1">
+    <node pkg="xgc2_world_lidar" type="shared_cloud_cpu_node" name="sensor" required="true">
+      <rosparam command="load" file="$(find xgc2_world_lidar)/test/shared_cloud_cpu_common.yaml"/>
+      <param name="worker_threads" value="1"/>
+    </node>
+  </group>
+  <group ns="scc_t4">
+    <node pkg="xgc2_world_lidar" type="shared_cloud_cpu_node" name="sensor" required="true">
+      <rosparam command="load" file="$(find xgc2_world_lidar)/test/shared_cloud_cpu_common.yaml"/>
+      <param name="worker_threads" value="4"/>
+    </node>
+  </group>
+  <group ns="scc_auto">
+    <node pkg="xgc2_world_lidar" type="shared_cloud_cpu_node" name="sensor" required="true">
+      <rosparam command="load" file="$(find xgc2_world_lidar)/test/shared_cloud_cpu_common.yaml"/>
+    </node>
+  </group>
+  <test test-name="shared_cloud_cpu" pkg="xgc2_world_lidar" type="shared_cloud_cpu_test.py" time-limit="60"/>
+</launch>
