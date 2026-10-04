@@ -200,6 +200,8 @@ public:
             return;
         active_.clear();
         poses_.clear();
+        active_.reserve(sensors_.size());
+        poses_.reserve(sensors_.size());
         for (std::size_t i = 0; i < sensors_.size(); ++i) {
             if (!sensors_[i].ready)
                 continue;

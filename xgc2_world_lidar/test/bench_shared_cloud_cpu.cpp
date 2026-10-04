@@ -52,6 +52,7 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr forest(double scale) {
     const double res = 0.1;
     const int count = static_cast<int>(60 * scale * scale);
     std::vector<std::array<double, 2>> accepted;
+    accepted.reserve(static_cast<std::size_t>(count));
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
     for (int i = 0; i < count; ++i) {
         double x = rx(eng), y = ry(eng);
@@ -89,10 +90,12 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr forest(double scale) {
         y = std::floor(y / res) * res + res / 2;
         z = std::floor(z / res) * res + res / 2;
         const double a0 = theta(eng), r1 = r12(eng), r2 = r12(eng);
-        for (double a = 0; a < 6.282; a += res / 2)
+        for (int k = 0; k * (res / 2) < 6.282; ++k) {
+            const double a = k * (res / 2);
             cloud->push_back({static_cast<float>(x - std::sin(a0) * r1 * std::cos(a)),
                               static_cast<float>(y + std::cos(a0) * r1 * std::cos(a)),
                               static_cast<float>(z + r2 * std::sin(a))});
+        }
     }
     return cloud;
 }
@@ -209,7 +212,6 @@ int main(int argc, char** argv) {
         if (bytes)
             std::memcpy(slot.wire.data(), slot.message.data(), bytes);
         wire_of[index] = slot.wire;
-        (void)index;
     };
     for (int t = 0; t < ticks + 20; ++t) {
         for (auto& p : poses) {

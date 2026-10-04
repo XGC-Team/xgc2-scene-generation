@@ -56,8 +56,10 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr forest(unsigned seed, int columns) {
     }
     for (int r = 0; r < 6; ++r) {
         const float x = ux(rng), y = uy(rng), z = 1.0f + 0.2f * r;
-        for (float a = 0.0f; a < 6.282f; a += 0.05f)
+        for (int k = 0; k < 126; ++k) {
+            const float a = 0.05f * static_cast<float>(k);
             cloud->push_back({x + std::cos(a), y + 0.1f * std::sin(a), z + std::sin(a)});
+        }
     }
     return cloud;
 }
@@ -81,6 +83,7 @@ std::vector<ScanPose> randomPoses(unsigned seed, int count) {
     std::uniform_real_distribution<double> x(-19.0, 19.0), y(-9.0, 9.0), z(0.2, 2.5);
     std::normal_distribution<double> n(0.0, 1.0);
     std::vector<ScanPose> poses;
+    poses.reserve(static_cast<std::size_t>(count));
     for (int i = 0; i < count; ++i)
         poses.push_back({{x(rng), y(rng), z(rng)},
                          Eigen::Quaterniond(n(rng), n(rng), n(rng), n(rng)).normalized()});
@@ -100,6 +103,7 @@ std::vector<std::vector<uint8_t>> serialReference(const SharedCloudCpu& cpu,
                                                   const std::vector<ScanPose>& poses,
                                                   std::vector<std::size_t>* candidates) {
     std::vector<std::vector<uint8_t>> out;
+    out.reserve(poses.size());
     CropResult scratch;
     for (const auto& pose : poses) {
         cpu.scanInto(pose.position, pose.orientation, &scratch);
@@ -153,10 +157,9 @@ void testBatchEqualsSerial() {
     const auto poses = randomPoses(11, 100);
     std::vector<std::size_t> candidates;
     const auto reference = serialReference(cpu, poses, &candidates);
-    std::size_t nonempty = 0, zero_neighbour = 0;
+    std::size_t nonempty = 0;
     for (std::size_t i = 0; i < poses.size(); ++i) {
         nonempty += reference[i].empty() ? 0 : 1;
-        zero_neighbour += candidates[i] == 0 ? 1 : 0;
     }
     CHECK(nonempty > 20); // the poses really hit the map
     for (std::size_t threads : {1, 2, 3, 8}) {
@@ -190,7 +193,6 @@ void testBatchEqualsSerial() {
             }
         }
     }
-    (void)zero_neighbour;
     // An empty batch calls no sink; a pose outside the map reports zero candidates.
     ScanPool pool(2);
     int calls = 0;
@@ -460,6 +462,7 @@ void testFovAndRange() {
         SharedCloudCpu windowed;
         windowed.load(lattice, m);
         std::vector<ScanPose> on_lattice;
+        on_lattice.reserve(12);
         for (int q = 0; q < 12; ++q)
             on_lattice.push_back({{static_cast<double>(q % 5 - 2),
                                    static_cast<double>(q % 3 - 1),
