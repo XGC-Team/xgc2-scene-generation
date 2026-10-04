@@ -25,11 +25,6 @@ namespace xgc2_world_lidar {
 // and the robots' software. `hardware` 0 means unknown and counts as 2.
 std::size_t defaultScanThreads(std::size_t scans, unsigned hardware);
 
-// Threads for the shared static-cloud entry: a quarter of the hardware threads
-// (at least one, at most one per sensor). That host also runs the plant, Core
-// and the viewer. `hardware` 0 means unknown and counts as 1.
-std::size_t defaultCloudScanThreads(std::size_t scans, unsigned hardware);
-
 class ScanPool {
 public:
     // `threads` is the parallelism including the calling thread; threads - 1

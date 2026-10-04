@@ -110,19 +110,6 @@ std::vector<std::vector<uint8_t>> serialReference(const SharedCloudCpu& cpu,
     return out;
 }
 
-void testThreadCount() {
-    using xgc2_world_lidar::defaultCloudScanThreads;
-    CHECK(defaultCloudScanThreads(100, 32) == 8);
-    CHECK(defaultCloudScanThreads(100, 16) == 4);
-    CHECK(defaultCloudScanThreads(100, 8) == 2); // the 8-core development box
-    CHECK(defaultCloudScanThreads(100, 4) == 1);
-    CHECK(defaultCloudScanThreads(100, 2) == 1);
-    CHECK(defaultCloudScanThreads(100, 0) == 1); // unknown hardware: serial
-    CHECK(defaultCloudScanThreads(3, 64) == 3);  // never more threads than sensors
-    CHECK(defaultCloudScanThreads(7, 8) == 2);   // the seven-robot Swarm profile
-    CHECK(defaultCloudScanThreads(0, 16) == 1);
-}
-
 void testPoolWorkerIndex() {
     for (std::size_t threads : {1, 2, 5}) {
         ScanPool pool(threads);
@@ -568,7 +555,6 @@ void testSpecValidation() {
 } // namespace
 
 int main() try {
-    testThreadCount();
     testPoolWorkerIndex();
     testBatchEqualsSerial();
     testBatchBeforeLoad();

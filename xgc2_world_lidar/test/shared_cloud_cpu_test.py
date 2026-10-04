@@ -7,14 +7,15 @@ import threading
 import time
 import unittest
 
+import rosgraph
 import rospy
 import rostest
 from geometry_msgs.msg import Point, Pose, PoseStamped, Quaternion
 from sensor_msgs.msg import PointCloud2, PointField
 
 ROBOTS = 12
-VARIANTS = ('scc_t1', 'scc_t4', 'scc_auto', 'scc_full', 'scc_fov')
-SAME_AS_SERIAL = ('scc_t4', 'scc_auto', 'scc_full')
+VARIANTS = ('scc_t1', 'scc_t4', 'scc_default', 'scc_full', 'scc_fov')
+SAME_AS_SERIAL = ('scc_t4', 'scc_default', 'scc_full')
 
 
 def world_cloud():
@@ -73,6 +74,20 @@ def window_state(point, pose, guard):
 
 
 class SharedCloudCpu(unittest.TestCase):
+    def test_zero_worker_threads_is_refused(self):
+        # worker_threads counts the caller, so 0 is invalid rather than automatic: that node
+        # exits during construction, before it advertises any output. (A node that exits
+        # without unregistering can linger in the master's node list, so look at the topics.)
+        master = rosgraph.Master(rospy.get_name())
+        deadline = time.monotonic() + 30
+        while '/scc_t1/sensor/uav1/points' not in dict(master.getSystemState()[0]):
+            self.assertLess(time.monotonic(), deadline, 'the valid nodes never advertised')
+            time.sleep(0.1)
+        time.sleep(1.0)
+        published = dict(master.getSystemState()[0])
+        self.assertIn('/scc_default/sensor/uav1/points', published)
+        self.assertNotIn('/scc_zero/sensor/uav1/points', published)
+
     def check_window(self, index, default_payloads, window_payloads):
         default, window = records(default_payloads), records(window_payloads)
         pose = pose_of(index)

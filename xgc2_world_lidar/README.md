@@ -46,15 +46,22 @@ sorted-search crop). Every paper YAML is unchanged.
 
 ### Scan threads
 
-`worker_threads` (CPU backend) sets how many threads scan the robots of a tick:
-`0` (default) is automatic, a quarter of the hardware threads, at least one and at most one
-per sensor, because the host also runs the plant, Core and the viewer; `1` is the previous
-serial path, in sensor order on the spin thread; `n` is `n` threads up to one per sensor.
-Each job is one robot's scan followed by its serialization and publish. Every thread owns its
-scan scratch and its message buffer, and the map index is read-only, so the published bytes of
-every topic are identical at every setting and per-topic order is unchanged. Only the order in
-which different robots' messages of one tick are published depends on scheduling. The GPU
-backend always scans on the spin thread, which owns the GL context.
+`worker_threads` (CPU backend; contract of `af994ea`) is the total number of threads that
+scan the robots of a tick, the spin thread included: `1` (default) is the serial path in
+sensor order, `n` is `n` threads up to one per sensor, and `0` or a negative value is
+invalid and the node refuses to start. The GPU backend always scans on the spin thread, which
+owns the GL context, and does not read the parameter.
+
+`af994ea` runs the queries on the pool and publishes serially from the spin thread. Here each
+job is one robot's scan followed by its serialization and publish, and every thread owns its
+scan scratch and its message buffer (the working set is one buffer per thread, not per
+sensor); the map index is read-only. The published bytes of every topic are identical at every
+setting and per-topic order is unchanged. Only the order in which different robots' messages
+of one tick are published depends on scheduling.
+
+For a profile of about 100 robots, set `worker_threads` explicitly instead of relying on the
+default of 1, to at most the cores left free by the plant, Core and the viewer; measure the
+tick with `test/bench_shared_cloud_cpu.cpp --robots N --threads W`.
 
 The crop returns the radius's kept points in FLANN's order (squared distance, then index). The
 node searches unsorted and sorts only the kept points by that order, which is the same

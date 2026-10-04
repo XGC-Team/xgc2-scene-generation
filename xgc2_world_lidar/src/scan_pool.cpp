@@ -9,11 +9,6 @@ std::size_t defaultScanThreads(std::size_t scans, unsigned hardware) {
     return std::max<std::size_t>(1, std::min(scans, half));
 }
 
-std::size_t defaultCloudScanThreads(std::size_t scans, unsigned hardware) {
-    const std::size_t quarter = std::max<std::size_t>(1, hardware / 4);
-    return std::max<std::size_t>(1, std::min(scans, quarter));
-}
-
 ScanPool::ScanPool(std::size_t threads) {
     try {
         for (std::size_t i = 1; i < threads; ++i)

@@ -1,6 +1,7 @@
 <launch>
   <!-- The same world cloud and poses go to one node per worker_threads setting: serial (1),
-       four threads, and automatic (0, the default). Every node must publish the same bytes. -->
+       four threads, and unset (the default, 1). Every node must publish the same bytes. Zero
+       is invalid (af994ea): that node must refuse to start. -->
   <arg name="rate" value="20"/>
   <group ns="scc_t1">
     <node pkg="xgc2_world_lidar" type="shared_cloud_cpu_node" name="sensor" required="true">
@@ -14,9 +15,15 @@
       <param name="worker_threads" value="4"/>
     </node>
   </group>
-  <group ns="scc_auto">
+  <group ns="scc_default">
     <node pkg="xgc2_world_lidar" type="shared_cloud_cpu_node" name="sensor" required="true">
       <rosparam command="load" file="$(find xgc2_world_lidar)/test/shared_cloud_cpu_common.yaml"/>
+    </node>
+  </group>
+  <group ns="scc_zero">
+    <node pkg="xgc2_world_lidar" type="shared_cloud_cpu_node" name="sensor" required="false">
+      <rosparam command="load" file="$(find xgc2_world_lidar)/test/shared_cloud_cpu_common.yaml"/>
+      <param name="worker_threads" value="0"/>
     </node>
   </group>
   <!-- The parameterized extent: explicit full values equal the default; a window keeps exactly the

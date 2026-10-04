@@ -12,7 +12,6 @@
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <string>
-#include <thread>
 #include <vector>
 class SharedCloudNode {
     struct Sensor {
@@ -106,19 +105,18 @@ public:
             throw std::runtime_error("actual cloud/pose/output bindings required");
         if (m.pose_type != "nav_msgs/Odometry" && m.pose_type != "geometry_msgs/PoseStamped")
             throw std::runtime_error("unsupported explicit pose type");
-        // 0 (default): automatic, a quarter of the hardware threads up to one per sensor;
-        // 1: serial in sensor order on the spin thread; n: n threads up to one per sensor.
-        // The GL context belongs to the spin thread, so the GPU backend always scans there.
-        int requested_threads = 0;
-        nh_.getParam("worker_threads", requested_threads);
-        if (requested_threads < 0)
-            throw std::invalid_argument("worker_threads must be >= 0 (0 = automatic)");
-        const std::size_t threads =
-            gpu_ ? 1
-            : requested_threads == 0
-                ? xgc2_world_lidar::defaultCloudScanThreads(poses.size(),
-                                                            std::thread::hardware_concurrency())
-                : std::min<std::size_t>(static_cast<std::size_t>(requested_threads), poses.size());
+        // The af994ea contract: total parallelism including the caller. 1 (default) is serial
+        // in sensor order on the spin thread; n is n threads up to one per sensor; 0 and
+        // negative values are invalid. The GL context belongs to the spin thread, so the GPU
+        // backend always scans there and does not read worker_threads.
+        std::size_t threads = 1;
+        if (!gpu_) {
+            const int worker_threads = nh_.param("worker_threads", 1);
+            if (worker_threads < 1)
+                throw std::invalid_argument("CPU worker_threads must be positive");
+            threads = std::min<std::size_t>(static_cast<std::size_t>(worker_threads),
+                                            std::max<std::size_t>(1, poses.size()));
+        }
         pool_ = std::make_unique<xgc2_world_lidar::ScanPool>(threads);
         workers_.resize(pool_->threads());
         for (auto& worker : workers_) {
