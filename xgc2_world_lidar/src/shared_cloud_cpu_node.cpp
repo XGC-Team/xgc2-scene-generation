@@ -1,9 +1,13 @@
+#include "xgc2_world_lidar/scan_pool.h"
 #include "xgc2_world_lidar/shared_cloud_cpu.hpp"
 #ifdef XGC_WORLD_LIDAR_GPU
 #include "xgc2_world_lidar/shared_cloud_gpu.hpp"
-#endif
 #include <cstring>
+#endif
+#include <algorithm>
+#include <cstdint>
 #include <geometry_msgs/PoseStamped.h>
+#include <memory>
 #include <nav_msgs/Odometry.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <ros/ros.h>
@@ -30,6 +34,7 @@ class SharedCloudNode {
     std::unique_ptr<xgc2_world_lidar::SharedCloudGpu> gpu_world_;
 #endif
     std::vector<Sensor> sensors_;
+    std::unique_ptr<xgc2_world_lidar::ScanPool> cpu_pool_;
     bool loaded_ = false, zero_stamp_ = false, gpu_ = false;
 
 public:
@@ -86,6 +91,16 @@ public:
         if (m.pose_type != "nav_msgs/Odometry" && m.pose_type != "geometry_msgs/PoseStamped")
             throw std::runtime_error("unsupported explicit pose type");
         sensors_.resize(poses.size());
+        if (!gpu_) {
+            // Total parallelism includes the caller: 1 is serial; 0 is invalid, not auto.
+            const int worker_threads = nh_.param("worker_threads", 1);
+            if (worker_threads < 1)
+                throw std::invalid_argument("CPU worker_threads must be positive");
+            const std::size_t threads = std::min<std::size_t>(
+                static_cast<std::size_t>(worker_threads), sensors_.size());
+            if (threads > 1)
+                cpu_pool_ = std::make_unique<xgc2_world_lidar::ScanPool>(threads);
+        }
         for (std::size_t i = 0; i < poses.size(); ++i) {
             sensors_[i].pub = nh_.advertise<sensor_msgs::PointCloud2>(outputs[i], 10);
 #ifdef XGC_WORLD_LIDAR_GPU
@@ -146,6 +161,15 @@ public:
     void tick() {
         if (!loaded_)
             return;
+        if (cpu_pool_) {
+            // Single ROS spin keeps poses and the installed index unchanged until join.
+            // One complete query per sensor; only its reusable scratch is written.
+            cpu_pool_->run(sensors_.size(), [this](std::size_t i) {
+                auto& s = sensors_[i];
+                if (s.ready)
+                    world_.scanInto(s.p, s.q, &s.scratch);
+            });
+        }
         for (auto& s : sensors_) {
             if (!s.ready)
                 continue;
@@ -159,7 +183,8 @@ public:
             } else
 #endif
             {
-                world_.scanInto(s.p, s.q, &s.scratch);
+                if (!cpu_pool_)
+                    world_.scanInto(s.p, s.q, &s.scratch);
                 if (!s.scratch.radius_candidates)
                     continue; // original CPU zero-neighbour no-publication behavior
                 s.output.width = s.scratch.cloud.size();
@@ -168,9 +193,22 @@ public:
             }
             s.output.height = 1;
             s.output.row_step = s.output.width * s.output.point_step;
-            s.output.data.resize(s.output.row_step); // retain per-sensor serialization capacity
-            if (!s.output.data.empty())
-                std::memcpy(s.output.data.data(), points, s.output.data.size());
+#ifdef XGC_WORLD_LIDAR_GPU
+            if (gpu_) {
+                s.output.data.resize(s.output.row_step);
+                if (!s.output.data.empty())
+                    std::memcpy(s.output.data.data(), points, s.output.data.size());
+            } else
+#endif
+            {
+                // Keep one owned payload copy; avoid resize's redundant tail initialization.
+                if (s.output.row_step == 0) {
+                    s.output.data.clear();
+                } else {
+                    const auto* bytes = static_cast<const std::uint8_t*>(points);
+                    s.output.data.assign(bytes, bytes + s.output.row_step);
+                }
+            }
             s.output.header.frame_id = metadata_.frame_id;
             s.output.header.stamp = zero_stamp_ ? ros::Time(0) : s.stamp;
             s.pub.publish(s.output);

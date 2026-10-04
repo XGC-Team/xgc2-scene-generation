@@ -64,9 +64,9 @@ if(catkin_FOUND)
   install(DIRECTORY include/${PROJECT_NAME}/ DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION})
   install(DIRECTORY launch/ DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch)
   install(DIRECTORY config/ DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/config)
-  add_executable(shared_cloud_cpu_node src/shared_cloud_cpu_node.cpp)
+  add_executable(shared_cloud_cpu_node src/shared_cloud_cpu_node.cpp src/scan_pool.cpp)
   add_dependencies(shared_cloud_cpu_node ${catkin_EXPORTED_TARGETS})
-  target_link_libraries(shared_cloud_cpu_node PRIVATE ${PROJECT_NAME}_cloud_cpu ${catkin_LIBRARIES})
+  target_link_libraries(shared_cloud_cpu_node PRIVATE ${PROJECT_NAME}_cloud_cpu ${catkin_LIBRARIES} Threads::Threads)
   install(TARGETS shared_cloud_cpu_node
     RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION} COMPONENT cloud_cpu)
   install(TARGETS ${PROJECT_NAME}_cloud_cpu
