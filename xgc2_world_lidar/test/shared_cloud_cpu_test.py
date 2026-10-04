@@ -13,7 +13,8 @@ from geometry_msgs.msg import Point, Pose, PoseStamped, Quaternion
 from sensor_msgs.msg import PointCloud2, PointField
 
 ROBOTS = 12
-VARIANTS = ('scc_t1', 'scc_t4', 'scc_auto')
+VARIANTS = ('scc_t1', 'scc_t4', 'scc_auto', 'scc_full', 'scc_fov')
+SAME_AS_SERIAL = ('scc_t4', 'scc_auto', 'scc_full')
 
 
 def world_cloud():
@@ -47,7 +48,43 @@ def pose_of(index):
                 Quaternion(0, 0, math.sin(yaw / 2), math.cos(yaw / 2)))
 
 
+def records(payloads):
+    for payload in payloads:
+        return [struct.unpack_from('<fff', payload, o) for o in range(0, len(payload), 16)]
+    return []
+
+
+def window_state(point, pose, guard):
+    """+1 clearly inside, -1 clearly outside, 0 within guard of a limit (60 x 40 deg, 1 m)."""
+    p = pose.position
+    q = pose.orientation
+    dx, dy, dz = point[0] - p.x, point[1] - p.y, point[2] - p.z
+    yaw = 2 * math.atan2(q.z, q.w)  # the test poses are pure yaw
+    lx = math.cos(yaw) * dx + math.sin(yaw) * dy
+    ly = -math.sin(yaw) * dx + math.cos(yaw) * dy
+    margins = [math.sqrt(dx * dx + dy * dy + dz * dz) - 1.0,
+               math.radians(30) - abs(math.atan2(ly, lx)),
+               math.radians(20) - abs(math.atan2(dz, math.hypot(lx, ly)))]
+    if min(margins) > guard:
+        return 1
+    if min(margins) < -guard:
+        return -1
+    return 0
+
+
 class SharedCloudCpu(unittest.TestCase):
+    def check_window(self, index, default_payloads, window_payloads):
+        default, window = records(default_payloads), records(window_payloads)
+        pose = pose_of(index)
+        inside = [pt for pt in default if window_state(pt, pose, 1e-4) == 1]
+        outside = [pt for pt in default if window_state(pt, pose, 1e-4) == -1]
+        kept = [pt for pt in window if window_state(pt, pose, 1e-4) != 0]
+        # In the default order, every default point clearly inside survives and every one
+        # clearly outside is gone; nothing appears that the default crop did not have.
+        self.assertEqual(inside, kept, 'uav%d window differs' % index)
+        self.assertTrue(set(window) <= set(default), 'uav%d window adds points' % index)
+        self.assertFalse(set(outside) & set(window), 'uav%d keeps points outside' % index)
+
     def test_every_worker_setting_publishes_the_same_bytes(self):
         world = rospy.Publisher('/scc_world', PointCloud2, queue_size=1, latch=True)
         poses = [rospy.Publisher('/scc_pose/uav%d' % i, PoseStamped, queue_size=1)
@@ -96,7 +133,7 @@ class SharedCloudCpu(unittest.TestCase):
         finally:
             stop.set()
             thread.join()
-        published = 0
+        published = default_points = window_points = 0
         for i in range(1, ROBOTS + 1):
             with lock:
                 streams = {v: list(received[(v, i)]) for v in VARIANTS}
@@ -104,8 +141,11 @@ class SharedCloudCpu(unittest.TestCase):
             payloads = {v: {bytes(m.data) for m in streams[v]} for v in VARIANTS}
             for v in VARIANTS:
                 self.assertLessEqual(len(payloads[v]), 1, '%s uav%d changed payload' % (v, i))
-            self.assertEqual(payloads['scc_t1'], payloads['scc_t4'], 'uav%d t4 differs' % i)
-            self.assertEqual(payloads['scc_t1'], payloads['scc_auto'], 'uav%d auto differs' % i)
+            for v in SAME_AS_SERIAL:
+                self.assertEqual(payloads['scc_t1'], payloads[v], 'uav%d %s differs' % (i, v))
+            self.check_window(i, payloads['scc_t1'], payloads['scc_fov'])
+            default_points += len(records(payloads['scc_t1']))
+            window_points += len(records(payloads['scc_fov']))
             for v in VARIANTS:
                 for m in streams[v]:
                     self.assertEqual(m.header.frame_id, 'map')
@@ -116,6 +156,8 @@ class SharedCloudCpu(unittest.TestCase):
         # Robots with no map point in range publish nothing (the original no-publication rule),
         # so most, not necessarily all, of the twelve have a cloud.
         self.assertGreaterEqual(published, 6)
+        self.assertGreater(window_points, 0, 'the window keeps no points anywhere')
+        self.assertLess(window_points, default_points, 'the window removes nothing')
 
 
 if __name__ == '__main__':

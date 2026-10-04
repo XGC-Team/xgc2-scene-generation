@@ -26,6 +26,42 @@ readback still keeps **`depth > near && depth < far - 0.1`**, rather than an
 inclusive range. `point_cover_spacing_m` controls the original GPU point cover,
 not CPU prevoxel. Supplied GPU `prevoxel_leaf_m` is explicitly rejected.
 
+### Sensor spec fields by model
+
+One spec chooses the model and the backend; the models are not equivalent and no field
+silently means two things. `-` means the model refuses the field instead of ignoring it.
+
+| Field | `crop_through` / `cpu` | `lidar_scan` / `gpu` |
+| --- | --- | --- |
+| `range_m` | radius of the crop (far) | far |
+| `min_range_m` | optional near range, 0 = none; returns closer than this are dropped, one at exactly this distance is kept | near, required, > 0 |
+| `h_fov_deg`, `v_fov_deg` | optional azimuth `(0, 360]` and elevation `(0, 180]` extent around body +X (same test as `WorldLidar::insideFov`, limits inclusive); unset or full = every point of the radius | the spherical grid extent, required |
+| `h_res`, `v_res`, `point_cover_spacing_m` | `-` (stored points have no resolution) | the spherical grid and point cover, required |
+| `heading_cos_min`, `vertical_slab_tan` | the original ZJU predicates, unchanged; the extent above only adds to them | `-` |
+| `prevoxel_leaf_m` | the original PCL voxel, required | `-` |
+
+With no `min_range_m`, `h_fov_deg` or `v_fov_deg` the crop is exactly the crop before they
+existed, byte for byte (the unit test compares it with an independent copy of the original
+sorted-search crop). Every paper YAML is unchanged.
+
+### Scan threads
+
+`worker_threads` (CPU backend) sets how many threads scan the robots of a tick:
+`0` (default) is automatic, a quarter of the hardware threads, at least one and at most one
+per sensor, because the host also runs the plant, Core and the viewer; `1` is the previous
+serial path, in sensor order on the spin thread; `n` is `n` threads up to one per sensor.
+Each job is one robot's scan followed by its serialization and publish. Every thread owns its
+scan scratch and its message buffer, and the map index is read-only, so the published bytes of
+every topic are identical at every setting and per-topic order is unchanged. Only the order in
+which different robots' messages of one tick are published depends on scheduling. The GPU
+backend always scans on the spin thread, which owns the GL context.
+
+The crop returns the radius's kept points in FLANN's order (squared distance, then index). The
+node searches unsorted and sorts only the kept points by that order, which is the same
+sequence as sorting the whole radius, at a fraction of the cost.
+`test/bench_shared_cloud_cpu.cpp` measures a tick without ROS (`--reference-sorted` runs the
+previous query and prints the same checksum).
+
 Both backends use `input_cloud_topic`, `pose_type`, `pose_topics`, `output_topics`,
 `frame_id` and `stamp_policy`. Poses must already be in the input cloud's world
 coordinates; this entry performs no TF/extrinsic conversion. The GPU output

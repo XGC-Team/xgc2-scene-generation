@@ -37,6 +37,13 @@ void SharedCloudCpu::scanInto(const Eigen::Vector3d& position,
     const auto& m = metadata_;
     const bool body_dot = m.heading_cos_min.has_value(),
                world_slab = m.vertical_slab_tan.has_value();
+    // Optional field of view and near range; unset (or full) adds no work per candidate.
+    constexpr double kPi = 3.14159265358979323846, kTolerance = 1e-9;
+    const bool h_limited = m.h_fov_deg > 0 && m.h_fov_deg < 360;
+    const bool v_limited = m.v_fov_deg > 0 && m.v_fov_deg < 180;
+    const double h_half = 0.5 * m.h_fov_deg * kPi / 180.0 + kTolerance;
+    const double v_half = 0.5 * m.v_fov_deg * kPi / 180.0 + kTolerance;
+    const double near_squared = m.min_range_m * m.min_range_m;
     const Eigen::Matrix3d rotation = orientation.toRotationMatrix();
     const Eigen::Vector3d body_x = rotation.col(0);
     pcl::PointXYZ search(static_cast<float>(position.x()),
@@ -52,6 +59,17 @@ void SharedCloudCpu::scanInto(const Eigen::Vector3d& position,
         if (body_dot) {
             const Eigen::Vector3d delta(p.x - position.x(), p.y - position.y(), p.z - position.z());
             if (delta.normalized().dot(body_x) < *m.heading_cos_min)
+                continue;
+        }
+        if (m.min_range_m > 0 && result->squared_distances[n] < near_squared)
+            continue;
+        if (h_limited || v_limited) {
+            const Eigen::Vector3d delta(p.x - position.x(), p.y - position.y(), p.z - position.z());
+            const Eigen::Vector3d local = rotation.transpose() * delta;
+            if (h_limited && std::abs(std::atan2(local.y(), local.x())) > h_half)
+                continue;
+            if (v_limited &&
+                std::abs(std::atan2(local.z(), std::hypot(local.x(), local.y()))) > v_half)
                 continue;
         }
         result->kept.emplace_back(result->squared_distances[n], result->indices[n]);

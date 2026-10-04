@@ -14,6 +14,17 @@ void validateSensorMetadata(const SensorMetadata& m) {
     for (auto leaf : m.prevoxel_leaf_m)
         if (!(leaf > 0 && std::isfinite(leaf)))
             throw std::invalid_argument("actual PCL voxel XYZ required");
+    // 0 is "not set": the crop keeps the whole radius and angular range.
+    if (!std::isfinite(m.min_range_m) || m.min_range_m < 0 || m.min_range_m >= m.range_m)
+        throw std::invalid_argument("min_range_m must be in [0, range_m)");
+    if (!std::isfinite(m.h_fov_deg) || m.h_fov_deg < 0 || m.h_fov_deg > 360)
+        throw std::invalid_argument("h_fov_deg must be 0 (unset) or in (0, 360]");
+    if (!std::isfinite(m.v_fov_deg) || m.v_fov_deg < 0 || m.v_fov_deg > 180)
+        throw std::invalid_argument("v_fov_deg must be 0 (unset) or in (0, 180]");
+    if (m.h_res != 0 || m.v_res != 0 || m.point_cover_spacing_m != 0)
+        throw std::invalid_argument(
+            "crop_through returns stored points: h_res, v_res and point_cover_spacing_m belong to "
+            "lidar_scan");
     if (m.heading_cos_min &&
         (!std::isfinite(*m.heading_cos_min) || *m.heading_cos_min < -1 || *m.heading_cos_min > 1))
         throw std::invalid_argument("invalid body-dot predicate");

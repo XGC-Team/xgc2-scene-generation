@@ -19,5 +19,23 @@
       <rosparam command="load" file="$(find xgc2_world_lidar)/test/shared_cloud_cpu_common.yaml"/>
     </node>
   </group>
+  <!-- The parameterized extent: explicit full values equal the default; a window keeps exactly the
+       default points that lie inside it. -->
+  <group ns="scc_full">
+    <node pkg="xgc2_world_lidar" type="shared_cloud_cpu_node" name="sensor" required="true">
+      <rosparam command="load" file="$(find xgc2_world_lidar)/test/shared_cloud_cpu_common.yaml"/>
+      <param name="h_fov_deg" value="360.0"/>
+      <param name="v_fov_deg" value="180.0"/>
+      <param name="min_range_m" value="0.0"/>
+    </node>
+  </group>
+  <group ns="scc_fov">
+    <node pkg="xgc2_world_lidar" type="shared_cloud_cpu_node" name="sensor" required="true">
+      <rosparam command="load" file="$(find xgc2_world_lidar)/test/shared_cloud_cpu_common.yaml"/>
+      <param name="h_fov_deg" value="60.0"/>
+      <param name="v_fov_deg" value="40.0"/>
+      <param name="min_range_m" value="1.0"/>
+    </node>
+  </group>
   <test test-name="shared_cloud_cpu" pkg="xgc2_world_lidar" type="shared_cloud_cpu_test.py" time-limit="60"/>
 </launch>

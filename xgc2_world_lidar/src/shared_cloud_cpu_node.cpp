@@ -57,6 +57,16 @@ public:
                 throw std::runtime_error("prevoxel XYZ required");
             for (int i = 0; i < 3; ++i)
                 m.prevoxel_leaf_m[i] = leaf[i];
+            // Optional extent and near range (0 / absent: the whole radius, as before). The
+            // resolution and point-cover parameters are lidar_scan's and are refused here.
+            nh_.getParam("min_range_m", m.min_range_m);
+            nh_.getParam("h_fov_deg", m.h_fov_deg);
+            nh_.getParam("v_fov_deg", m.v_fov_deg);
+            for (const char* name : {"h_res", "v_res", "point_cover_spacing_m"})
+                if (nh_.hasParam(name))
+                    throw std::invalid_argument(std::string(name) +
+                                                " is a lidar_scan parameter; crop_through has "
+                                                "no resolution");
         }
         nh_.getParam("range_m", m.range_m);
         double value;
