@@ -42,8 +42,8 @@ public:
     // reentrant: one batch at a time.
     // thread_limit includes the caller and preserves this batch's original
     // effective width even when the shared pool has a larger cold capacity.
-    void run(std::size_t count, std::size_t thread_limit,
-             const std::function<void(std::size_t)>& job);
+    void
+    run(std::size_t count, std::size_t thread_limit, const std::function<void(std::size_t)>& job);
 
 private:
     void work(std::size_t ordinal);

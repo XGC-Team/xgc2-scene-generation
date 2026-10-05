@@ -36,6 +36,20 @@ class PackageDebsTest(unittest.TestCase):
                 path = prefix / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(content)
+        if distro == "noetic":
+            world_files = {
+                "lib/libxgc2_world_lidar.a": "!<arch>\n",
+                "lib/libxgc2_world_lidar_cloud_cpu.a": "!<arch>\n",
+                "lib/libxgc2_world_lidar_sensor_system.a": "!<arch>\n",
+                "share/cmake/XgcWorldLidar/XgcWorldLidarConfig.cmake": "# fixture\n",
+                "share/cmake/XgcWorldLidar/XgcWorldLidarTargets.cmake": "# fixture\n",
+                "share/cmake/XgcWorldLidar/XgcWorldLidarTargets-release.cmake": "# fixture\n",
+                "include/xgc2_world_lidar/world_sensor_system.hpp": "// fixture\n",
+            }
+            for name, content in world_files.items():
+                path = prefix / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(content)
         environment = os.environ.copy()
         environment.update(ROS_DISTRO=distro, PACKAGE_VERSION="1.1.4-14")
         result = subprocess.run(

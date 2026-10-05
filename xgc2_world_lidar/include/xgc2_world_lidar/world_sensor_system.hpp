@@ -2,16 +2,16 @@
 
 #include "xgc2_world_lidar/scene_conversion.h"
 #include "xgc2_world_lidar/sensor_metadata.hpp"
-#include <pcl/point_cloud.h>
-#include <pcl/point_types.h>
-#include <ros/time.h>
-#include <sensor_msgs/PointCloud2.h>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <functional>
 #include <memory>
 #include <optional>
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
+#include <ros/time.h>
+#include <sensor_msgs/PointCloud2.h>
 #include <vector>
 
 namespace xgc2_world_lidar {
@@ -71,8 +71,7 @@ struct SensorAcquisition {
     Eigen::Vector3d position = Eigen::Vector3d::Zero();
     Eigen::Quaterniond orientation = Eigen::Quaterniond::Identity();
     ros::Time source_stamp;
-    std::uint64_t source_version = 0, generation = 0, world_commit = 0,
-                  geometry_version = 0;
+    std::uint64_t source_version = 0, generation = 0, world_commit = 0, geometry_version = 0;
     bool ready = false;
 };
 
@@ -136,8 +135,9 @@ struct WorldSensorCallbacks {
     // Synchronous consumption, on the ONE sensor execution caller, outside the
     // compute pool. The message and acquisition reference expire on return;
     // ROS publish(const&) serializes before return. No deferred borrow/queue.
-    std::function<void(std::size_t, SensorOutputKind,
-                       const sensor_msgs::PointCloud2&, const SensorAcquisition&)> publish;
+    std::function<void(
+        std::size_t, SensorOutputKind, const sensor_msgs::PointCloud2&, const SensorAcquisition&)>
+        publish;
     // Original unrecoverable error -> existing World fatal/fence. This runs on
     // the sensor caller: arrange lifecycle stop elsewhere; do not self-join.
     std::function<void(std::exception_ptr)> fatal;

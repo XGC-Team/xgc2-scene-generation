@@ -1,13 +1,13 @@
 #include "xgc2_world_lidar/world_sensor_system.hpp"
+#include <algorithm>
+#include <atomic>
 #include <geometry_msgs/PoseStamped.h>
+#include <mutex>
 #include <nav_msgs/Odometry.h>
 #include <pcl_conversions/pcl_conversions.h>
-#include <ros/ros.h>
 #include <ros/callback_queue.h>
-#include <atomic>
+#include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
-#include <algorithm>
-#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -121,36 +121,51 @@ public:
         };
         callbacks.capture = [this](xgc2_world_lidar::WorldSensorAcquisition& out) {
             std::lock_guard<std::mutex> lock(source_mutex_);
-            for (std::size_t i = 0; i < sensors_.size(); ++i) out.sources[i] = sensors_[i].source;
+            for (std::size_t i = 0; i < sensors_.size(); ++i)
+                out.sources[i] = sensors_[i].source;
             out.geometry = geometry_;
         };
-        callbacks.publish = [this](std::size_t i, xgc2_world_lidar::SensorOutputKind,
+        callbacks.publish = [this](std::size_t i,
+                                   xgc2_world_lidar::SensorOutputKind,
                                    const sensor_msgs::PointCloud2& cloud,
                                    const xgc2_world_lidar::SensorAcquisition&) {
             sensors_[i].pub.publish(cloud);
         };
         callbacks.fatal = [this](std::exception_ptr error) {
             failed_.store(true, std::memory_order_release);
-            try { std::rethrow_exception(error); }
-            catch (const std::exception& e) { ROS_FATAL("%s", e.what()); }
-            catch (...) { ROS_FATAL("unknown shared sensor backend failure"); }
+            try {
+                std::rethrow_exception(error);
+            } catch (const std::exception& e) {
+                ROS_FATAL("%s", e.what());
+            } catch (...) {
+                ROS_FATAL("unknown shared sensor backend failure");
+            }
             ros::shutdown();
         };
         system_ = std::make_unique<xgc2_world_lidar::WorldSensorSystem>(std::move(config),
-                                                                     std::move(callbacks));
+                                                                        std::move(callbacks));
         input_ = geometry_nh_.subscribe<sensor_msgs::PointCloud2>(
             m.input_cloud_topic, 1, [this](const sensor_msgs::PointCloud2::ConstPtr& msg) {
-                { std::lock_guard<std::mutex> lock(source_mutex_); if (loaded_) return; }
+                {
+                    std::lock_guard<std::mutex> lock(source_mutex_);
+                    if (loaded_)
+                        return;
+                }
                 pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
                 pcl::fromROSMsg(*msg, *cloud);
                 if (gpu_ && msg->header.frame_id != metadata_.frame_id)
-                    throw std::invalid_argument("GPU cloud must already use the declared world frame");
+                    throw std::invalid_argument(
+                        "GPU cloud must already use the declared world frame");
                 auto geometry = std::make_shared<xgc2_world_lidar::WorldSensorGeometry>();
                 geometry->version = 1;
                 geometry->shared.push_back(cloud);
-                { std::lock_guard<std::mutex> lock(source_mutex_);
-                  geometry_ = std::move(geometry); loaded_ = true; }
-                input_.shutdown(); // exact original first-cloud lifecycle, including empty CPU input
+                {
+                    std::lock_guard<std::mutex> lock(source_mutex_);
+                    geometry_ = std::move(geometry);
+                    loaded_ = true;
+                }
+                input_
+                    .shutdown(); // exact original first-cloud lifecycle, including empty CPU input
                 system_->notify();
             });
         system_->start(); // one sensor caller replaces this entry's old scan/timer owner
@@ -159,16 +174,21 @@ public:
         system_->fence();
         input_.shutdown();
         geometry_callbacks_.disable();
-        for (auto& sensor : sensors_) sensor.pose.shutdown();
+        for (auto& sensor : sensors_)
+            sensor.pose.shutdown();
         system_->stop(); // input snapshots, publisher and geometry owners still alive
     }
     bool failed() const { return failed_.load(std::memory_order_acquire); }
     void setPose(std::size_t i, const geometry_msgs::Pose& p, const ros::Time& stamp) {
-        { std::lock_guard<std::mutex> lock(source_mutex_);
-          auto& s = sensors_[i].source;
-          s.position = {p.position.x, p.position.y, p.position.z};
-          s.orientation = {p.orientation.w, p.orientation.x, p.orientation.y, p.orientation.z};
-          s.source_stamp = stamp; s.ready = true; ++s.source_version; }
+        {
+            std::lock_guard<std::mutex> lock(source_mutex_);
+            auto& s = sensors_[i].source;
+            s.position = {p.position.x, p.position.y, p.position.z};
+            s.orientation = {p.orientation.w, p.orientation.x, p.orientation.y, p.orientation.z};
+            s.source_stamp = stamp;
+            s.ready = true;
+            ++s.source_version;
+        }
         system_->notify();
     }
 };

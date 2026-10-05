@@ -55,9 +55,7 @@ void ScanPool::work(std::size_t ordinal) {
     uint64_t seen = 0;
     std::unique_lock<std::mutex> lock(mutex_);
     for (;;) {
-        start_.wait(lock, [&] {
-            return stop_ || (batch_ != seen && ordinal < selected_workers_);
-        });
+        start_.wait(lock, [&] { return stop_ || (batch_ != seen && ordinal < selected_workers_); });
         if (stop_)
             return;
         seen = batch_;
@@ -69,7 +67,8 @@ void ScanPool::work(std::size_t ordinal) {
     }
 }
 
-void ScanPool::run(std::size_t count, std::size_t thread_limit,
+void ScanPool::run(std::size_t count,
+                   std::size_t thread_limit,
                    const std::function<void(std::size_t)>& job) {
     if (count == 0)
         return;

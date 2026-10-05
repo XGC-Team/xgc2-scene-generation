@@ -1,11 +1,10 @@
 #include "xgc2_world_lidar/world_sensor_system.hpp"
 #include "xgc2_world_lidar/observation_contract.h"
-#include "xgc2_world_lidar/shared_cloud_cpu.hpp"
 #include "xgc2_world_lidar/scan_pool.h"
+#include "xgc2_world_lidar/shared_cloud_cpu.hpp"
 #ifdef XGC_WORLD_LIDAR_GPU
 #include "xgc2_world_lidar/shared_cloud_gpu.hpp"
 #endif
-#include <pcl_conversions/pcl_conversions.h>
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -13,6 +12,7 @@
 #include <condition_variable>
 #include <cstring>
 #include <mutex>
+#include <pcl_conversions/pcl_conversions.h>
 #include <stdexcept>
 #include <thread>
 
@@ -146,7 +146,6 @@ sensor_msgs::PointCloud2 toBeamCloud(const std::vector<Beam>& beams,
                      });
 }
 
-
 } // namespace
 
 void SharedSensorDue::start(const ros::Time& now, const ros::Duration& duration) {
@@ -160,7 +159,9 @@ void SharedSensorDue::clockRegression(const ros::Time& now) {
         next_expected = now + period;
     }
 }
-bool SharedSensorDue::due(const ros::Time& now) const { return next_expected <= now; }
+bool SharedSensorDue::due(const ros::Time& now) const {
+    return next_expected <= now;
+}
 void SharedSensorDue::complete(const ros::Time& finish) {
     // ros_comm1.17.4 TimerManager::updateNext: strict <, not finish+period.
     if (next_expected <= finish) {
@@ -246,7 +247,8 @@ struct WorldSensorSystem::Impl {
             auto& runtime = normal[i];
             runtime.lidar = std::make_unique<WorldLidar>(equipment.sensor);
             runtime.others.reserve(configuration.bodies.size());
-            runtime.output = cloudLayout({"x", "y", "z"}, equipment.with_bodies, equipment.frame_id);
+            runtime.output =
+                cloudLayout({"x", "y", "z"}, equipment.with_bodies, equipment.frame_id);
         }
         shared.resize(configuration.shared.size());
         for (std::size_t i = 0; i < shared.size(); ++i) {
@@ -294,21 +296,25 @@ struct WorldSensorSystem::Impl {
             acquisition.bodies.size() != configuration.bodies.size())
             throw std::invalid_argument("capture changed frozen acquisition cardinality");
         std::size_t count = normal.size();
-        for (const auto& group : shared) count += group.sensors.size();
+        for (const auto& group : shared)
+            count += group.sensors.size();
         if (acquisition.demand.size() != count)
             throw std::invalid_argument("capture changed frozen output demand cardinality");
         for (auto& source : acquisition.sources)
             source.geometry_version = acquisition.geometry ? acquisition.geometry->version : 0;
     }
 
-    void publish(std::size_t index, SensorOutputKind kind,
-                 const sensor_msgs::PointCloud2& cloud, const SensorAcquisition& sample) {
+    void publish(std::size_t index,
+                 SensorOutputKind kind,
+                 const sensor_msgs::PointCloud2& cloud,
+                 const SensorAcquisition& sample) {
         if (!fenced.load(std::memory_order_acquire))
             callbacks.publish(index, kind, cloud, sample);
     }
 
     void publishMap(const ros::Time& now) {
-        if (!map_lidar) return;
+        if (!map_lidar)
+            return;
         if (acquisition.normal_map_clear_version != map_clear_version) {
             map_clear_version = acquisition.normal_map_clear_version;
             map_clear_pending = true;
@@ -318,30 +324,37 @@ struct WorldSensorSystem::Impl {
             map_dirty = true;
             map_stamp = ros::Time();
         }
-        if (!acquisition.enabled) return;
+        if (!acquisition.enabled)
+            return;
         SensorAcquisition stamp;
         stamp.source_stamp = now;
         stamp.world_commit = acquisition.world_commit;
         stamp.geometry_version = acquisition.geometry ? acquisition.geometry->version : 0;
         if (map_clear_pending) {
-            publish(kWorldSensorMapOutput, SensorOutputKind::Map,
-                    toCloud({}, now, configuration.normal_map->frame_id), stamp);
+            publish(kWorldSensorMapOutput,
+                    SensorOutputKind::Map,
+                    toCloud({}, now, configuration.normal_map->frame_id),
+                    stamp);
             map_clear_pending = false;
         }
         if (!acquisition.normal_geometry_ready || !acquisition.normal_state_fresh ||
-            !acquisition.geometry || !acquisition.geometry->normal_map) return;
+            !acquisition.geometry || !acquisition.geometry->normal_map)
+            return;
         const auto& geometry = acquisition.geometry;
         if (map_scene != geometry->normal_map) {
             map_scene = geometry->normal_map;
             map_lidar->setScene(map_scene);
             map_dirty = true;
         }
-        if (!map_dirty || !acquisition.normal_map_requested) return;
+        if (!map_dirty || !acquisition.normal_map_requested)
+            return;
         if (!geometry->normal_has_dynamic || map_stamp.isZero() ||
             (now - map_stamp).toSec() >= configuration.normal_map->period_sec) {
             const auto points = map_lidar->globalMap(map_lidar->config().surface_spacing);
-            publish(kWorldSensorMapOutput, SensorOutputKind::Map,
-                    toCloud(points, now, configuration.normal_map->frame_id), stamp);
+            publish(kWorldSensorMapOutput,
+                    SensorOutputKind::Map,
+                    toCloud(points, now, configuration.normal_map->frame_id),
+                    stamp);
             map_dirty = false;
             map_stamp = now;
         }
@@ -367,28 +380,33 @@ struct WorldSensorSystem::Impl {
         if (equipment.publish_beams) {
             runtime.beams = runtime.lidar->scanWithBeams(p.position, q, runtime.others);
         } else {
-            runtime.count = runtime.lidar->scanInto(p.position, q, runtime.others,
-                                                    equipment.with_bodies, &runtime.output.data);
+            runtime.count = runtime.lidar->scanInto(
+                p.position, q, runtime.others, equipment.with_bodies, &runtime.output.data);
         }
     }
 
     void serviceNormal(const ros::Time& scheduled, const ros::Time& now) {
         capture();
         if (!last_normal_tick.isZero() && now < last_normal_tick) {
-            for (auto& runtime : normal) runtime.next_scan = ros::Time();
+            for (auto& runtime : normal)
+                runtime.next_scan = ros::Time();
             map_stamp = ros::Time();
         }
         last_normal_tick = now;
         publishMap(now); // existing latched clear is independent of sensor demand
         if (!acquisition.enabled || !acquisition.normal_geometry_ready ||
-            !acquisition.normal_state_fresh || !acquisition.geometry) return;
+            !acquisition.normal_state_fresh || !acquisition.geometry)
+            return;
         active.clear();
         bodies.clear();
         bool body_truth_ready = true;
         for (std::size_t i = 0; i < acquisition.bodies.size(); ++i) {
             const auto& sample = acquisition.bodies[i];
             // The World source owner has applied the original body's pose age.
-            if (!sample.ready) { body_truth_ready = false; continue; }
+            if (!sample.ready) {
+                body_truth_ready = false;
+                continue;
+            }
             const auto& binding = configuration.bodies[i];
             bodies.push_back({binding.id, sample.position, binding.radius});
         }
@@ -396,41 +414,51 @@ struct WorldSensorSystem::Impl {
             const auto& equipment = configuration.normal[i];
             const auto& sample = acquisition.sources[equipment.source_index];
             const auto& demand = acquisition.demand[i];
-            if (!sample.ready || !freshObservationTime(sample.source_stamp.toSec(), now.toSec(),
-                                                       equipment.pose_timeout_sec) ||
+            if (!sample.ready ||
+                !freshObservationTime(
+                    sample.source_stamp.toSec(), now.toSec(), equipment.pose_timeout_sec) ||
                 (!demand.points && !(equipment.publish_beams && demand.beams)) ||
                 (equipment.with_bodies && configuration.require_complete_body_roster &&
-                 !body_truth_ready)) continue;
+                 !body_truth_ready))
+                continue;
             if (i >= acquisition.geometry->normal.size() || !acquisition.geometry->normal[i])
                 continue;
             auto& runtime = normal[i];
             if (runtime.lidar->scene() != acquisition.geometry->normal[i])
                 runtime.lidar->setScene(acquisition.geometry->normal[i]);
-            if (!runtime.next_scan.isZero() &&
-                scheduled < runtime.next_scan - ros::Duration(1e-6)) continue;
+            if (!runtime.next_scan.isZero() && scheduled < runtime.next_scan - ros::Duration(1e-6))
+                continue;
             // Original normal next_scan skip-expired policy, NOT shared completion.
-            if (runtime.next_scan.isZero()) runtime.next_scan = scheduled;
+            if (runtime.next_scan.isZero())
+                runtime.next_scan = scheduled;
             runtime.next_scan += ros::Duration(1.0 / equipment.rate_hz);
             if (runtime.next_scan <= scheduled)
                 runtime.next_scan = scheduled + ros::Duration(1.0 / equipment.rate_hz);
             active.push_back(i);
         }
-        pool->run(active.size(), configuration.normal_worker_threads, [&](std::size_t k) { normalScan(active[k]); });
+        pool->run(active.size(), configuration.normal_worker_threads, [&](std::size_t k) {
+            normalScan(active[k]);
+        });
         // Packing/ROS publication never occupies a ScanPool compute worker.
         for (auto i : active) {
             auto& runtime = normal[i];
             const auto& equipment = configuration.normal[i];
             const auto& sample = acquisition.sources[equipment.source_index];
-            const auto count = equipment.publish_beams
-                ? packHits(runtime.beams, equipment.with_bodies, &runtime.output.data)
-                : runtime.count;
+            const auto count =
+                equipment.publish_beams
+                    ? packHits(runtime.beams, equipment.with_bodies, &runtime.output.data)
+                    : runtime.count;
             finishCloud(&runtime.output, count, sample.source_stamp);
             // Configured beams imply both outputs, including beams-only admission.
             publish(i, SensorOutputKind::Points, runtime.output, sample);
             if (equipment.publish_beams)
-                publish(i, SensorOutputKind::Beams,
-                        toBeamCloud(runtime.beams, equipment.with_bodies, sample.source_stamp,
-                                    equipment.frame_id), sample);
+                publish(i,
+                        SensorOutputKind::Beams,
+                        toBeamCloud(runtime.beams,
+                                    equipment.with_bodies,
+                                    sample.source_stamp,
+                                    equipment.frame_id),
+                        sample);
         }
     }
 
@@ -439,9 +467,9 @@ struct WorldSensorSystem::Impl {
         auto& runtime = shared[group_index];
         const auto& equipment = configuration.shared[group_index];
         const auto& metadata = equipment.metadata;
-        if (!acquisition.geometry ||
-            group_index >= acquisition.geometry->shared.size() ||
-            !acquisition.geometry->shared[group_index]) return; // ordinary not-ready
+        if (!acquisition.geometry || group_index >= acquisition.geometry->shared.size() ||
+            !acquisition.geometry->shared[group_index])
+            return; // ordinary not-ready
         const auto& cloud = acquisition.geometry->shared[group_index];
         if (metadata.backend == "cpu" && runtime.loaded_cloud != cloud) {
             auto next = std::make_unique<SharedCloudCpu>();
@@ -468,25 +496,27 @@ struct WorldSensorSystem::Impl {
             pool->run(runtime.sensors.size(), equipment.worker_threads, [&](std::size_t i) {
                 const auto& source = acquisition.sources[equipment.source_indices[i]];
                 if (source.ready) {
-                    runtime.cpu->scanInto(source.position, source.orientation,
-                                          &runtime.sensors[i].scratch);
+                    runtime.cpu->scanInto(
+                        source.position, source.orientation, &runtime.sensors[i].scratch);
                 }
             });
         }
         for (std::size_t i = 0; i < runtime.sensors.size(); ++i) {
             const auto& source = acquisition.sources[equipment.source_indices[i]];
-            if (!source.ready) continue;
+            if (!source.ready)
+                continue;
             auto& sensor = runtime.sensors[i];
             const void* points = nullptr;
             if (metadata.backend == "cpu") {
-                if (!sensor.scratch.radius_candidates) continue;
+                if (!sensor.scratch.radius_candidates)
+                    continue;
                 sensor.output.width = sensor.scratch.cloud.size();
                 sensor.output.is_dense = true;
                 points = sensor.scratch.cloud.points.data();
             } else {
 #ifdef XGC_WORLD_LIDAR_GPU
-                const auto& scan = gpu->scan(source.position, source.orientation,
-                                             source.source_stamp.toSec());
+                const auto& scan =
+                    gpu->scan(source.position, source.orientation, source.source_stamp.toSec());
                 sensor.output.width = scan.size();
                 sensor.output.is_dense = scan.is_dense;
                 points = scan.points.data();
@@ -505,8 +535,8 @@ struct WorldSensorSystem::Impl {
                 sensor.output.data.assign(bytes, bytes + sensor.output.row_step);
             }
             sensor.output.header.frame_id = metadata.frame_id;
-            sensor.output.header.stamp = metadata.stamp_policy == "zero"
-                ? ros::Time(0) : source.source_stamp;
+            sensor.output.header.stamp =
+                metadata.stamp_policy == "zero" ? ros::Time(0) : source.source_stamp;
             // Original shared tick has NO subscriber gate. GPU's borrowed scan
             // buffer is packed/consumed before its next scan invocation.
             publish(runtime.output_begin + i, SensorOutputKind::Points, sensor.output, source);
@@ -520,8 +550,9 @@ struct WorldSensorSystem::Impl {
             std::size_t capacity = normal.empty() ? 1 : configuration.normal_worker_threads;
             for (const auto& equipment : configuration.shared)
                 if (equipment.metadata.backend == "cpu")
-                    capacity = std::max(capacity, std::min(equipment.worker_threads,
-                                                          equipment.source_indices.size()));
+                    capacity = std::max(
+                        capacity,
+                        std::min(equipment.worker_threads, equipment.source_indices.size()));
             pool = std::make_unique<ScanPool>(capacity);
             const auto start_time = callbacks.now();
             normal_tick.start(start_time, ros::Duration(1.0 / configuration.normal_poll_rate_hz));
@@ -539,21 +570,30 @@ struct WorldSensorSystem::Impl {
                         pcl::PointCloud<pcl::PointXYZI> empty;
                         pcl::toROSMsg(empty, sensor.output);
                         if (sensor.output.point_step != sizeof(pcl::PointXYZI))
-                            throw std::runtime_error("actual original GPU XYZ/intensity layout required");
+                            throw std::runtime_error(
+                                "actual original GPU XYZ/intensity layout required");
 #endif
                     }
                 }
             }
             // Only fixed pool/layout/original clock-anchor initialization.
             // Never wait for geometry, a pose, a timer opportunity or physics.
-            { std::lock_guard<std::mutex> lock(mutex); initialized = true; }
+            {
+                std::lock_guard<std::mutex> lock(mutex);
+                initialized = true;
+            }
             cold_complete = true;
             wake.notify_all();
             while (!fenced.load(std::memory_order_acquire)) {
                 std::uint64_t seen;
-                { std::lock_guard<std::mutex> lock(mutex); seen = notifications; }
-                if (callbacks.process_inputs) callbacks.process_inputs();
-                if (fenced.load()) break;
+                {
+                    std::lock_guard<std::mutex> lock(mutex);
+                    seen = notifications;
+                }
+                if (callbacks.process_inputs)
+                    callbacks.process_inputs();
+                if (fenced.load())
+                    break;
                 auto now = callbacks.now();
                 if (!normal.empty() || map_lidar) {
                     normal_tick.clockRegression(now);
@@ -563,8 +603,10 @@ struct WorldSensorSystem::Impl {
                     }
                 }
                 for (std::size_t i = 0; i < shared.size() && !fenced.load(); ++i) {
-                    if (callbacks.process_inputs) callbacks.process_inputs();
-                    if (fenced.load()) break;
+                    if (callbacks.process_inputs)
+                        callbacks.process_inputs();
+                    if (fenced.load())
+                        break;
                     now = callbacks.now();
                     shared[i].due.clockRegression(now);
                     if (shared[i].due.due(now)) {
@@ -573,18 +615,27 @@ struct WorldSensorSystem::Impl {
                         shared[i].due.complete(callbacks.now());
                     }
                 }
-                if (fenced.load()) break;
+                if (fenced.load())
+                    break;
                 now = callbacks.now();
                 ros::Time next;
                 bool have_due = false;
-                if (!normal.empty() || map_lidar) { next = normal_tick.next_expected; have_due = true; }
+                if (!normal.empty() || map_lidar) {
+                    next = normal_tick.next_expected;
+                    have_due = true;
+                }
                 for (const auto& group : shared)
-                    if (!have_due || group.due.next_expected < next) { next = group.due.next_expected; have_due = true; }
+                    if (!have_due || group.due.next_expected < next) {
+                        next = group.due.next_expected;
+                        have_due = true;
+                    }
                 std::unique_lock<std::mutex> lock(mutex);
                 const auto notified = [&] { return fenced.load() || notifications != seen; };
-                if (!have_due) wake.wait(lock, notified);
+                if (!have_due)
+                    wake.wait(lock, notified);
                 else if (next > now)
-                    wake.wait_for(lock, std::chrono::duration<double>((next - now).toSec()), notified);
+                    wake.wait_for(
+                        lock, std::chrono::duration<double>((next - now).toSec()), notified);
             }
         } catch (...) {
             fenced.store(true, std::memory_order_release);
@@ -596,15 +647,22 @@ struct WorldSensorSystem::Impl {
 #endif
         pool.reset();
         acquisition.geometry.reset();
-        for (auto& group : shared) { group.cpu.reset(); group.loaded_cloud.reset(); }
-        for (auto& sensor : normal) sensor.lidar.reset();
+        for (auto& group : shared) {
+            group.cpu.reset();
+            group.loaded_cloud.reset();
+        }
+        for (auto& sensor : normal)
+            sensor.lidar.reset();
         map_lidar.reset();
         map_scene.reset();
         if (error && !cold_complete) {
             // start may be holding the host's cold lifecycle lock. Do NOT call
             // fatal here: it can take that host lock and deadlock start/join.
-            { std::lock_guard<std::mutex> lock(mutex);
-              initialization_error = error; initialized = true; }
+            {
+                std::lock_guard<std::mutex> lock(mutex);
+                initialization_error = error;
+                initialized = true;
+            }
             wake.notify_all();
         } else if (error) {
             callbacks.fatal(error); // resources gone, host lock free, no self-join
@@ -614,10 +672,13 @@ struct WorldSensorSystem::Impl {
 
 WorldSensorSystem::WorldSensorSystem(WorldSensorConfiguration c, WorldSensorCallbacks cb)
     : impl_(std::make_unique<Impl>(std::move(c), std::move(cb))) {}
-WorldSensorSystem::~WorldSensorSystem() { stop(); }
+WorldSensorSystem::~WorldSensorSystem() {
+    stop();
+}
 void WorldSensorSystem::start() {
     std::unique_lock<std::mutex> lock(impl_->mutex);
-    if (impl_->started) throw std::logic_error("World sensor lifecycle already started");
+    if (impl_->started)
+        throw std::logic_error("World sensor lifecycle already started");
     impl_->started = true;
     impl_->caller = std::thread([this] { impl_->run(); });
     impl_->wake.wait(lock, [this] { return impl_->initialized; });
@@ -629,7 +690,10 @@ void WorldSensorSystem::start() {
     }
 }
 void WorldSensorSystem::notify() noexcept {
-    { std::lock_guard<std::mutex> lock(impl_->mutex); ++impl_->notifications; }
+    {
+        std::lock_guard<std::mutex> lock(impl_->mutex);
+        ++impl_->notifications;
+    }
     impl_->wake.notify_one();
 }
 void WorldSensorSystem::fence() noexcept {

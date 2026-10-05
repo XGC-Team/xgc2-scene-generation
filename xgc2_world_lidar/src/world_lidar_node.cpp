@@ -1013,8 +1013,9 @@ private:
                 v.next_scan = scheduled + ros::Duration(1.0 / v.rate);
         }
         // Each job scans one robot into its reused message and publishes it.
-        pool_->run(active.size(), pool_->threads(),
-                   [&](std::size_t i) { scanAndPublish(vehicles_[active[i]], bodies); });
+        pool_->run(active.size(), pool_->threads(), [&](std::size_t i) {
+            scanAndPublish(vehicles_[active[i]], bodies);
+        });
     }
 
     void scanAndPublish(Vehicle& v, const std::vector<VehicleBody>& bodies) {
