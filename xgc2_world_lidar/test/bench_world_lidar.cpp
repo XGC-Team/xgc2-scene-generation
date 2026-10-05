@@ -286,7 +286,7 @@ int run(int argc, char** argv) {
     for (int t = 0; t < ticks; ++t) {
         const auto tick_start = Clock::now();
         const double cpu_start = cpuMs();
-        pool.run(static_cast<std::size_t>(robots), [&](std::size_t i) {
+        pool.run(static_cast<std::size_t>(robots), pool.threads(), [&](std::size_t i) {
             const Eigen::Vector3d p = start[i] + Eigen::Vector3d(0.075 * t, 0.0, 0.0);
             if (path == "into")
                 fleet[i]->scanInto(p, Eigen::Quaterniond::Identity(), {}, false, &clouds[i]);

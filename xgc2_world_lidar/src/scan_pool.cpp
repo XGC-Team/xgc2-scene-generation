@@ -1,6 +1,7 @@
 #include "xgc2_world_lidar/scan_pool.h"
 
 #include <algorithm>
+#include <stdexcept>
 
 namespace xgc2_world_lidar {
 
@@ -12,7 +13,7 @@ std::size_t defaultScanThreads(std::size_t scans, unsigned hardware) {
 ScanPool::ScanPool(std::size_t threads) {
     try {
         for (std::size_t i = 1; i < threads; ++i)
-            workers_.emplace_back([this] { work(); });
+            workers_.emplace_back([this, ordinal = i - 1] { work(ordinal); });
     } catch (...) {
         {
             std::lock_guard<std::mutex> lock(mutex_);
@@ -50,11 +51,13 @@ void ScanPool::drain() {
     }
 }
 
-void ScanPool::work() {
+void ScanPool::work(std::size_t ordinal) {
     uint64_t seen = 0;
     std::unique_lock<std::mutex> lock(mutex_);
     for (;;) {
-        start_.wait(lock, [&] { return stop_ || batch_ != seen; });
+        start_.wait(lock, [&] {
+            return stop_ || (batch_ != seen && ordinal < selected_workers_);
+        });
         if (stop_)
             return;
         seen = batch_;
@@ -66,10 +69,14 @@ void ScanPool::work() {
     }
 }
 
-void ScanPool::run(std::size_t count, const std::function<void(std::size_t)>& job) {
+void ScanPool::run(std::size_t count, std::size_t thread_limit,
+                   const std::function<void(std::size_t)>& job) {
     if (count == 0)
         return;
-    if (workers_.empty() || count == 1) {
+    if (thread_limit == 0)
+        throw std::invalid_argument("scan batch width must include its caller");
+    const std::size_t selected = std::min({thread_limit, threads(), count});
+    if (selected == 1) {
         std::exception_ptr error;
         for (std::size_t i = 0; i < count; ++i) {
             try {
@@ -89,7 +96,8 @@ void ScanPool::run(std::size_t count, const std::function<void(std::size_t)>& jo
         count_ = count;
         next_.store(0, std::memory_order_relaxed);
         error_ = nullptr;
-        busy_ = workers_.size();
+        selected_workers_ = selected - 1;
+        busy_ = selected_workers_;
         ++batch_;
     }
     start_.notify_all();

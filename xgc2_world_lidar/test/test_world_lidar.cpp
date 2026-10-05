@@ -856,14 +856,14 @@ void testScanPool() {
              {std::size_t{0}, std::size_t{1}, std::size_t{2}, std::size_t{37}}) {
             for (int batch = 0; batch < 20; ++batch) {
                 std::vector<int> runs(count, 0);
-                pool.run(count, [&](std::size_t i) { ++runs[i]; });
+                pool.run(count, pool.threads(), [&](std::size_t i) { ++runs[i]; });
                 CHECK(std::all_of(runs.begin(), runs.end(), [](int n) { return n == 1; }));
             }
         }
         std::vector<int> runs(10, 0);
         bool rethrown = false;
         try {
-            pool.run(runs.size(), [&](std::size_t i) {
+            pool.run(runs.size(), pool.threads(), [&](std::size_t i) {
                 ++runs[i];
                 if (i == 4)
                     throw std::runtime_error("job 4");
@@ -912,7 +912,7 @@ void testParallelFleetEqualsSerial() {
         auto at = [&](int i) { return Eigen::Vector3d(-6.0 + i, 0.3 * tick, 0.5); };
         for (int i = 0; i < robots; ++i)
             serial[i]->scanInto(at(i), kI, {}, false, &a[i]);
-        pool.run(robots, [&](std::size_t i) {
+        pool.run(robots, pool.threads(), [&](std::size_t i) {
             pooled[i]->scanInto(at(static_cast<int>(i)), kI, {}, false, &b[i]);
         });
         for (int i = 0; i < robots; ++i)

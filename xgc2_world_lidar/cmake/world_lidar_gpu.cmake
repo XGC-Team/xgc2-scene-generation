@@ -23,7 +23,9 @@ if(XGC_WORLD_LIDAR_GPU)
   endif()
   add_library(${PROJECT_NAME}_cloud_gpu STATIC src/shared_cloud_gpu.cpp
     "${_gpu_upstream}/glad.c" "${_gpu_upstream}/FOV_Checker/FOV_Checker.cpp")
-  target_include_directories(${PROJECT_NAME}_cloud_gpu PUBLIC include ${PCL_INCLUDE_DIRS}
+  set_target_properties(${PROJECT_NAME}_cloud_gpu PROPERTIES POSITION_INDEPENDENT_CODE ON EXPORT_NAME CloudGpu)
+  target_include_directories(${PROJECT_NAME}_cloud_gpu PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include> ${PCL_INCLUDE_DIRS}
     PRIVATE "${XGC_WORLD_LIDAR_GPU_SOURCE_ROOT}/local_sensing/include" "${_gpu_upstream}"
     "${XGC_WORLD_LIDAR_GPU_GLM_INCLUDE}" "${_gpu_khr_include}" ${OpenCV_INCLUDE_DIRS})
   target_compile_definitions(${PROJECT_NAME}_cloud_gpu PRIVATE XGC_WORLD_LIDAR_GPU=1
@@ -33,6 +35,10 @@ if(XGC_WORLD_LIDAR_GPU)
   set_property(TARGET ${PROJECT_NAME}_cloud_gpu APPEND_STRING PROPERTY LINK_FLAGS " ${OpenMP_CXX_FLAGS}")
   target_link_libraries(${PROJECT_NAME}_cloud_gpu PUBLIC ${PROJECT_NAME}_cloud_cpu
     ${PCL_LIBRARIES} ${OpenCV_LIBS} ${OPENGL_LIBRARIES} glfw ${CMAKE_DL_LIBS})
+  target_compile_definitions(${PROJECT_NAME}_sensor_system PRIVATE XGC_WORLD_LIDAR_GPU=1)
+  target_link_libraries(${PROJECT_NAME}_sensor_system PUBLIC ${PROJECT_NAME}_cloud_gpu)
+  install(TARGETS ${PROJECT_NAME}_cloud_gpu EXPORT XgcWorldLidarTargets
+    ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION} COMPONENT cloud_gpu)
   target_compile_definitions(shared_cloud_cpu_node PRIVATE XGC_WORLD_LIDAR_GPU=1)
   set_property(TARGET shared_cloud_cpu_node APPEND_STRING PROPERTY LINK_FLAGS " ${OpenMP_CXX_FLAGS}")
   target_link_libraries(shared_cloud_cpu_node PRIVATE ${PROJECT_NAME}_cloud_gpu)

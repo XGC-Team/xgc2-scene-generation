@@ -2,7 +2,7 @@
 #define XGC2_WORLD_LIDAR_SCAN_POOL_H
 
 // A fixed set of threads that runs one batch of independent jobs at a time
-// (the fleet node: one robot's scan and publish per job), without ROS. Job
+// (one robot's heavy scan per job; packing/publication stays with its caller), without ROS. Job
 // indices are handed out one at a time, so a robot with a large cloud does
 // not hold up a static share of the others; the calling thread works too.
 // The threads live as long as the pool: a batch costs one wakeup per thread,
@@ -40,10 +40,13 @@ public:
     // have finished. Jobs must not depend on each other. If jobs throw, the
     // others still run and the first exception is rethrown here. Not
     // reentrant: one batch at a time.
-    void run(std::size_t count, const std::function<void(std::size_t)>& job);
+    // thread_limit includes the caller and preserves this batch's original
+    // effective width even when the shared pool has a larger cold capacity.
+    void run(std::size_t count, std::size_t thread_limit,
+             const std::function<void(std::size_t)>& job);
 
 private:
-    void work();
+    void work(std::size_t ordinal);
     void drain();
 
     std::vector<std::thread> workers_;
@@ -54,6 +57,7 @@ private:
     std::size_t count_ = 0;
     std::atomic<std::size_t> next_{0};
     std::size_t busy_ = 0; // workers that have not finished the current batch
+    std::size_t selected_workers_ = 0;
     uint64_t batch_ = 0;
     bool stop_ = false;
     std::exception_ptr error_;

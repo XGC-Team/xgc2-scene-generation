@@ -1,7 +1,7 @@
 schema: xgc2.product.v1
 id: xgc2-scene-generation
 name: XGC2 Scene Generation
-version: 1.2.0-11
+version: 1.2.0-12
 kind: ros1-apt
 summary: ROS1 scene-generation tools for convex obstacle scenarios and procedural
   point-cloud maps.
@@ -37,6 +37,10 @@ apt:
   depends:
   - ros-noetic-xgc2-scene-runtime (>= 1.2.0-3)
   - libxgc2-math-dev (>= 0.5.6-6~focal)
+  - libeigen3-dev
+  - libpcl-dev
+  - ros-noetic-nav-msgs
+  - ros-noetic-pcl-conversions
   - ros-noetic-xgc2-geometry-msgs (>= 1.1.4-11)
   - ros-noetic-xgc2-cluttered-environment (>= 1.1.4-11)
   - ros-noetic-xgc2-mockamap (>= 1.1.4-11)
@@ -75,12 +79,16 @@ ownership:
   - /opt/ros/noetic/share/xgc2_world_lidar
   - /opt/ros/noetic/include/xgc2_world_lidar
   - /opt/ros/noetic/lib/xgc2_world_lidar
+  - /opt/ros/noetic/lib/libxgc2_world_lidar.a
+  - /opt/ros/noetic/lib/libxgc2_world_lidar_cloud_cpu.a
+  - /opt/ros/noetic/lib/libxgc2_world_lidar_sensor_system.a
+  - /opt/ros/noetic/share/cmake/XgcWorldLidar
   - /opt/ros/noetic/lib/pkgconfig/xgc2_world_lidar.pc
   - /opt/ros/noetic/share/mockamap
   - /opt/ros/noetic/include/mockamap
   - /opt/ros/noetic/lib/mockamap
 release:
   apt_versions:
-    focal: 1.2.0-11
+    focal: 1.2.0-12
   dependency_policy:
     libxgc2-math-dev: rebuild

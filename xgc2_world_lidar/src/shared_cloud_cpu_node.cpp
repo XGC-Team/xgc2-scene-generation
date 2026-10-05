@@ -1,44 +1,41 @@
-#include "xgc2_world_lidar/scan_pool.h"
-#include "xgc2_world_lidar/shared_cloud_cpu.hpp"
-#ifdef XGC_WORLD_LIDAR_GPU
-#include "xgc2_world_lidar/shared_cloud_gpu.hpp"
-#include <cstring>
-#endif
-#include <algorithm>
-#include <cstdint>
+#include "xgc2_world_lidar/world_sensor_system.hpp"
 #include <geometry_msgs/PoseStamped.h>
-#include <memory>
 #include <nav_msgs/Odometry.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <ros/ros.h>
+#include <ros/callback_queue.h>
+#include <atomic>
 #include <sensor_msgs/PointCloud2.h>
+#include <algorithm>
+#include <mutex>
+#include <stdexcept>
 #include <string>
 #include <vector>
+
+// This ROS entry remains only for a real external (e.g. Gazebo) source. The
+// lightweight World attaches the same library directly; its recipe retires
+// this process, not the per-robot topics or their scientific source semantics.
 class SharedCloudNode {
     struct Sensor {
         ros::Publisher pub;
         ros::Subscriber pose;
-        bool ready = false;
-        Eigen::Vector3d p;
-        Eigen::Quaterniond q;
-        ros::Time stamp;
-        xgc2_world_lidar::CropResult scratch;
-        sensor_msgs::PointCloud2 output;
+        xgc2_world_lidar::SensorAcquisition source;
     };
     ros::NodeHandle nh_{"~"};
+    ros::CallbackQueue geometry_callbacks_;
+    ros::NodeHandle geometry_nh_{nh_};
     ros::Subscriber input_;
-    ros::Timer timer_;
     xgc2_world_lidar::SensorMetadata metadata_;
-    xgc2_world_lidar::SharedCloudCpu world_;
-#ifdef XGC_WORLD_LIDAR_GPU
-    std::unique_ptr<xgc2_world_lidar::SharedCloudGpu> gpu_world_;
-#endif
     std::vector<Sensor> sensors_;
-    std::unique_ptr<xgc2_world_lidar::ScanPool> cpu_pool_;
-    bool loaded_ = false, zero_stamp_ = false, gpu_ = false;
+    std::mutex source_mutex_;
+    std::shared_ptr<const xgc2_world_lidar::WorldSensorGeometry> geometry_;
+    std::unique_ptr<xgc2_world_lidar::WorldSensorSystem> system_;
+    bool loaded_ = false, gpu_ = false;
+    std::atomic<bool> failed_{false};
 
 public:
     SharedCloudNode() {
+        geometry_nh_.setCallbackQueue(&geometry_callbacks_);
         auto& m = metadata_;
         nh_.getParam("observation_model", m.observation_model);
         nh_.getParam("backend", m.backend);
@@ -76,14 +73,13 @@ public:
                 throw std::invalid_argument(
                     "explicit GPU spherical grid/near/point-cover required");
             xgc2_world_lidar::validateGpuSensorMetadata(m);
-            gpu_world_ = std::make_unique<xgc2_world_lidar::SharedCloudGpu>();
 #else
             throw std::invalid_argument("GPU is unsupported by this CPU-only build; no fallback");
 #endif
         } else {
             xgc2_world_lidar::validateSensorMetadata(m);
         }
-        zero_stamp_ = m.stamp_policy == "zero";
+
         std::vector<std::string> poses, outputs;
         if (!nh_.getParam("pose_topics", poses) || !nh_.getParam("output_topics", outputs) ||
             poses.empty() || poses.size() != outputs.size() || m.input_cloud_topic.empty())
@@ -91,32 +87,21 @@ public:
         if (m.pose_type != "nav_msgs/Odometry" && m.pose_type != "geometry_msgs/PoseStamped")
             throw std::runtime_error("unsupported explicit pose type");
         sensors_.resize(poses.size());
+        xgc2_world_lidar::WorldSensorConfiguration config;
+        config.source_count = poses.size();
+        std::size_t effective_threads = 1;
         if (!gpu_) {
-            // Total parallelism includes the caller: 1 is serial; 0 is invalid, not auto.
             const int worker_threads = nh_.param("worker_threads", 1);
             if (worker_threads < 1)
                 throw std::invalid_argument("CPU worker_threads must be positive");
-            const std::size_t threads = std::min<std::size_t>(
-                static_cast<std::size_t>(worker_threads), sensors_.size());
-            if (threads > 1)
-                cpu_pool_ = std::make_unique<xgc2_world_lidar::ScanPool>(threads);
+            effective_threads = std::min<std::size_t>(worker_threads, poses.size());
         }
+        xgc2_world_lidar::SharedSensorEquipment equipment;
+        equipment.metadata = m;
+        equipment.worker_threads = effective_threads;
         for (std::size_t i = 0; i < poses.size(); ++i) {
+            equipment.source_indices.push_back(i);
             sensors_[i].pub = nh_.advertise<sensor_msgs::PointCloud2>(outputs[i], 10);
-#ifdef XGC_WORLD_LIDAR_GPU
-            if (gpu_) {
-                pcl::PointCloud<pcl::PointXYZI> empty;
-                pcl::toROSMsg(empty, sensors_[i].output);
-                if (sensors_[i].output.point_step != sizeof(pcl::PointXYZI))
-                    throw std::runtime_error("actual original GPU XYZ/intensity layout required");
-            } else
-#endif
-            {
-                pcl::PointCloud<pcl::PointXYZ> empty;
-                pcl::toROSMsg(empty, sensors_[i].output);
-                if (sensors_[i].output.point_step != sizeof(pcl::PointXYZ))
-                    throw std::runtime_error("actual PCL XYZ layout required");
-            }
             if (m.pose_type == "nav_msgs/Odometry")
                 sensors_[i].pose = nh_.subscribe<nav_msgs::Odometry>(
                     poses[i], 50, [this, i](const nav_msgs::Odometry::ConstPtr& p) {
@@ -128,91 +113,63 @@ public:
                         setPose(i, p->pose, p->header.stamp);
                     });
         }
-        input_ = nh_.subscribe<sensor_msgs::PointCloud2>(
+        config.shared.push_back(std::move(equipment));
+        xgc2_world_lidar::WorldSensorCallbacks callbacks;
+        callbacks.now = [] { return ros::Time::now(); };
+        callbacks.process_inputs = [this] {
+            geometry_callbacks_.callAvailable(ros::WallDuration(0));
+        };
+        callbacks.capture = [this](xgc2_world_lidar::WorldSensorAcquisition& out) {
+            std::lock_guard<std::mutex> lock(source_mutex_);
+            for (std::size_t i = 0; i < sensors_.size(); ++i) out.sources[i] = sensors_[i].source;
+            out.geometry = geometry_;
+        };
+        callbacks.publish = [this](std::size_t i, xgc2_world_lidar::SensorOutputKind,
+                                   const sensor_msgs::PointCloud2& cloud,
+                                   const xgc2_world_lidar::SensorAcquisition&) {
+            sensors_[i].pub.publish(cloud);
+        };
+        callbacks.fatal = [this](std::exception_ptr error) {
+            failed_.store(true, std::memory_order_release);
+            try { std::rethrow_exception(error); }
+            catch (const std::exception& e) { ROS_FATAL("%s", e.what()); }
+            catch (...) { ROS_FATAL("unknown shared sensor backend failure"); }
+            ros::shutdown();
+        };
+        system_ = std::make_unique<xgc2_world_lidar::WorldSensorSystem>(std::move(config),
+                                                                     std::move(callbacks));
+        input_ = geometry_nh_.subscribe<sensor_msgs::PointCloud2>(
             m.input_cloud_topic, 1, [this](const sensor_msgs::PointCloud2::ConstPtr& msg) {
-                if (loaded_)
-                    return;
+                { std::lock_guard<std::mutex> lock(source_mutex_); if (loaded_) return; }
                 pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
                 pcl::fromROSMsg(*msg, *cloud);
-#ifdef XGC_WORLD_LIDAR_GPU
-                if (gpu_) {
-                    if (msg->header.frame_id != metadata_.frame_id)
-                        throw std::invalid_argument(
-                            "GPU cloud must already use the declared world frame");
-                    gpu_world_->load(cloud, metadata_);
-                } else
-#endif
-                {
-                    world_.load(cloud, metadata_);
-                }
-                loaded_ = true;
-                input_.shutdown(); // original static first-cloud contract
+                if (gpu_ && msg->header.frame_id != metadata_.frame_id)
+                    throw std::invalid_argument("GPU cloud must already use the declared world frame");
+                auto geometry = std::make_shared<xgc2_world_lidar::WorldSensorGeometry>();
+                geometry->version = 1;
+                geometry->shared.push_back(cloud);
+                { std::lock_guard<std::mutex> lock(source_mutex_);
+                  geometry_ = std::move(geometry); loaded_ = true; }
+                input_.shutdown(); // exact original first-cloud lifecycle, including empty CPU input
+                system_->notify();
             });
-        timer_ = nh_.createTimer(ros::Duration(1.0 / m.publish_rate_hz),
-                                 [this](const ros::TimerEvent&) { tick(); });
+        system_->start(); // one sensor caller replaces this entry's old scan/timer owner
     }
+    ~SharedCloudNode() {
+        system_->fence();
+        input_.shutdown();
+        geometry_callbacks_.disable();
+        for (auto& sensor : sensors_) sensor.pose.shutdown();
+        system_->stop(); // input snapshots, publisher and geometry owners still alive
+    }
+    bool failed() const { return failed_.load(std::memory_order_acquire); }
     void setPose(std::size_t i, const geometry_msgs::Pose& p, const ros::Time& stamp) {
-        auto& s = sensors_[i];
-        s.p = {p.position.x, p.position.y, p.position.z};
-        s.q = {p.orientation.w, p.orientation.x, p.orientation.y, p.orientation.z};
-        s.stamp = stamp;
-        s.ready = true;
-    }
-    void tick() {
-        if (!loaded_)
-            return;
-        if (cpu_pool_) {
-            // Single ROS spin keeps poses and the installed index unchanged until join.
-            // One complete query per sensor; only its reusable scratch is written.
-            cpu_pool_->run(sensors_.size(), [this](std::size_t i) {
-                auto& s = sensors_[i];
-                if (s.ready)
-                    world_.scanInto(s.p, s.q, &s.scratch);
-            });
-        }
-        for (auto& s : sensors_) {
-            if (!s.ready)
-                continue;
-            const void* points = nullptr;
-#ifdef XGC_WORLD_LIDAR_GPU
-            if (gpu_) {
-                const auto& scan = gpu_world_->scan(s.p, s.q, s.stamp.toSec());
-                s.output.width = scan.size();
-                s.output.is_dense = scan.is_dense;
-                points = scan.points.data(); // one renderer buffer, serialize before the next pose
-            } else
-#endif
-            {
-                if (!cpu_pool_)
-                    world_.scanInto(s.p, s.q, &s.scratch);
-                if (!s.scratch.radius_candidates)
-                    continue; // original CPU zero-neighbour no-publication behavior
-                s.output.width = s.scratch.cloud.size();
-                s.output.is_dense = true;
-                points = s.scratch.cloud.points.data();
-            }
-            s.output.height = 1;
-            s.output.row_step = s.output.width * s.output.point_step;
-#ifdef XGC_WORLD_LIDAR_GPU
-            if (gpu_) {
-                s.output.data.resize(s.output.row_step);
-                if (!s.output.data.empty())
-                    std::memcpy(s.output.data.data(), points, s.output.data.size());
-            } else
-#endif
-            {
-                // Keep one owned payload copy; avoid resize's redundant tail initialization.
-                if (s.output.row_step == 0) {
-                    s.output.data.clear();
-                } else {
-                    const auto* bytes = static_cast<const std::uint8_t*>(points);
-                    s.output.data.assign(bytes, bytes + s.output.row_step);
-                }
-            }
-            s.output.header.frame_id = metadata_.frame_id;
-            s.output.header.stamp = zero_stamp_ ? ros::Time(0) : s.stamp;
-            s.pub.publish(s.output);
-        }
+        { std::lock_guard<std::mutex> lock(source_mutex_);
+          auto& s = sensors_[i].source;
+          s.position = {p.position.x, p.position.y, p.position.z};
+          s.orientation = {p.orientation.w, p.orientation.x, p.orientation.y, p.orientation.z};
+          s.source_stamp = stamp; s.ready = true; ++s.source_version; }
+        system_->notify();
     }
 };
 int main(int argc, char** argv) {
@@ -220,6 +177,7 @@ int main(int argc, char** argv) {
     try {
         SharedCloudNode node;
         ros::spin();
+        return node.failed() ? 1 : 0;
     } catch (const std::exception& e) {
         ROS_FATAL("%s", e.what());
         return 1;

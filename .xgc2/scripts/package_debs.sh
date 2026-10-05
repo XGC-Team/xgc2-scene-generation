@@ -117,6 +117,23 @@ build_ros_package_deb() {
     echo "missing installed ROS package: ${ros_pkg}" >&2; exit 1;
   }
   copy_ros_package_paths "${ros_pkg}" "${pkg_root}"
+  if [[ "${ros_pkg}" == "xgc2_world_lidar" ]]; then
+    for library in libxgc2_world_lidar.a libxgc2_world_lidar_cloud_cpu.a \
+        libxgc2_world_lidar_sensor_system.a; do
+      test -s "${PREFIX_ROOT}/lib/${library}" || {
+        echo "missing installed world sensor archive: ${library}" >&2; exit 1;
+      }
+      copy_path "${PREFIX_ROOT}/lib/${library}" "${pkg_root}"
+    done
+    for export_file in XgcWorldLidarConfig.cmake XgcWorldLidarTargets.cmake \
+        XgcWorldLidarTargets-release.cmake; do
+      test -f "${PREFIX_ROOT}/share/cmake/XgcWorldLidar/${export_file}" || {
+        echo "missing installed world sensor export: ${export_file}" >&2; exit 1;
+      }
+    done
+    test -f "${PREFIX_ROOT}/include/xgc2_world_lidar/world_sensor_system.hpp"
+    copy_path "${PREFIX_ROOT}/share/cmake/XgcWorldLidar" "${pkg_root}"
+  fi
   write_control "${pkg_root}" "${package}" "${depends}" "${description}"
   fakeroot dpkg-deb --build "${pkg_root}" "${OUTPUT_DIR}/${package}_${VERSION}_${ARCH}.deb" >/dev/null
 }
@@ -159,7 +176,7 @@ build_ros_package_deb \
 build_ros_package_deb \
   "${world_lidar_pkg}" \
   "xgc2_world_lidar" \
-  "${msgs_pkg} (= ${VERSION}), ros-noetic-roscpp, ros-noetic-roslib, ros-noetic-geometry-msgs, ros-noetic-sensor-msgs, ros-noetic-std-srvs" \
+  "${msgs_pkg} (= ${VERSION}), ros-noetic-roscpp, ros-noetic-roslib, ros-noetic-geometry-msgs, ros-noetic-nav-msgs, ros-noetic-sensor-msgs, ros-noetic-pcl-conversions, ros-noetic-std-srvs, libeigen3-dev, libpcl-dev" \
   "XGC2 optional world-frame simple lidar for simulated robots"
 
 meta_root="${BUILD_DIR}/${meta_pkg}"
