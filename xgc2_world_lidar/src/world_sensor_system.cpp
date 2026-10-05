@@ -526,8 +526,11 @@ struct WorldSensorSystem::Impl {
             sensor.output.row_step = sensor.output.width * sensor.output.point_step;
             if (metadata.backend == "gpu") {
                 sensor.output.data.resize(sensor.output.row_step);
-                if (!sensor.output.data.empty())
+                if (!sensor.output.data.empty()) {
+                    if (!points)
+                        throw std::runtime_error("nonempty GPU output requires scan data");
                     std::memcpy(sensor.output.data.data(), points, sensor.output.data.size());
+                }
             } else if (sensor.output.row_step == 0) {
                 sensor.output.data.clear();
             } else {
@@ -670,10 +673,17 @@ struct WorldSensorSystem::Impl {
     }
 };
 
-WorldSensorSystem::WorldSensorSystem(WorldSensorConfiguration c, WorldSensorCallbacks cb)
-    : impl_(std::make_unique<Impl>(std::move(c), std::move(cb))) {}
-WorldSensorSystem::~WorldSensorSystem() {
-    stop();
+WorldSensorSystem::WorldSensorSystem(WorldSensorConfiguration configuration,
+                                     WorldSensorCallbacks callbacks)
+    : impl_(std::make_unique<Impl>(std::move(configuration), std::move(callbacks))) {}
+WorldSensorSystem::~WorldSensorSystem() noexcept {
+    try {
+        stop();
+    } catch (...) {
+        // A failed join cannot release borrowed owners or detach the caller.
+        // Preserve the destructor's original noexcept failure semantics.
+        std::terminate();
+    }
 }
 void WorldSensorSystem::start() {
     std::unique_lock<std::mutex> lock(impl_->mutex);

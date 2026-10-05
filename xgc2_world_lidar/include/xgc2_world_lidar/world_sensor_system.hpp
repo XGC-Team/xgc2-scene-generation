@@ -150,7 +150,7 @@ struct WorldSensorCallbacks {
 class WorldSensorSystem {
 public:
     WorldSensorSystem(WorldSensorConfiguration configuration, WorldSensorCallbacks callbacks);
-    ~WorldSensorSystem();
+    ~WorldSensorSystem() noexcept;
     WorldSensorSystem(const WorldSensorSystem&) = delete;
     WorldSensorSystem& operator=(const WorldSensorSystem&) = delete;
 
