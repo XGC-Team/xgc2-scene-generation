@@ -103,7 +103,7 @@ struct Rig {
             outputs.push_back({index, kind, cloud, sample}); // caller consumes owned copy
             changed.notify_all();
         };
-        c.fatal = [this](std::exception_ptr) {
+        c.fatal = [this](const std::exception_ptr&) {
             std::lock_guard<std::mutex> lock(mutex);
             failed = true;
             changed.notify_all();
@@ -394,7 +394,7 @@ TEST(WorldSensorExecution, ColdStartFailureReturnsWithoutRuntimeFatalOrInputWait
     callbacks.now = []() -> ros::Time {
         throw std::runtime_error("cold clock initialization failed");
     };
-    callbacks.fatal = [&](std::exception_ptr) { runtime_fatal = true; };
+    callbacks.fatal = [&](const std::exception_ptr&) { runtime_fatal = true; };
     rig.system = std::make_unique<WorldSensorSystem>(sharedConfig(), std::move(callbacks));
     EXPECT_THROW(rig.system->start(), std::runtime_error);
     rig.system->stop();
