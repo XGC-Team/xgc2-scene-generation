@@ -134,7 +134,7 @@ public:
         callbacks.fatal = [this](std::exception_ptr error) {
             failed_.store(true, std::memory_order_release);
             try {
-                std::rethrow_exception(error);
+                std::rethrow_exception(std::move(error));
             } catch (const std::exception& e) {
                 ROS_FATAL("%s", e.what());
             } catch (...) {
