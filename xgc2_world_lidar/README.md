@@ -35,6 +35,12 @@ without fallback. Pinhole/through GPU, moving-body sensing, dynamic world
 replacement and pose-loss invalidation are not implemented by this entry.
 Legacy camera/noise/pattern declarations are not mapped to GPU sensor behavior.
 
+The native GPU uses one common `polar_res` for both axes. Its metadata requires
+`h_fov_deg / h_res == v_fov_deg / v_res` in the native float domain. For example,
+120° × 60° with 240 × 120 samples is valid; 240 × 30 at those FOVs is rejected.
+This protects the actual vertical FOV without changing the original kernel,
+requested precision, or selecting a CPU fallback.
+
 CPU compilation is the default. To include the original GPU adapter, enable
 `XGC_WORLD_LIDAR_GPU=ON`; optional CMake then finds GLFW, GLM, OpenGL/Khronos,
 OpenCV, PCL and OpenMP. These dependencies are external: GPU dependencies are
