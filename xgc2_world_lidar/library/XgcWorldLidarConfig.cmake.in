@@ -1,0 +1,12 @@
+@PACKAGE_INIT@
+include(CMakeFindDependencyMacro)
+find_dependency(Eigen3)
+find_dependency(Threads)
+if(@XGC_WORLD_LIDAR_GPU@)
+  find_dependency(PCL COMPONENTS common io filters features search kdtree)
+  find_dependency(OpenCV)
+  find_dependency(OpenGL)
+  find_dependency(glfw3)
+  find_dependency(OpenMP)
+endif()
+include("${CMAKE_CURRENT_LIST_DIR}/XgcWorldLidarTargets.cmake")
