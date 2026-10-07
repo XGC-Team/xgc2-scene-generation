@@ -36,7 +36,8 @@ void validateGpuSensorMetadata(const SensorMetadata& m) {
             "finite positive GPU range/spacing/rate and spherical grid required");
     const float h_step = static_cast<float>(m.h_fov_deg) / static_cast<float>(m.h_res);
     const float v_step = static_cast<float>(m.v_fov_deg) / static_cast<float>(m.v_res);
-    if (!std::isfinite(h_step) || h_step <= 0 || !std::isfinite(v_step) || v_step<=0 || h_step!=v_step)
+    if (!std::isfinite(h_step) || h_step <= 0 || !std::isfinite(v_step) || v_step <= 0 ||
+        h_step != v_step)
         throw std::invalid_argument(
             "original GPU requires one common angular step: h_fov_deg/h_res == v_fov_deg/v_res");
     // Original shader asin(cover_dis/depth), with depth >= near.

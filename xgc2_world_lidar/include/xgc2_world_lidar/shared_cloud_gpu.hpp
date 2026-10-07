@@ -19,8 +19,8 @@ public:
     const pcl::PointCloud<pcl::PointXYZI>&
     scan(const Eigen::Vector3d& position, const Eigen::Quaterniond& orientation, double stamp);
     // Switch per-sensor projection on the same uploaded map and GL context.
-    const pcl::PointCloud<pcl::PointXYZI>& scan(const Eigen::Vector3d&, const Eigen::Quaterniond&,
-                                              double stamp, const SensorMetadata&);
+    const pcl::PointCloud<pcl::PointXYZI>&
+    scan(const Eigen::Vector3d&, const Eigen::Quaterniond&, double stamp, const SensorMetadata&);
 
 private:
     std::unique_ptr<opengl_pointcloud_render> renderer_;
