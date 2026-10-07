@@ -15,7 +15,8 @@ int main() {
     source.setScene({Obstacle::box({5, 0, 0}, {1, 6, 4})});
     pcl::PointCloud<pcl::PointXYZ>::Ptr map(new pcl::PointCloud<pcl::PointXYZ>);
     for (const auto& p : source.globalMap(.1))
-        map->push_back(pcl::PointXYZ(p.x(), p.y(), p.z()));
+        map->push_back(pcl::PointXYZ(
+            static_cast<float>(p.x()), static_cast<float>(p.y()), static_cast<float>(p.z())));
     SensorMetadata configs[2];
     pcl::PointCloud<pcl::PointXYZI> references[2];
     for (int i = 0; i < 2; ++i) {
