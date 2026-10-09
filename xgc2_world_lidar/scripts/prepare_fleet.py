@@ -18,7 +18,7 @@ def prepare(envelope):
     for robot in robots:
         if context['runMode'] == 'hybrid' and robot['hybridSource'] != 'simulation':
             continue
-        authored = robot['authoredSimulationSensors']['simpleLidar']
+        authored = robot['authoredSimulationSensors'].get('simpleLidar', False)
         lidar = dict(enabled=authored) if isinstance(authored, bool) else authored
         mode, preset = lidar.get('mode', ''), lidar.get('preset', '')
         if not lidar.get('enabled', False) or not (mode in ('penetrating', 'depth_frustum') or lidar.get('publishBeams', False) or (preset and mode != 'raycast')):
