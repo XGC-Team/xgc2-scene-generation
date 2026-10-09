@@ -104,7 +104,7 @@ public:
         }
         return value;
     }
-    void Handle(HttpRequest request, HttpReply reply) {
+    void Handle(HttpRequest request, const HttpReply& reply) {
         try {
             std::unique_lock<std::mutex> lock(mutex);
             if (stopping) {
@@ -211,7 +211,9 @@ public:
                     index = i;
                     break;
                 }
-                if (operations[i].state != "accepted" && operations[i].completed < oldest) {
+                if (operations[i].state != "accepted" &&
+                    operations[i].completed.time_since_epoch().count() <
+                        oldest.time_since_epoch().count()) {
                     index = i;
                     oldest = operations[i].completed;
                 }
@@ -255,7 +257,8 @@ public:
                 enabled = operations[index].enabled;
             }
             std::string failure;
-            if (Clock::now() >= operations[index].deadline)
+            if (Clock::now().time_since_epoch().count() >=
+                operations[index].deadline.time_since_epoch().count())
                 failure = "deadline_exceeded";
             else
                 try {
