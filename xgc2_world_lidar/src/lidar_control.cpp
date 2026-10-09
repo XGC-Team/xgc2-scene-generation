@@ -306,7 +306,7 @@ void LidarControl::Start() {
     limits.request_timeout = std::chrono::seconds(60);
     s.host = std::make_unique<HttpServer>(
         UnixOptions{s.socket},
-        [&s](HttpRequest r, HttpReply p) { s.Handle(std::move(r), std::move(p)); },
+        [&s](HttpRequest r, const HttpReply& p) { s.Handle(std::move(r), p); },
         limits,
         HttpIdentity{s.instance, {"/v1/describe"}});
     s.io = std::thread([&s] { s.host->run(); });

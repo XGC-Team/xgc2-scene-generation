@@ -13,6 +13,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--socket', required=True)
     parser.add_argument('--target-id', required=True)
+    parser.add_argument('--service', default='xgc2.simulation')
     parser.add_argument('--field', required=True, choices=('lifecycle', 'state'))
     parser.add_argument('--timeout', type=float, default=1)
     args = parser.parse_args()
@@ -22,7 +23,7 @@ def main():
     client = None
     try:
         deadline = time.monotonic()+args.timeout
-        discovery = ServiceRef.from_dict(dict(target_id=args.target_id, service='xgc2.simulation',
+        discovery = ServiceRef.from_dict(dict(target_id=args.target_id, service=args.service,
                                               api_version='v1', profile='http.v1', instance_id='',
                                               endpoint={'kind':'unix', 'address':args.socket}))
         limits = Limits(call_timeout=args.timeout, response_bytes=65536, connections=1)
