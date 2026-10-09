@@ -127,3 +127,10 @@ declare which motion models they support.
 ## External random scene sources
 
 A `xgc2.scene-source.v1` source declares `mode: random`, `format: geometry`, and a `generator` with an explicit `command` argument vector and numeric `parameters`. The external generator returns JSON with a validated `scene` document and provenance fields. The runtime generates once for its Run-owned `working_file`, saves the geometry and `.generation.yaml` receipt, and reuses that result on process restart. Failed generators publish no scene. Fixed sources continue to use `xgc2.scene.v1` directly; the simulator consumes the same saved geometry authority.
+
+The finite `python3 -m xgc2_scene_runtime.assembly` entry reads JSON from stdin
+and writes `{sceneDocument, task}` to stdout. Its input is `{request, documents,
+extrinsic}`: the archive owner supplies each sealed element document in request
+order and the sealed camera extrinsic. The runtime applies placements with its
+canonical pose/motion functions and validates the resulting scene. It opens no
+files, starts no ROS node, and exits with status 2 for invalid input.
