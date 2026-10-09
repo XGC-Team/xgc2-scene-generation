@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2016,SC1004
 set -euo pipefail
+export SETUPTOOLS_USE_DISTUTILS=stdlib
 # Literal scripts below are expanded by Bash inside the build container.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -18,6 +19,7 @@ while [[ $# -gt 0 ]]; do
 done
 "${SCRIPT_DIR}/run_in_build_container.sh" "${container_args[@]}" -- bash -c '
   set -euo pipefail
+  export SETUPTOOLS_USE_DISTUTILS=stdlib
   case "${ROS_DISTRO}" in
     melodic) packages=(xgc2_geometry_msgs) ;;
     noetic) packages=(xgc2_geometry_msgs cluttered_environment mockamap xgc2_scene_runtime xgc2_world_lidar) ;;

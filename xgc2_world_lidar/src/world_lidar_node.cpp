@@ -26,8 +26,8 @@
  * ~preset and the sensor parameters; see prepareParameters(). Switches ~enabled initial state
  * (default true). While disabled the node scans nothing and publishes nothing (no empty clouds: an
  * empty cloud would read as observed-free space). The source-owned XRPC control
- * host applies enabled changes on this node's callback boundary. ~enabled_vehicles list of vehicle ids that get a sensor;
- * empty = all served vehicles. The others get no publisher.
+ * host applies enabled changes on this node's callback boundary. ~enabled_vehicles list of vehicle
+ * ids that get a sensor; empty = all served vehicles. The others get no publisher.
  *
  * Snapshot rules: an older revision of the current epoch is ignored; a
  * snapshot with dynamic obstacles waits for a state of the same epoch and
@@ -590,10 +590,14 @@ public:
                                : defaultScanThreads(sensed, std::thread::hardware_concurrency());
         pool_ = std::make_unique<ScanPool>(threads);
         std::string control_socket, control_target;
-        if (!pnh.getParam("xrpc_socket", control_socket) || !pnh.getParam("target_id", control_target))
-            throw std::invalid_argument("world_lidar requires explicit ~xrpc_socket and ~target_id");
-        control_ = std::make_unique<LidarControl>(control_socket, control_target, enabled_, nh_.getCallbackQueue(),
-                                                [this](bool enabled) { enabled_ = enabled; });
+        if (!pnh.getParam("xrpc_socket", control_socket) ||
+            !pnh.getParam("target_id", control_target))
+            throw std::invalid_argument(
+                "world_lidar requires explicit ~xrpc_socket and ~target_id");
+        control_ = std::make_unique<LidarControl>(
+            control_socket, control_target, enabled_, nh_.getCallbackQueue(), [this](bool enabled) {
+                enabled_ = enabled;
+            });
         control_->Start();
 
         const std::string scene_source = pnh.param<std::string>("scene_source", "snapshot");
