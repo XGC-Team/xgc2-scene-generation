@@ -16,6 +16,8 @@ find_package(catkin QUIET COMPONENTS
   roscpp roslib geometry_msgs nav_msgs sensor_msgs pcl_conversions xgc2_geometry_msgs
 )
 if(catkin_FOUND)
+  catkin_install_python(PROGRAMS scripts/prepare_fleet.py
+    DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
   catkin_package(INCLUDE_DIRS include
     CATKIN_DEPENDS roscpp roslib geometry_msgs nav_msgs sensor_msgs pcl_conversions xgc2_geometry_msgs
     DEPENDS PCL)
