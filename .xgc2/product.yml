@@ -81,6 +81,8 @@ ownership:
   - /opt/ros/noetic/include/mockamap
   - /opt/ros/noetic/lib/mockamap
 release:
+  requires:
+  - xgc2-xrpc
   apt_versions:
     focal: 1.2.0-12
   dependency_policy:
