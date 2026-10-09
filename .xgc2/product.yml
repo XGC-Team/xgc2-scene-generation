@@ -85,3 +85,4 @@ release:
     focal: 1.2.0-12
   dependency_policy:
     libxgc2-math-dev: rebuild
+    xgc2-xrpc: verify
