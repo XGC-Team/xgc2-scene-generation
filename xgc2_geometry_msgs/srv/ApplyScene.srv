@@ -1,6 +1,0 @@
-SceneSnapshot scene
----
-bool success
-string message
-string epoch
-uint64 applied_revision

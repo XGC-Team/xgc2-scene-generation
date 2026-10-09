@@ -29,7 +29,7 @@ class OriginalComparison(NodeFixture):
                               h_res=30, v_res=10, width=30, height=10, noise_std=0.0)
             for variant, executable in [('original', original_executable), ('candidate', None)]:
                 name = 'pr6_' + label + '_' + variant
-                self.start(name, executable=executable,
+                self.start(name, executable=executable, source_control=(variant == 'candidate'),
                            output_topic_pattern='/' + name + '/points', **parameters)
                 streams.append(self.listen('/' + name + '/points'))
             self.wait(lambda: min(scene_pub.get_num_connections(), state_pub.get_num_connections(),

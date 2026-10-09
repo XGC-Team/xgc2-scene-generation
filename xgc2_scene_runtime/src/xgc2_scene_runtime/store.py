@@ -9,6 +9,7 @@ Nothing may modify a document, its obstacles or their fields in place.
 import hashlib
 import json
 import os
+import re
 import stat
 from pathlib import Path
 import tempfile
@@ -145,13 +146,22 @@ def digest(data):
 
 
 def load(path):
-    data = Path(path).read_bytes()
+    with Path(path).open('rb') as stream:
+        data = stream.read(MAX_DOCUMENT_BYTES+1)
     if len(data) > MAX_DOCUMENT_BYTES:
         raise SceneError('Scene file exceeds the supported size')
     try:
         return document(yaml.load(data, Loader=SceneLoader)), digest(data)
     except yaml.YAMLError as error:
         raise SceneError('Invalid scene YAML: {}'.format(error))
+
+
+def file_digest(path):
+    with Path(path).open('rb') as stream:
+        data = stream.read(MAX_DOCUMENT_BYTES+1)
+    if len(data) > MAX_DOCUMENT_BYTES:
+        raise SceneError('Scene file exceeds the supported size')
+    return digest(data)
 
 
 FROZEN_REJECTED = frozenset(
@@ -161,7 +171,7 @@ FROZEN_ERROR = 'Scene geometry is read-only for this simulator; select an editab
 
 class SceneStore:
     def __init__(self, initial, source=None, save_root=None, apply=None, clock=time.monotonic, source_digest=None,
-                 frozen=False, working_file=None):
+                 frozen=False, working_file=None, motion=None):
         self.lock = threading.RLock()
         self.frozen = bool(frozen)
         self.working_file = Path(working_file).resolve() if working_file else None
@@ -171,6 +181,8 @@ class SceneStore:
         self.document = document(initial)
         self.epoch = str(uuid.uuid4())
         self.revision = 1
+        self.applied_revision = 0
+        self.application_known = False
         self.next_revision = 2
         self.saved_revision = 1
         self.saved_document = self.document
@@ -179,8 +191,9 @@ class SceneStore:
         self.save_root = Path(save_root).resolve() if save_root else (save_target.parent if save_target else None)
         self.file_digests = {}
         if self.source and self.source.exists():
-            self.file_digests[self.source] = source_digest or digest(self.source.read_bytes())
+            self.file_digests[self.source] = source_digest or file_digest(self.source)
         self.apply = apply or (lambda doc, epoch, revision: None)
+        self.motion = motion or (lambda operation, epoch, revision: None)
         self.clock = clock
         self.playing = False
         self.elapsed = 0.0
@@ -190,6 +203,8 @@ class SceneStore:
         self.requests = OrderedDict()
         self.yaml = DocumentYaml()
         self.apply(self.document, self.epoch, self.revision)
+        self.applied_revision = self.revision
+        self.application_known = True
 
     def scene_time(self):
         return self.elapsed + (max(0.0, self.clock()-self.started_at) if self.playing else 0.0)
@@ -199,7 +214,12 @@ class SceneStore:
         with self.lock:
             return {'epoch': self.epoch, 'revision': self.revision, 'savedRevision': self.saved_revision,
                     'dirty': self.document is not self.saved_document and self.document != self.saved_document,
-                    'playing': self.playing, 'frozen': self.frozen}
+                    'playing': self.playing, 'frozen': self.frozen,
+                    'configuration': {
+                        'desired': {'epoch': self.epoch, 'revision': self.revision},
+                        'applied': {'epoch': self.epoch, 'revision': self.applied_revision,
+                                    'known': self.application_known},
+                        'persisted': {'epoch': self.epoch, 'revision': self.saved_revision}}}
 
     def envelope(self):
         with self.lock:
@@ -218,7 +238,9 @@ class SceneStore:
                 fields(request, ('requestId', 'expectedEpoch', 'expectedRevision', 'operation', 'obstacle', 'id', 'document'), ('operation',))
                 if request['operation'] == 'get':
                     return dict(self.envelope(), success=True)
-                rid = identifier(request.get('requestId'), 'Request ID')
+                rid = request.get('requestId')
+                if not isinstance(rid, str) or not re.fullmatch(r'[A-Za-z0-9._:-]{1,128}', rid, re.ASCII):
+                    raise SceneError('Request ID must follow the XRPC identity contract')
                 fingerprint = json.dumps(request, sort_keys=True, allow_nan=False)
                 previous = self.requests.get(rid)
                 if previous:
@@ -264,6 +286,7 @@ class SceneStore:
             self.redo_stack.clear()
             return
         if operation in ('play', 'pause', 'reset'):
+            self.motion(operation, self.epoch, self.revision)
             elapsed = self.scene_time()
             self.playing = operation == 'play'
             self.elapsed = 0.0 if operation == 'reset' else elapsed
@@ -330,7 +353,7 @@ class SceneStore:
 
     def _check_source(self):
         if self.source is not None:
-            current = digest(self.source.read_bytes()) if self.source.exists() else None
+            current = file_digest(self.source) if self.source.exists() else None
             if current != self.file_digests.get(self.source):
                 raise SceneError('Scene YAML changed outside the editor; reload YAML before editing')
 
@@ -348,7 +371,10 @@ class SceneStore:
         # revision after either a partial failure or an ambiguous lost reply.
         revision = self.next_revision
         self.next_revision += 1
+        self.application_known = False
         self.apply(candidate, self.epoch, revision)
+        self.applied_revision = revision
+        self.application_known = True
         return revision
 
     def _save(self):
@@ -367,7 +393,7 @@ class SceneStore:
             target.parent.mkdir(parents=True, exist_ok=True)
         if not target.parent.is_dir():
             raise SceneError('Save directory does not exist')
-        current = digest(target.read_bytes()) if target.exists() else None
+        current = file_digest(target) if target.exists() else None
         expected = self.file_digests.get(target)
         if current != expected:
             raise SceneError('Scene YAML changed outside the editor; reload YAML before editing')
@@ -381,7 +407,7 @@ class SceneStore:
                 stream.flush()
                 os.fsync(stream.fileno())
             # Recheck after serialization; do not overwrite an external edit detected here.
-            actual = digest(target.read_bytes()) if target.exists() else None
+            actual = file_digest(target) if target.exists() else None
             if actual != expected:
                 raise SceneError('Scene file changed while saving')
             os.replace(temporary, str(target))

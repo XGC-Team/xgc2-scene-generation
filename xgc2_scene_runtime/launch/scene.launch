@@ -6,6 +6,9 @@
   <arg name="gazebo" default="true" />
   <arg name="frozen" default="false" />
   <arg name="generation_parameters_json" default="{}" />
+  <arg name="xrpc_socket" />
+  <arg name="target_id" />
+  <arg name="simulation_service_ref_json" default="" />
   <group ns="$(arg scene_namespace)">
     <node pkg="xgc2_scene_runtime" type="scene_node" name="runtime" output="screen" required="true">
       <param name="scene_file" value="$(arg scene_file)" />
@@ -14,6 +17,9 @@
       <param name="gazebo" value="$(arg gazebo)" />
       <param name="frozen" value="$(arg frozen)" />
       <param name="generation_parameters_json" value="$(arg generation_parameters_json)" />
+      <param name="xrpc_socket" value="$(arg xrpc_socket)" />
+      <param name="target_id" value="$(arg target_id)" />
+      <param name="simulation_service_ref_json" value="$(arg simulation_service_ref_json)" />
     </node>
   </group>
 </launch>

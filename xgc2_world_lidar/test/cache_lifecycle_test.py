@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Exercise cached publication and fleet exclusion on real ROS nodes."""
 import copy
+import os
+from collections import namedtuple
+from pathlib import Path
 import struct
 import subprocess
 import tempfile
@@ -8,14 +11,31 @@ import time
 import unittest
 
 import roslib.packages
+import rosgraph
 import rospy
 import rostest
 from geometry_msgs.msg import Point, Pose, PoseStamped, Quaternion
 from sensor_msgs.msg import PointCloud2
-from std_srvs.srv import SetBool
 from xgc2_geometry_msgs.msg import SceneSnapshot
+from xgc2_xrpc.http import Client
+from xgc2_xrpc.runtime import Runtime
 
 from topic_contract_test import snapshot
+
+class SourceToggle:
+    def __init__(self, path):
+        self.runtime = Runtime(blocking_workers=1)
+        self.client = Client(path, runtime=self.runtime)
+        described = self.client.json('/v1/describe', method='GET')
+        self.client.instance_id = described['service_ref']['instance_id']
+        self.revision = 1
+    def __call__(self, enabled):
+        result = self.client.json('/v1/configure', {'expected_revision': self.revision,
+            'configuration': {'enabled': enabled}, 'operation_timeout_ms': 2000}, timeout=3)
+        if result['state'] == 'succeeded': self.revision = result['result']['revision']
+        return namedtuple('SourceResult', 'success')(result['state'] == 'succeeded')
+    def close(self):
+        self.client.close(); self.runtime.close()
 
 
 class NodeFixture(unittest.TestCase):
@@ -24,6 +44,8 @@ class NodeFixture(unittest.TestCase):
         self.subscribers = []
         self.publishers = []
         self.logs = []
+        self.socket_grants = []
+        self.controls = []
 
     def tearDown(self):
         for sub in self.subscribers:
@@ -39,6 +61,8 @@ class NodeFixture(unittest.TestCase):
                 process.wait()
         for log in self.logs:
             log.close()
+        for control in self.controls: control.close()
+        for grant in self.socket_grants: grant.cleanup()
 
     def wait(self, predicate, detail, timeout=8):
         deadline = time.monotonic() + timeout
@@ -49,13 +73,19 @@ class NodeFixture(unittest.TestCase):
                 for log in self.logs:
                     log.seek(0)
                     outputs.append(log.read().decode(errors='replace')[-3000:])
-                self.fail(detail + '\n' + '\n'.join(outputs))
+                try: graph = str(rosgraph.Master(rospy.get_name(), os.environ['ROS_MASTER_URI']).getSystemState())
+                except Exception as error: graph = str(error)
+                self.fail(detail + '\n' + '\n'.join(outputs)+'\nprivate fixture graph: '+graph)
             time.sleep(0.02)
 
-    def start(self, name, executable=None, **parameters):
-        executable = executable or roslib.packages.find_node('xgc2_world_lidar', 'world_lidar_node')[0]
+    def start(self, name, executable=None, source_control=True, **parameters):
+        executable = executable or os.environ.get('XGC2_WORLD_LIDAR_FIXTURE') or roslib.packages.find_node('xgc2_world_lidar', 'world_lidar_node')[0]
         parameters.setdefault('scene_namespace', '/pr6_cache')
         args = [executable, '__name:=' + name]
+        grant = tempfile.TemporaryDirectory(prefix='xgc2-lidar-cache-')
+        self.socket_grants.append(grant)
+        path = str(Path(grant.name)/'source.sock')
+        args += ['_xrpc_socket:='+path, '_target_id:=fixture']
         # roscpp private CLI arguments are scalars; arrays must be real
         # XmlRpc parameters, otherwise vehicle_ids silently falls back to 1.
         for key, value in parameters.items():
@@ -63,9 +93,10 @@ class NodeFixture(unittest.TestCase):
         log = tempfile.TemporaryFile()
         self.logs.append(log)
         self.processes.append(subprocess.Popen(args, stdout=log, stderr=log))
-        service = '/' + name + '/set_enabled'
-        rospy.wait_for_service(service, timeout=8)
-        return rospy.ServiceProxy(service, SetBool)
+        if not source_control: return None
+        self.wait(lambda: Path(path).exists(), 'explicit source endpoint did not start')
+        control = SourceToggle(path); self.controls.append(control)
+        return control
 
     def listen(self, topic):
         seen = []

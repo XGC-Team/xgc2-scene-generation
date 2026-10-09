@@ -3,32 +3,28 @@
        snapshot, /ugv2 on the Gazebo obstacle truth, /ugv3 leaves it off; /uav4 is
        started the way the XGC2 process definition starts it (no roslaunch, preset).
        The driver publishes one toy scene in both forms and identical poses. -->
-  <include file="$(find xgc2_world_lidar)/launch/world_lidar.launch">
-    <arg name="enable" value="true"/>
-    <arg name="namespace" value="/uav1"/>
-    <arg name="scene_source" value="snapshot"/>
-    <arg name="mode" value="raycast"/>
-    <arg name="rate_hz" value="5"/>
-    <arg name="h_res" value="90"/>
-    <arg name="v_res" value="8"/>
-    <arg name="publish_beams" value="true"/>
-  </include>
-  <include file="$(find xgc2_world_lidar)/launch/world_lidar.launch">
-    <arg name="enable" value="true"/>
-    <arg name="namespace" value="/ugv2"/>
-    <arg name="scene_source" value="gazebo"/>
-    <arg name="mode" value="raycast"/>
-    <arg name="rate_hz" value="5"/>
-    <arg name="h_res" value="90"/>
-    <arg name="v_res" value="8"/>
-    <arg name="publish_beams" value="true"/>
-  </include>
-  <include file="$(find xgc2_world_lidar)/launch/world_lidar.launch">
-    <arg name="enable" value="false"/>
-    <arg name="namespace" value="/ugv3"/>
-    <arg name="scene_source" value="gazebo"/>
-  </include>
-  <node pkg="xgc2_world_lidar" type="world_lidar_node" name="world_lidar" ns="/uav4"
+  <node pkg="xgc2_world_lidar" type="lidar_test_node" name="world_lidar" ns="/uav1" required="true">
+    <param name="scene_source" value="snapshot"/>
+    <param name="pose_topic_pattern" value="/vrpn_client_node/uav1/pose"/>
+    <param name="output_topic_pattern" value="simple_lidar/points"/>
+    <param name="beams_topic_pattern" value="simple_lidar/beams"/>
+    <param name="publish_global_map" value="false"/>
+    <param name="mode" value="raycast"/><param name="rate" value="5"/>
+    <param name="h_res" value="90"/><param name="v_res" value="8"/>
+    <param name="publish_beams" value="true"/>
+  </node>
+  <node pkg="xgc2_world_lidar" type="lidar_test_node" name="world_lidar" ns="/ugv2" required="true">
+    <param name="scene_source" value="gazebo"/>
+    <param name="pose_topic_pattern" value="/vrpn_client_node/ugv2/pose"/>
+    <param name="output_topic_pattern" value="simple_lidar/points"/>
+    <param name="beams_topic_pattern" value="simple_lidar/beams"/>
+    <param name="publish_global_map" value="false"/>
+    <param name="mode" value="raycast"/><param name="rate" value="5"/>
+    <param name="h_res" value="90"/><param name="v_res" value="8"/>
+    <param name="publish_beams" value="true"/>
+  </node>
+  <!-- ugv3 has no source owner, matching enable:=false. -->
+  <node pkg="xgc2_world_lidar" type="lidar_test_node" name="world_lidar" ns="/uav4"
         args="_scene_source:=snapshot _pose_topic_pattern:=/vrpn_client_node/uav4/pose _mode:= _preset:=zju_cpu_crop
               _rate:=0 _range:=0 _h_fov_deg:=0 _v_fov_deg:=0 _h_res:=0 _v_res:=0 _publish_beams:=false"/>
   <test test-name="topic_contract" pkg="xgc2_world_lidar" type="topic_contract_test.py" time-limit="60.0"/>

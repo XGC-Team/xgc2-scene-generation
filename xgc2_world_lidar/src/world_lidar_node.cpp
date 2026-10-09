@@ -25,8 +25,8 @@
  * sensor_msgs/PointCloud2, latched, penetrating full-scene cloud (~publish_global_map) Model ~mode,
  * ~preset and the sensor parameters; see prepareParameters(). Switches ~enabled initial state
  * (default true). While disabled the node scans nothing and publishes nothing (no empty clouds: an
- * empty cloud would read as observed-free space). ~set_enabled                std_srvs/SetBool:
- * runtime toggle of ~enabled. ~enabled_vehicles           list of vehicle ids that get a sensor;
+ * empty cloud would read as observed-free space). The source-owned XRPC control
+ * host applies enabled changes on this node's callback boundary. ~enabled_vehicles list of vehicle ids that get a sensor;
  * empty = all served vehicles. The others get no publisher.
  *
  * Snapshot rules: an older revision of the current epoch is ignored; a
@@ -41,7 +41,6 @@
 #include <ros/package.h>
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
-#include <std_srvs/SetBool.h>
 #include <xgc2_geometry_msgs/ConvexBodyArray.h>
 #include <xgc2_geometry_msgs/GeometryLibrary.h>
 #include <xgc2_geometry_msgs/SceneSnapshot.h>
@@ -65,6 +64,7 @@
 #include <vector>
 
 #include "xgc2_world_lidar/convex_body_conversion.h"
+#include "xgc2_world_lidar/lidar_control.hpp"
 #include "xgc2_world_lidar/observation_contract.h"
 #include "xgc2_world_lidar/scan_pool.h"
 #include "xgc2_world_lidar/scene_conversion.h"
@@ -589,7 +589,12 @@ public:
                                                        std::max<std::size_t>(sensed, 1))
                                : defaultScanThreads(sensed, std::thread::hardware_concurrency());
         pool_ = std::make_unique<ScanPool>(threads);
-        enable_srv_ = pnh.advertiseService("set_enabled", &WorldLidarNode::setEnabled, this);
+        std::string control_socket, control_target;
+        if (!pnh.getParam("xrpc_socket", control_socket) || !pnh.getParam("target_id", control_target))
+            throw std::invalid_argument("world_lidar requires explicit ~xrpc_socket and ~target_id");
+        control_ = std::make_unique<LidarControl>(control_socket, control_target, enabled_, nh_.getCallbackQueue(),
+                                                [this](bool enabled) { enabled_ = enabled; });
+        control_->Start();
 
         const std::string scene_source = pnh.param<std::string>("scene_source", "snapshot");
         if (scene_source == "snapshot") {
@@ -636,9 +641,9 @@ public:
                  publish_beams_ ? "on" : "off",
                  vehicle_bodies_ ? "on" : "off");
         ROS_INFO("world_lidar: %zu sensors on %zu scan threads", sensed, pool_->threads());
-        ROS_INFO("world_lidar: %s (toggle with %s)",
+        ROS_INFO("world_lidar: %s (source XRPC %s)",
                  enabled_ ? "enabled" : "disabled: publishing nothing",
-                 enable_srv_.getService().c_str());
+                 control_socket.c_str());
     }
 
 private:
@@ -666,14 +671,6 @@ private:
         // publish() serializes before it returns.
         sensor_msgs::PointCloud2 cloud;
     };
-
-    bool setEnabled(std_srvs::SetBool::Request& req, std_srvs::SetBool::Response& res) {
-        enabled_ = req.data;
-        res.success = true;
-        res.message = enabled_ ? "world_lidar enabled" : "world_lidar disabled: publishing nothing";
-        ROS_INFO("world_lidar: %s", res.message.c_str());
-        return true;
-    }
 
     void snapshotCallback(const xgc2_geometry_msgs::SceneSnapshot::ConstPtr& msg) {
         if (snapshot_ && msg->epoch == snapshot_->epoch && msg->revision <= snapshot_->revision)
@@ -1049,7 +1046,6 @@ private:
     std::unique_ptr<WorldLidar> map_lidar_;
     double map_period_ = 1.0;
     ros::Publisher map_pub_;
-    ros::ServiceServer enable_srv_;
     ros::Subscriber snapshot_sub_;
     ros::Subscriber state_sub_;
     ros::Subscriber library_sub_;
@@ -1093,6 +1089,8 @@ private:
     bool gazebo_source_ = false;
     bool pending_ = false;
     bool scene_ready_ = false;
+    // Stop the host and remove dispatched callbacks before source fields die.
+    std::unique_ptr<LidarControl> control_;
 };
 
 } // namespace

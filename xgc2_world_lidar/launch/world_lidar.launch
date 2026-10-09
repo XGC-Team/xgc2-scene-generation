@@ -2,11 +2,13 @@
   <!-- World-frame LiDAR of one robot.
        Publishes <namespace>/simple_lidar/points (and <namespace>/simple_lidar/beams in
        raycast / depth_frustum with publish_beams), frame "world". Node: <namespace>/world_lidar,
-       runtime toggle <namespace>/world_lidar/set_enabled (std_srvs/SetBool).
+       runtime source configuration uses its explicitly granted XRPC endpoint.
        Nothing starts unless enable:=true. -->
   <arg name="enable" default="false"/>
   <!-- Absolute robot namespace, e.g. /uav1 or /ugv2. -->
   <arg name="namespace"/>
+  <arg name="xrpc_socket"/>
+  <arg name="target_id"/>
   <!-- snapshot: the scene runtime's document (/xgc/scene/{snapshot,state}), on every simulator;
        gazebo: Gazebo obstacle truth (/xgc2/simulation/obstacles/{geometry_library,instances}). -->
   <arg name="scene_source" default="snapshot"/>
@@ -31,6 +33,8 @@
 
   <group if="$(arg enable)">
     <node pkg="xgc2_world_lidar" type="world_lidar_node" name="world_lidar" ns="$(arg namespace)" output="screen" required="true">
+      <param name="xrpc_socket" value="$(arg xrpc_socket)"/>
+      <param name="target_id" value="$(arg target_id)"/>
       <rosparam if="$(eval arg('config') != '')" command="load" file="$(arg config)"/>
       <param name="preset" value="$(arg preset)"/>
       <param name="scene_source" value="$(arg scene_source)"/>

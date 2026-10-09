@@ -79,14 +79,15 @@ def build_node(directory, document):
     source.write_text(yaml.safe_dump(document, allow_unicode=True))
     recorder.params.update({'~scene_file': str(source), '~gazebo': False, '~frozen': False,
                             '~save_directory': str(directory)})
+    ros_node.SceneService = ros_stubs.SceneService
     return ros_node.SceneNode()
 
 
 def command(node, **request):
     request.setdefault('requestId', 'r{}'.format(random.random()))
     request.update(expectedEpoch=node.store.epoch, expectedRevision=node.store.revision)
-    response = node.command(ros_stubs.Msg(command_json=json.dumps(request)))
-    assert response.success, response.result_json
+    response = node.command_value(request)
+    assert response['success'], response
     return response
 
 

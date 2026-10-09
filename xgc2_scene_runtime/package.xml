@@ -13,5 +13,6 @@
   <depend>tf2_ros</depend>
   <depend>xgc2_geometry_msgs</depend>
   <exec_depend>python3-yaml</exec_depend>
+  <exec_depend>xgc2-xrpc</exec_depend>
   <test_depend>python3-nose</test_depend>
 </package>

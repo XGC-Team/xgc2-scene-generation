@@ -1,5 +1,5 @@
 <launch>
-  <node pkg="xgc2_world_lidar" type="world_lidar_node" name="lidar_contract" output="screen" required="true">
+  <node pkg="xgc2_world_lidar" type="lidar_test_node" name="lidar_contract" output="screen" required="true">
     <param name="scene_source" value="snapshot"/>
     <param name="scene_namespace" value="/lidar_contract_scene"/>
     <param name="pose_topic_pattern" value="/lidar_contract_pose"/>

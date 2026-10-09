@@ -1,5 +1,5 @@
 <launch>
-  <node pkg="xgc2_world_lidar" type="world_lidar_node" name="fleet_lidar" required="true">
+  <node pkg="xgc2_world_lidar" type="lidar_test_node" name="fleet_lidar" required="true">
     <param name="fleet_json" value='{"schemaVersion":1,"robots":[{"namespace":"/uav1","mode":"penetrating","rangeMeters":5,"rateHz":10,"hFovDeg":360,"vFovDeg":180},{"namespace":"/ugv2","mode":"raycast","rangeMeters":9,"rateHz":5,"hRes":90,"vRes":8,"publishBeams":true}]}'/>
   </node>
   <test test-name="fleet_contract" pkg="xgc2_world_lidar" type="fleet_contract_test.py" time-limit="35"/>

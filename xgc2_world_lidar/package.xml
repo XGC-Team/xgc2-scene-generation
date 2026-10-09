@@ -23,7 +23,8 @@
   <build_export_depend>libpcl-all-dev</build_export_depend>
   <exec_depend>libpcl-all</exec_depend>
   <depend>sensor_msgs</depend>
-  <depend>std_srvs</depend>
+  <depend>xgc2-xrpc</depend>
+  <depend>libjsoncpp-dev</depend>
   <depend>xgc2_geometry_msgs</depend>
   <depend>eigen</depend>
 

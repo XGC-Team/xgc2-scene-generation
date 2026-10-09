@@ -4,15 +4,56 @@ import math
 import os
 from pathlib import Path
 import subprocess
+import selectors
+import signal
 import tempfile
+import time
 
 from .document import SceneError, document
 from .store import MAX_DOCUMENT_BYTES, SceneLoader, digest, dump_yaml, load
 import yaml
 
 
-def resolve(source, working_file='', overrides=None):
-    raw = Path(source).read_bytes()
+def run_generator(argv, output_limit):
+    """Bound stdout/stderr before capture and reap the entire owned process group."""
+    process = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
+    buffers = {'stdout': bytearray(), 'stderr': bytearray()}
+    limits = {'stdout': output_limit, 'stderr': 65536}
+    selector = selectors.DefaultSelector()
+    for name in buffers:
+        selector.register(getattr(process, name), selectors.EVENT_READ, name)
+    deadline = time.monotonic()+30
+    try:
+        while selector.get_map():
+            remaining = deadline-time.monotonic()
+            if remaining <= 0:
+                raise SceneError('Scene generator exceeded its 30 second budget')
+            for key, _ in selector.select(remaining):
+                chunk = os.read(key.fileobj.fileno(), 65536)
+                if not chunk:
+                    selector.unregister(key.fileobj)
+                elif len(buffers[key.data])+len(chunk) > limits[key.data]:
+                    raise SceneError('Scene generator {} exceeds its byte limit'.format(key.data))
+                else:
+                    buffers[key.data].extend(chunk)
+        code = process.wait(timeout=max(.001, deadline-time.monotonic()))
+        if code:
+            raise SceneError('Scene generator exited with status {}'.format(code))
+        return bytes(buffers['stdout'])
+    finally:
+        # A successful generator can still leave children holding resources.
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        selector.close()
+        process.stdout.close(); process.stderr.close()
+        process.wait()
+
+
+def resolve(source, working_file='', overrides=None, *, max_bytes=MAX_DOCUMENT_BYTES):
+    with Path(source).open('rb') as stream:
+        raw = stream.read(MAX_DOCUMENT_BYTES+1)
     if len(raw) > MAX_DOCUMENT_BYTES:
         raise SceneError('Scene source exceeds the supported size')
     value = yaml.load(raw, Loader=SceneLoader)
@@ -44,13 +85,11 @@ def resolve(source, working_file='', overrides=None):
             raise SceneError('Generator parameter must be a finite number')
         argv.extend(['--' + key, str(value)])
     try:
-        result = subprocess.run(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30, check=True)
+        stdout = run_generator(argv, min(MAX_DOCUMENT_BYTES, max_bytes))
     except (OSError, subprocess.SubprocessError) as error:
         raise SceneError('Scene generator failed: {}'.format(error))
-    if len(result.stdout) > MAX_DOCUMENT_BYTES:
-        raise SceneError('Generated scene exceeds the supported size')
     try:
-        produced = json.loads(result.stdout)
+        produced = json.loads(stdout)
         generated = document(produced['scene'])
     except (ValueError, KeyError, TypeError) as error:
         raise SceneError('Invalid generator result: {}'.format(error))
@@ -59,7 +98,10 @@ def resolve(source, working_file='', overrides=None):
     # saved result. All consumers receive the one generated scene snapshot.
     metadata = {key: value for key, value in produced.items() if key != 'scene'}
     metadata.update(parameters=params, sourceSha256=digest(raw), mode='random', format='geometry')
-    for path, body in ((target.with_suffix('.generation.yaml'), dump_yaml(metadata)), (target, dump_yaml(generated))):
+    artifacts = ((target.with_suffix('.generation.yaml'), dump_yaml(metadata)), (target, dump_yaml(generated)))
+    if sum(len(body.encode('utf-8')) for _, body in artifacts) > max_bytes:
+        raise SceneError('Generated scene artifacts exceed the granted byte limit')
+    for path, body in artifacts:
         temporary = None
         try:
             with tempfile.NamedTemporaryFile(mode='w', dir=str(path.parent), delete=False) as handle:

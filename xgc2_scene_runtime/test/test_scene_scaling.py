@@ -37,17 +37,22 @@ class CountingList(list):
 
 
 class FakeGazeboApply:
-    """gazebo/apply: one call receives the whole scene snapshot."""
+    """Native apply seam: one operation receives the whole document."""
 
     def __init__(self):
         self.calls = 0
         self.obstacles = 0
 
-    def __call__(self, snapshot):
+    def apply(self, document, epoch, revision):
         self.calls += 1
-        self.obstacles += len(snapshot.obstacles)
-        return ros_stubs.Msg(success=True, epoch=snapshot.epoch, applied_revision=snapshot.revision,
-                             message='applied')
+        self.obstacles += len(document['obstacles'])
+        return {'epoch': epoch, 'revision': revision}
+
+    def motion(self, operation, epoch, revision):
+        return {'epoch': epoch, 'revision': revision}
+
+    def close(self):
+        pass
 
 
 def obstacle(index, moving):
@@ -84,13 +89,14 @@ def forest_obstacles():
 def build_node(directory, count):
     recorder.__init__()
     gazebo = FakeGazeboApply()
-    recorder.proxies['gazebo/apply'] = gazebo
+    ros_node.SimulationClient = lambda *args, **kwargs: gazebo
+    ros_node.SceneService = ros_stubs.SceneService
     source = Path(directory)/'scene.yaml'
     obstacles = forest_obstacles() if count == FOREST else [obstacle(i, i % 2 == 1) for i in range(count)]
     source.write_text(yaml.safe_dump({'schema': 'xgc2.scene.v1', 'id': 'bench', 'frame': 'world',
                                       'obstacles': obstacles}))
     recorder.params.update({'~scene_file': str(source), '~gazebo': True, '~frozen': False,
-                            '~save_directory': str(directory)})
+                            '~save_directory': str(directory), '~simulation_service_ref_json': '{}', '~target_id': 'fixture'})
     started = time.perf_counter()
     node = ros_node.SceneNode()
     return node, gazebo, time.perf_counter()-started
@@ -116,15 +122,14 @@ def measure(count, consumers=10, rounds=10):
         tick = average_seconds(lambda: node.tick(None), 20)
         definition = average_seconds(node.publish_definition, 5)
         document = average_seconds(node.publish_document, 5)
-        get = ros_stubs.Msg(command_json=json.dumps({'operation': 'get'}))
-        get_seconds = average_seconds(lambda: node.command(get), 5)
+        get_seconds = average_seconds(lambda: node.command_value({'operation': 'get'}), 5)
 
         published = recorder.publishes.get('document', 0)
         published_bytes = recorder.published_bytes.get('document', 0)
         started = time.perf_counter()
         for round_index in range(rounds):
             for consumer in range(consumers):
-                node.consumer_status(heartbeat(node, 'planner{}'.format(consumer), 1000+round_index))
+                node.publish_document(changed_only=True)
         heartbeat_seconds = time.perf_counter()-started
         heartbeat_publishes = recorder.publishes.get('document', 0)-published
         heartbeat_bytes = recorder.published_bytes.get('document', 0)-published_bytes
@@ -137,10 +142,10 @@ def measure(count, consumers=10, rounds=10):
             request = {'requestId': 'move-{}'.format(step), 'expectedEpoch': node.store.epoch,
                        'expectedRevision': node.store.revision, 'operation': 'update', 'obstacle': edited}
             started = time.perf_counter()
-            response = node.command(ros_stubs.Msg(command_json=json.dumps(request)))
+            response = node.command_value(request)
             updates.append(time.perf_counter()-started)
-            if not response.success:
-                raise AssertionError(response.result_json)
+            if not response['success']:
+                raise AssertionError(response)
         return {
             'obstacles': count,
             'startup_s': startup,
@@ -179,28 +184,20 @@ class SceneScalingTest(unittest.TestCase):
                 # Each consumer's first report changes the published view once.
                 self.assertLessEqual(result['heartbeat_document_publishes'], 10)
 
-    def test_a_changed_consumer_view_is_still_published(self):
+    def test_native_failure_and_recovery_change_the_published_view(self):
         with tempfile.TemporaryDirectory() as directory:
             node, _, _ = build_node(directory, 5)
             base = recorder.publishes.get('document', 0)
-            node.consumer_status(heartbeat(node, 'planner', 1000))
-            node.consumer_status(heartbeat(node, 'planner', 1001))
+            node.gazebo_failure(node.store.epoch, node.store.revision, 'outcome unknown')
+            node.publish_document(changed_only=True)
+            node.publish_document(changed_only=True)
             self.assertEqual(recorder.publishes['document']-base, 1)
-            failed = heartbeat(node, 'planner', 1002)
-            failed.applied = False
-            node.consumer_status(failed)
+            self.assertFalse(json.loads(recorder.last['document'].data)['synchronized'])
+            node.apply_scene(node.store.document, node.store.epoch, node.store.revision)
+            node.publish_document(changed_only=True)
             self.assertEqual(recorder.publishes['document']-base, 2)
-            published = json.loads(recorder.last['document'].data)
-            self.assertEqual({item['consumer']: item['applied'] for item in published['consumers']},
-                             {'gazebo': True, 'planner': False})
-            self.assertFalse(published['synchronized'])
-            self.assertEqual(len(published['document']['obstacles']), 5)
-            # Commands still publish the running scene time even when nothing else changed.
-            node.command(ros_stubs.Msg(command_json=json.dumps({
-                'requestId': 'play', 'expectedEpoch': node.store.epoch, 'expectedRevision': node.store.revision,
-                'operation': 'play'})))
-            self.assertEqual(recorder.publishes['document']-base, 3)
-            self.assertTrue(json.loads(recorder.last['document'].data)['playing'])
+            self.assertTrue(json.loads(recorder.last['document'].data)['synchronized'])
+            self.assertEqual(len(json.loads(recorder.last['document'].data)['document']['obstacles']), 5)
 
     def test_tick_and_definition_scan_the_obstacle_list_a_constant_number_of_times(self):
         # A frame lookup used to scan every obstacle for each moving obstacle

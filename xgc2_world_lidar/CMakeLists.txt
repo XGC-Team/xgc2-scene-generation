@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.0.2)
+cmake_minimum_required(VERSION 3.16)
 project(xgc2_world_lidar)
 
 if(NOT CMAKE_CXX_STANDARD)
@@ -13,11 +13,11 @@ find_package(Eigen3 REQUIRED)
 find_package(Threads REQUIRED)
 find_package(PCL REQUIRED COMPONENTS common filters search kdtree)
 find_package(catkin QUIET COMPONENTS
-  roscpp roslib geometry_msgs nav_msgs sensor_msgs std_srvs pcl_conversions xgc2_geometry_msgs
+  roscpp roslib geometry_msgs nav_msgs sensor_msgs pcl_conversions xgc2_geometry_msgs
 )
 if(catkin_FOUND)
   catkin_package(INCLUDE_DIRS include
-    CATKIN_DEPENDS roscpp roslib geometry_msgs nav_msgs sensor_msgs std_srvs pcl_conversions xgc2_geometry_msgs
+    CATKIN_DEPENDS roscpp roslib geometry_msgs nav_msgs sensor_msgs pcl_conversions xgc2_geometry_msgs
     DEPENDS PCL)
 endif()
 include_directories(include ${EIGEN3_INCLUDE_DIR})
@@ -53,10 +53,14 @@ add_executable(bench_world_lidar test/bench_world_lidar.cpp)
 target_link_libraries(bench_world_lidar PRIVATE ${PROJECT_NAME})
 
 if(catkin_FOUND)
+  find_package(XgcXrpc CONFIG REQUIRED)
+  find_package(PkgConfig REQUIRED)
+  pkg_check_modules(JSONCPP REQUIRED IMPORTED_TARGET jsoncpp)
   include_directories(${catkin_INCLUDE_DIRS})
-  add_executable(world_lidar_node src/world_lidar_node.cpp)
+  add_executable(world_lidar_node src/world_lidar_node.cpp src/lidar_control.cpp)
+  target_compile_features(world_lidar_node PRIVATE cxx_std_20)
   add_dependencies(world_lidar_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-  target_link_libraries(world_lidar_node PRIVATE ${PROJECT_NAME} ${catkin_LIBRARIES})
+  target_link_libraries(world_lidar_node PRIVATE ${PROJECT_NAME} XgcXrpc::http PkgConfig::JSONCPP ${catkin_LIBRARIES})
   install(TARGETS world_lidar_node
     ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
     LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}

@@ -22,8 +22,6 @@ add_message_files(
   SceneConsumerStatus.msg
 )
 
-add_service_files(FILES ApplyScene.srv SceneCommand.srv)
-
 generate_messages(
   DEPENDENCIES
   geometry_msgs

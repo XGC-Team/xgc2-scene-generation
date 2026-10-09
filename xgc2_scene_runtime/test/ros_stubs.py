@@ -178,3 +178,13 @@ def install():
            SceneState=SceneState, SceneObstacleState=Msg, SceneConsumerStatus=Msg)
     module('xgc2_geometry_msgs.srv', ApplyScene=Msg, SceneCommand=Msg, SceneCommandResponse=SceneCommandResponse)
     return recorder
+
+
+class SceneService:
+    """Projection tests do not run a transport. Real UDS is tested separately."""
+    def __init__(self, node, **kwargs):
+        self.node = node
+    def start(self):
+        return {'service': 'xgc2.scene.authoring', 'instance_id': 'projection-fixture'}
+    def close(self):
+        pass

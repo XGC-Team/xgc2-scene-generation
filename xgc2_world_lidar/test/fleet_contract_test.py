@@ -21,7 +21,7 @@ from topic_contract_test import snapshot, xyz
 
 class FleetContract(unittest.TestCase):
     def test_reference_only_world_does_not_create_sensor_topics(self):
-        executables = roslib.packages.find_node('xgc2_world_lidar', 'world_lidar_node')
+        executables = roslib.packages.find_node('xgc2_world_lidar', 'lidar_test_node')
         self.assertTrue(executables)
         observed = []
         subscriber = rospy.Subscriber('/xgc/scene/reference_cloud', PointCloud2,
@@ -94,7 +94,7 @@ class FleetContract(unittest.TestCase):
                   for i in range(512)]
         raw = json.dumps({'schemaVersion': 1, 'robots': robots})
         self.assertGreater(len(raw), 131072)
-        executables = roslib.packages.find_node('xgc2_world_lidar', 'world_lidar_node')
+        executables = roslib.packages.find_node('xgc2_world_lidar', 'lidar_test_node')
         self.assertTrue(executables)
         with tempfile.NamedTemporaryFile(mode='w', suffix='.json') as manifest:
             manifest.write(raw)

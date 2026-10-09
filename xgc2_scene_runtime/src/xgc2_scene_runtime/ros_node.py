@@ -1,4 +1,4 @@
-"""ROS transport projections of the simulator-independent scene document."""
+"""ROS user-data projections and the XRPC authoring host."""
 
 import hashlib
 import json
@@ -10,15 +10,16 @@ from geometry_msgs.msg import Point, Pose, TransformStamped
 from std_msgs.msg import String
 from visualization_msgs.msg import Marker, MarkerArray
 from xgc2_geometry_msgs.msg import (
-    SceneSnapshot, SceneObstacle, ScenePart, SceneState, SceneObstacleState, SceneConsumerStatus,
+    SceneSnapshot, SceneObstacle, ScenePart, SceneState, SceneObstacleState,
 )
-from xgc2_geometry_msgs.srv import ApplyScene, SceneCommand, SceneCommandResponse
+from xgc2_xrpc.runtime import Runtime
 
-from .consumers import ConsumerRegistry
 from .document import SceneError
 from .generation import resolve
 from .motion import rotate, state
 from .store import MAX_DOCUMENT_BYTES, EnvelopeJson, SceneStore, load, unique_object
+from .simulation_client import SimulationClient
+from .xrpc_service import SceneService
 
 
 def set_pose(message, value):
@@ -99,7 +100,7 @@ class SceneNode:
         (initial, source_digest), source = resolve(source, rospy.get_param('~working_file', '') or '', overrides)
         self.gazebo = bool(rospy.get_param('~gazebo', True))
         self.frozen = bool(rospy.get_param('~frozen', False))
-        self.registry = ConsumerRegistry()
+        self.native_report = None
         self.consumer_lock = threading.RLock()
         self.online = True
         self.snapshot_pub = rospy.Publisher('snapshot', SceneSnapshot, queue_size=1, latch=True)
@@ -122,39 +123,42 @@ class SceneNode:
         self._markers = {}
         self._json = EnvelopeJson()
         self._states = (None, [])
-        self.apply_service = None
+        self.xrpc_runtime = Runtime(blocking_workers=2, max_calls=8)
+        self.simulation = None
         if self.gazebo:
-            rospy.wait_for_service('gazebo/apply', timeout=30.0)
-            self.apply_service = rospy.ServiceProxy('gazebo/apply', ApplyScene)
+            self.simulation = SimulationClient(json.loads(rospy.get_param('~simulation_service_ref_json')),
+                                                runtime=self.xrpc_runtime,
+                                                local_target=rospy.get_param('~target_id'))
         self.store = SceneStore(initial, source, rospy.get_param('~save_directory', '') or None,
                                 self.apply_scene, lambda: rospy.Time.now().to_sec(), source_digest=source_digest,
-                                frozen=self.frozen, working_file=rospy.get_param('~working_file', '') or None)
-        self.status_sub = rospy.Subscriber('consumer_status', SceneConsumerStatus, self.consumer_status, queue_size=50)
-        self.service = rospy.Service('command', SceneCommand, self.command)
+                                frozen=self.frozen, working_file=rospy.get_param('~working_file', '') or None,
+                                motion=self.apply_motion)
+        self.service = SceneService(self, path=rospy.get_param('~xrpc_socket'), runtime=self.xrpc_runtime,
+                                    target_id=rospy.get_param('~target_id'))
+        self.service_ref = self.service.start()
         self.publish_definition()
         self.timer = rospy.Timer(rospy.Duration(1.0/30.0), self.tick, reset=True)
         rospy.on_shutdown(self.shutdown)
 
     def apply_scene(self, document, epoch, revision):
-        if self.apply_service is None:
+        if self.simulation is None:
             return
         try:
             message = snapshot(document, epoch, revision, self._obstacle_messages)
             self._applied_snapshot = ((epoch, revision), message)
-            result = self.apply_service(message)
-            if not result.success or result.epoch != epoch or result.applied_revision != revision:
-                raise SceneError('Gazebo did not apply the scene: {}'.format(result.message))
-        except rospy.ServiceException as error:
-            self.gazebo_failure(epoch, revision, str(error))
-            raise SceneError('Gazebo scene update failed: {}'.format(error))
+            result = self.simulation.apply(document, epoch, revision)
         except SceneError as error:
             self.gazebo_failure(epoch, revision, str(error))
             raise
         self._remember({
             'consumer': 'gazebo', 'epoch': epoch, 'revision': revision,
             'applied': True, 'operational': True, 'capability': 'ok',
-            'message': result.message, 'header_stamp': rospy.Time.now().to_sec(),
+            'message': 'Native scene operation completed', 'header_stamp': rospy.Time.now().to_sec(),
         })
+
+    def apply_motion(self, operation, epoch, revision):
+        if self.simulation is not None:
+            self.simulation.motion(operation, epoch, revision)
 
     def gazebo_failure(self, epoch, revision, message):
         # A failed factory operation can leave a partially changed simulator.
@@ -167,12 +171,17 @@ class SceneNode:
 
     def _remember(self, report):
         with self.consumer_lock:
-            self.registry.update(report)
+            self.native_report = report
+
+    def application_view(self, epoch, revision):
+        with self.consumer_lock:
+            rows = [] if self.native_report is None else [self.native_report]
+            synchronized = all(row['applied'] and row['epoch'] == epoch and row['revision'] == revision for row in rows)
+        return {'consumers': rows, 'synchronized': synchronized, 'syncRetryable': not synchronized}
 
     def envelope(self):
         result = self.store.envelope()
-        with self.consumer_lock:
-            public = self.registry.public(result['epoch'], result['revision'])
+        public = self.application_view(result['epoch'], result['revision'])
         result['consumers'] = public['consumers']
         result['online'] = self.online
         result['synchronized'] = public['synchronized']
@@ -187,8 +196,7 @@ class SceneNode:
         """
         with self.store.lock:
             status = self.store.status()
-            with self.consumer_lock:
-                public = self.registry.public(status['epoch'], status['revision'])
+            public = self.application_view(status['epoch'], status['revision'])
             view = json.dumps([status, public, self.online], sort_keys=True)
             if changed_only and view == self._published_view:
                 return False
@@ -199,27 +207,8 @@ class SceneNode:
             self._published_view = view
             return True
 
-    def consumer_status(self, message):
-        # Store the latest reported version; mismatches remain visible, not promoted to applied.
-        # Capability gaps stay listed while the consumer is alive; exited members expire.
-        # success on the ROS message is ignored; applied and operational are the facts.
-        stamp = 0.0
-        if message.header.stamp:
-            stamp = message.header.stamp.to_sec()
-        self._remember({
-            'consumer': message.consumer, 'epoch': message.epoch, 'revision': message.revision,
-            'applied': message.applied, 'operational': message.operational,
-            'capability': message.capability, 'generation': message.generation,
-            'message': message.message, 'header_stamp': stamp,
-        })
-        self.publish_document(changed_only=True)
-
-    def command(self, request):
+    def command_value(self, command):
         try:
-            if len(request.command_json.encode('utf-8')) > MAX_DOCUMENT_BYTES:
-                raise SceneError('Scene command exceeds the supported size')
-            command = json.loads(request.command_json, object_pairs_hook=unique_object,
-                                 parse_constant=lambda value: (_ for _ in ()).throw(SceneError('Nonfinite JSON value')))
             with self.store.lock:
                 previous = self.store.revision
                 result = self.store.command(command)
@@ -231,7 +220,7 @@ class SceneNode:
                 result.update(self.envelope())
         except (ValueError, TypeError, AttributeError) as error:
             result = dict(self.envelope(), success=False, error=str(error))
-        return SceneCommandResponse(success=result['success'], result_json=self._json.dumps(result))
+        return result
 
     def obstacle_frames(self):
         """TF child frame per obstacle ID, rebuilt once per document revision."""
@@ -344,10 +333,6 @@ class SceneNode:
         return [marker]
 
     def tick(self, _event):
-        with self.consumer_lock:
-            dropped = self.registry.expire()
-        if dropped:
-            self.publish_document(changed_only=True)
         with self.store.lock:
             message = SceneState()
             message.header.stamp = rospy.Time.now()
@@ -384,8 +369,14 @@ class SceneNode:
         return entries
 
     def shutdown(self):
+        if not self.online:
+            return
         self.online = False
         self.publish_document()
+        self.service.close()
+        if self.simulation is not None:
+            self.simulation.close()
+        self.xrpc_runtime.close()
 
 
 def main():
