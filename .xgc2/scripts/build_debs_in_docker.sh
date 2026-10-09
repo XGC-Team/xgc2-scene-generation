@@ -32,6 +32,7 @@ done
   set +u
   source "/opt/ros/${ROS_DISTRO}/setup.bash"
   set -u
+  if [[ "${ROS_DISTRO}" == noetic ]]; then export CC=clang-10 CXX=clang++-10; fi
   DESTDIR=/workspace/work/install-root catkin_make install \
     -DCMAKE_INSTALL_PREFIX="/opt/ros/${ROS_DISTRO}" \
     -DCMAKE_BUILD_TYPE=Release \

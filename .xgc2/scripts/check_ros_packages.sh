@@ -65,6 +65,7 @@ esac
   # shellcheck source=/dev/null
   source "/opt/ros/${ROS_DISTRO}/setup.bash"
   set -u
+  if [[ "${ROS_DISTRO}" == noetic ]]; then export CC=clang-10 CXX=clang++-10; fi
   catkin_make \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo \
     -DCATKIN_ENABLE_TESTING=ON

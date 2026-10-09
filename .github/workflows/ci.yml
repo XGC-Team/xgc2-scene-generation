@@ -55,7 +55,7 @@ jobs:
       matrix:
         include:
           - name: focal-noetic
-            image: ghcr.io/xgc-team/xgc2-images/xgc2-build-focal-full-noetic:1.0.4@sha256:37f273f6d63c58ff90bf781b7684c7a034cbaf5054165861e3dd0928f2559f31
+            image: ghcr.io/xgc-team/xgc2-images/xgc2-build-focal-full-noetic:1.0.8@sha256:fce2d76fddf4f6439bf0a188249b731650febdc163befc360bed186b269d252a
           - name: bionic-melodic
             image: ghcr.io/xgc-team/xgc2-images/xgc2-build-bionic-ros-melodic:1.0.0
     steps:
@@ -87,12 +87,12 @@ jobs:
             arch: amd64
             distribution: focal
             runner: ubuntu-latest
-            image: ghcr.io/xgc-team/xgc2-images/xgc2-build-focal-full-noetic:1.0.4@sha256:37f273f6d63c58ff90bf781b7684c7a034cbaf5054165861e3dd0928f2559f31
+            image: ghcr.io/xgc-team/xgc2-images/xgc2-build-focal-full-noetic:1.0.8@sha256:fce2d76fddf4f6439bf0a188249b731650febdc163befc360bed186b269d252a
           - name: arm64-focal-noetic
             arch: arm64
             distribution: focal
             runner: ubuntu-24.04-arm
-            image: ghcr.io/xgc-team/xgc2-images/xgc2-build-focal-full-noetic:1.0.4@sha256:37f273f6d63c58ff90bf781b7684c7a034cbaf5054165861e3dd0928f2559f31
+            image: ghcr.io/xgc-team/xgc2-images/xgc2-build-focal-full-noetic:1.0.8@sha256:fce2d76fddf4f6439bf0a188249b731650febdc163befc360bed186b269d252a
           - name: amd64-bionic-melodic
             arch: amd64
             distribution: bionic

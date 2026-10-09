@@ -159,7 +159,7 @@ build_ros_package_deb \
 build_ros_package_deb \
   "${world_lidar_pkg}" \
   "xgc2_world_lidar" \
-  "${msgs_pkg} (= ${VERSION}), ros-noetic-roscpp, ros-noetic-roslib, ros-noetic-geometry-msgs, ros-noetic-sensor-msgs, ros-noetic-std-srvs" \
+  "${msgs_pkg} (= ${VERSION}), libxgc2-xrpc1 (>= 0.1.0-1~focal), libjsoncpp1, ros-noetic-roscpp, ros-noetic-roslib, ros-noetic-geometry-msgs, ros-noetic-sensor-msgs, ros-noetic-std-srvs" \
   "XGC2 optional world-frame simple lidar for simulated robots"
 
 meta_root="${BUILD_DIR}/${meta_pkg}"

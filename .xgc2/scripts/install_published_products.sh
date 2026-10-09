@@ -24,4 +24,13 @@ if [[ -n "${XGC2_APT_OVERLAY_URL:-}" ]]; then
     "${XGC2_APT_OVERLAY_URL%/}" "${suite}" > /etc/apt/sources.list.d/00-xgc2-release-train.list
 fi
 apt-get update
-apt-get install -y --no-install-recommends libxgc2-math-dev
+apt-get install -y --no-install-recommends libxgc2-math-dev libxgc2-xrpc-dev
+
+# Install the exact first-party native SDK asset; third-party modules are image-owned.
+sdk_wheel=/tmp/xgc2_xrpc-0.1.0-py3-none-any.whl
+curl -fsSL --retry 5 \
+  https://github.com/XGC-Team/xgc2-xrpc/releases/download/v0.1.0-1/xgc2_xrpc-0.1.0-py3-none-any.whl \
+  -o "$sdk_wheel"
+echo "8e505ab2366eed198dcd4343e758fed5b7936990b2a72ba635d73d81b195187c  $sdk_wheel" | sha256sum -c -
+python3 -m pip install --no-index --no-deps "$sdk_wheel"
+rm "$sdk_wheel"

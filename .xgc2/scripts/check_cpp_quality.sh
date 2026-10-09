@@ -75,6 +75,7 @@ cp "${REPO_ROOT}/.clang-tidy" "${WORK_DIR}/src/.clang-tidy"
   cd "${WORK_DIR}"
   # shellcheck source=/dev/null
   source "/opt/ros/${ROS_DISTRO}/setup.bash"
+  if [[ "${ROS_DISTRO}" == noetic ]]; then export CC=clang-10 CXX=clang++-10; fi
   catkin_make \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo \
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
