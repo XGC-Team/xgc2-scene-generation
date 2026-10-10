@@ -21,9 +21,12 @@ sensors/xgc2_world_lidar/         CPU/GPU sensing library and ROS entries
 
 Shared ROS messages are maintained in `ros1/common/ros1-msgs`. ROS package,
 Python domain, native CMake target and Debian package names remain stable.
-The integration Python imports are explicitly namespaced as
+Integration implementations are explicitly namespaced as
 `xgc2_scene_runtime.integrations.simulation_client` and
-`xgc2_scene_runtime.integrations.gazebo.prepare`; old import locations are removed.
+`xgc2_scene_runtime.integrations.gazebo.prepare`. Existing public Python imports
+are retained as small exports of these implementations, so installed Gazebo
+consumers continue to work without a coordinated interface upgrade. There is
+one implementation of each operation.
 
 The product ID `xgc2-scene-generation` is retained for the existing release
 dependency graph; it does not describe a physics engine.

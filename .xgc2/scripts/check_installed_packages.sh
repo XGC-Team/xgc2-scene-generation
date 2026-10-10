@@ -21,7 +21,15 @@ dpkg --compare-versions "${geometry_version}" ge '1.2.0-13'
 dpkg -s ros-noetic-xgc2-scene-generation >/dev/null
 dpkg -s ros-noetic-xgc2-scene-runtime >/dev/null
 test -x "/opt/ros/noetic/lib/xgc2_scene_runtime/scene_node"
-python3 -c "from xgc2_scene_runtime.store import SceneStore; from xgc2_scene_runtime.integrations.gazebo.prepare import prepare; from xgc2_scene_runtime.integrations.simulation_client import SimulationClient"
+python3 - <<'PY_CHECK'
+from xgc2_scene_runtime.store import SceneStore
+from xgc2_scene_runtime.integrations.gazebo.prepare import prepare
+from xgc2_scene_runtime.integrations.simulation_client import SimulationClient
+from xgc2_scene_runtime.prepare import prepare as public_prepare
+from xgc2_scene_runtime.simulation_client import SimulationClient as public_client
+assert prepare is public_prepare
+assert SimulationClient is public_client
+PY_CHECK
 dpkg -s ros-noetic-xgc2-cluttered-environment >/dev/null
 dpkg -s ros-noetic-xgc2-geometry-msgs >/dev/null
 dpkg -s ros-noetic-xgc2-mockamap >/dev/null
