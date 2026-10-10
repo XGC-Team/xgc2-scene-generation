@@ -1,35 +1,34 @@
 schema: xgc2.product.v1
 id: xgc2-scene-generation
 name: XGC2 Scene Generation
-version: 1.2.0-14
+version: 1.2.0-15
 kind: ros1-apt
 summary: ROS1 scene-generation tools for convex obstacle scenarios and procedural
   point-cloud maps.
 ros:
-  distro: melodic,noetic
+  distro: noetic
   packages:
-  - xgc2_geometry_msgs
   - cluttered_environment
   - mockamap
   - xgc2_scene_runtime
   - xgc2_world_lidar
 apt:
-  distribution: bionic,focal
+  distribution: focal
   install:
-  - ros-melodic-xgc2-geometry-msgs
   - ros-noetic-xgc2-scene-generation
   package_distributions:
-    ros-melodic-xgc2-geometry-msgs: [bionic]
-    ros-noetic-xgc2-scene-generation: [focal]
-    ros-noetic-xgc2-geometry-msgs: [focal]
-    ros-noetic-xgc2-cluttered-environment: [focal]
-    ros-noetic-xgc2-mockamap: [focal]
-    ros-noetic-xgc2-scene-runtime: [focal]
-    ros-noetic-xgc2-world-lidar: [focal]
+    ros-noetic-xgc2-scene-generation:
+    - focal
+    ros-noetic-xgc2-cluttered-environment:
+    - focal
+    ros-noetic-xgc2-mockamap:
+    - focal
+    ros-noetic-xgc2-scene-runtime:
+    - focal
+    ros-noetic-xgc2-world-lidar:
+    - focal
   packages:
-  - ros-melodic-xgc2-geometry-msgs
   - ros-noetic-xgc2-scene-generation
-  - ros-noetic-xgc2-geometry-msgs
   - ros-noetic-xgc2-cluttered-environment
   - ros-noetic-xgc2-mockamap
   - ros-noetic-xgc2-scene-runtime
@@ -38,18 +37,16 @@ apt:
   - ros-noetic-xgc2-scene-runtime (>= 1.2.0-3)
   - libxgc2-math-dev (>= 0.5.6-6~focal)
   - libxgc2-xrpc1 (>= 0.1.0-1~focal)
-  - ros-noetic-xgc2-geometry-msgs (>= 1.1.4-11)
+  - ros-noetic-xgc2-geometry-msgs (>= 1.2.0-13)
   - ros-noetic-xgc2-cluttered-environment (>= 1.1.4-11)
   - ros-noetic-xgc2-mockamap (>= 1.1.4-11)
 usage:
   install: 'sudo apt update
 
-    sudo apt install ros-melodic-xgc2-geometry-msgs
-
     sudo apt install ros-noetic-xgc2-scene-generation
 
     '
-  smoke_test: 'rospack find xgc2_geometry_msgs
+  smoke_test: 'rospack find xgc2_scene_runtime
 
     rospack find cluttered_environment
 
@@ -58,14 +55,6 @@ usage:
     '
 ownership:
   paths:
-  - /opt/ros/melodic/share/xgc2_geometry_msgs
-  - /opt/ros/melodic/include/xgc2_geometry_msgs
-  - /opt/ros/melodic/lib/python2.7/dist-packages/xgc2_geometry_msgs
-  - /opt/ros/melodic/lib/pkgconfig/xgc2_geometry_msgs.pc
-  - /opt/ros/noetic/lib/python3/dist-packages/xgc2_geometry_msgs
-  - /opt/ros/noetic/lib/pkgconfig/xgc2_geometry_msgs.pc
-  - /opt/ros/noetic/share/xgc2_geometry_msgs
-  - /opt/ros/noetic/include/xgc2_geometry_msgs
   - /opt/ros/noetic/share/cluttered_environment
   - /opt/ros/noetic/include/cluttered_environment
   - /opt/ros/noetic/lib/cluttered_environment
@@ -84,7 +73,8 @@ release:
   requires:
   - xgc2-xrpc
   apt_versions:
-    focal: 1.2.0-14
+    focal: 1.2.0-15
   dependency_policy:
     libxgc2-math-dev: rebuild
     xgc2-xrpc: verify
+    xgc2-ros-msgs: rebuild

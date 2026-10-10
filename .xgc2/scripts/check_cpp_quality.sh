@@ -66,7 +66,6 @@ require_command catkin_make
 
 rm -rf "${WORK_DIR}/src" "${WORK_DIR}/build" "${WORK_DIR}/devel"
 mkdir -p "${WORK_DIR}/src"
-rsync -a --delete "${REPO_ROOT}/xgc2_geometry_msgs/" "${WORK_DIR}/src/xgc2_geometry_msgs/"
 rsync -a --delete "${REPO_ROOT}/cluttered_environment/" "${WORK_DIR}/src/cluttered_environment/"
 rsync -a --delete "${REPO_ROOT}/xgc2_world_lidar/" "${WORK_DIR}/src/xgc2_world_lidar/"
 cp "${REPO_ROOT}/.clang-tidy" "${WORK_DIR}/src/.clang-tidy"

@@ -48,17 +48,10 @@ command -v rsync >/dev/null 2>&1 || {
 
 rm -rf "${WORK_DIR}/src" "${WORK_DIR}/build" "${WORK_DIR}/devel"
 mkdir -p "${WORK_DIR}/src"
-rsync -a --delete "${REPO_ROOT}/xgc2_geometry_msgs/" "${WORK_DIR}/src/xgc2_geometry_msgs/"
-case "${ROS_DISTRO}" in
-  melodic) ;;
-  noetic)
-    rsync -a --delete "${REPO_ROOT}/cluttered_environment/" "${WORK_DIR}/src/cluttered_environment/"
-    rsync -a --delete "${REPO_ROOT}/xgc2_scene_runtime/" "${WORK_DIR}/src/xgc2_scene_runtime/"
-    rsync -a --delete "${REPO_ROOT}/mockamap/" "${WORK_DIR}/src/mockamap/"
-    rsync -a --delete "${REPO_ROOT}/xgc2_world_lidar/" "${WORK_DIR}/src/xgc2_world_lidar/"
-    ;;
-  *) echo "unsupported ROS_DISTRO: ${ROS_DISTRO}" >&2; exit 1 ;;
-esac
+[[ "${ROS_DISTRO}" == noetic ]] || { echo "unsupported ROS_DISTRO: ${ROS_DISTRO}" >&2; exit 1; }
+for package in cluttered_environment xgc2_scene_runtime mockamap xgc2_world_lidar; do
+  rsync -a --delete "${REPO_ROOT}/${package}/" "${WORK_DIR}/src/${package}/"
+done
 
 (
   cd "${WORK_DIR}"

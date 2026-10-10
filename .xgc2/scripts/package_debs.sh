@@ -41,7 +41,7 @@ if [[ -z "${INSTALL_ROOT}" || -z "${OUTPUT_DIR}" ]]; then
 fi
 
 case "${ROS_DISTRO}" in
-  melodic|noetic) ;;
+  noetic) ;;
   *) echo "unsupported ROS_DISTRO: ${ROS_DISTRO}" >&2; exit 1 ;;
 esac
 
@@ -121,7 +121,7 @@ build_ros_package_deb() {
   fakeroot dpkg-deb --build "${pkg_root}" "${OUTPUT_DIR}/${package}_${VERSION}_${ARCH}.deb" >/dev/null
 }
 
-msgs_pkg="ros-${ROS_DISTRO}-xgc2-geometry-msgs"
+msgs_pkg="ros-noetic-xgc2-geometry-msgs"
 env_pkg="ros-noetic-xgc2-cluttered-environment"
 mockamap_pkg="ros-noetic-xgc2-mockamap"
 scene_pkg="ros-noetic-xgc2-scene-runtime"
@@ -129,19 +129,9 @@ world_lidar_pkg="ros-noetic-xgc2-world-lidar"
 meta_pkg="ros-noetic-xgc2-scene-generation"
 
 build_ros_package_deb \
-  "${msgs_pkg}" \
-  "xgc2_geometry_msgs" \
-  "ros-${ROS_DISTRO}-message-runtime, ros-${ROS_DISTRO}-geometry-msgs, ros-${ROS_DISTRO}-std-msgs" \
-  "XGC2 convex geometry template and obstacle instance messages"
-
-if [[ "${ROS_DISTRO}" == "melodic" ]]; then
-  exit 0
-fi
-
-build_ros_package_deb \
   "${env_pkg}" \
   "cluttered_environment" \
-  "libxgc2-math-dev (>= 0.5.6-6~focal), ${msgs_pkg} (>= 1.1.4-12), ros-noetic-roscpp, ros-noetic-rospy, ros-noetic-geometry-msgs, ros-noetic-std-msgs, ros-noetic-visualization-msgs, ros-noetic-tf2, ros-noetic-tf2-geometry-msgs, ros-noetic-tf2-ros, python3-yaml" \
+  "libxgc2-math-dev (>= 0.5.6-6~focal), ${msgs_pkg} (>= 1.2.0-13), ros-noetic-roscpp, ros-noetic-rospy, ros-noetic-geometry-msgs, ros-noetic-std-msgs, ros-noetic-visualization-msgs, ros-noetic-tf2, ros-noetic-tf2-geometry-msgs, ros-noetic-tf2-ros, python3-yaml" \
   "XGC2 cluttered simulation environment manager"
 
 build_ros_package_deb \
@@ -153,13 +143,13 @@ build_ros_package_deb \
 build_ros_package_deb \
   "${scene_pkg}" \
   "xgc2_scene_runtime" \
-  "${msgs_pkg} (= ${VERSION}), ros-noetic-rospy, ros-noetic-geometry-msgs, ros-noetic-std-msgs, ros-noetic-visualization-msgs, ros-noetic-tf2-ros, python3-yaml" \
+  "${msgs_pkg} (>= 1.2.0-13), ros-noetic-rospy, ros-noetic-geometry-msgs, ros-noetic-std-msgs, ros-noetic-visualization-msgs, ros-noetic-tf2-ros, python3-yaml" \
   "XGC2 independent obstacle scene runtime and YAML authoring"
 
 build_ros_package_deb \
   "${world_lidar_pkg}" \
   "xgc2_world_lidar" \
-  "${msgs_pkg} (= ${VERSION}), libxgc2-xrpc1 (>= 0.1.0-1~focal), libjsoncpp1, ros-noetic-roscpp, ros-noetic-roslib, ros-noetic-geometry-msgs, ros-noetic-sensor-msgs, ros-noetic-std-srvs" \
+  "${msgs_pkg} (>= 1.2.0-13), libxgc2-xrpc1 (>= 0.1.0-1~focal), libjsoncpp1, ros-noetic-roscpp, ros-noetic-roslib, ros-noetic-geometry-msgs, ros-noetic-sensor-msgs, ros-noetic-std-srvs" \
   "XGC2 optional world-frame simple lidar for simulated robots"
 
 meta_root="${BUILD_DIR}/${meta_pkg}"
@@ -168,7 +158,7 @@ mkdir -p "${meta_root}"
 write_control \
   "${meta_root}" \
   "${meta_pkg}" \
-  "${scene_pkg} (= ${VERSION}), ${world_lidar_pkg} (= ${VERSION}), ${msgs_pkg} (>= 1.1.4-12), ${env_pkg} (>= 1.1.4-12), ${mockamap_pkg} (>= 1.1.4-12)" \
+  "${scene_pkg} (= ${VERSION}), ${world_lidar_pkg} (= ${VERSION}), ${msgs_pkg} (>= 1.2.0-13), ${env_pkg} (>= 1.1.4-12), ${mockamap_pkg} (>= 1.1.4-12)" \
   "XGC2 scene generation package set"
 fakeroot dpkg-deb --build "${meta_root}" "${OUTPUT_DIR}/${meta_pkg}_${VERSION}_${ARCH}.deb" >/dev/null
 
