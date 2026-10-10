@@ -21,7 +21,7 @@ done
   set -euo pipefail
   export SETUPTOOLS_USE_DISTUTILS=stdlib
   case "${ROS_DISTRO}" in
-    noetic) packages=(generators/cluttered_environment generators/mockamap runtime/xgc2_scene_runtime sensors/xgc2_world_lidar) ;;
+    noetic) packages=(generators/cluttered_environment generators/mockamap runtime/scene_runtime sensors/world_lidar) ;;
     *) echo "unsupported ROS_DISTRO: ${ROS_DISTRO}" >&2; exit 1 ;;
   esac
   rm -rf /workspace/work/src /workspace/work/build /workspace/work/devel /workspace/work/install-root

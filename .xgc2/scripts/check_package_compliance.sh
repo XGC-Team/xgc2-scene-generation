@@ -12,13 +12,13 @@ required_files=(
   ".xgc2/product.yml"
   "generators/cluttered_environment/package.xml"
   "generators/cluttered_environment/CMakeLists.txt"
-  "runtime/xgc2_scene_runtime/package.xml"
-  "runtime/xgc2_scene_runtime/CMakeLists.txt"
-  "runtime/xgc2_scene_runtime/scripts/scene_node"
+  "runtime/scene_runtime/package.xml"
+  "runtime/scene_runtime/CMakeLists.txt"
+  "runtime/scene_runtime/scripts/scene_node"
   "generators/mockamap/package.xml"
   "generators/mockamap/CMakeLists.txt"
-  "sensors/xgc2_world_lidar/package.xml"
-  "sensors/xgc2_world_lidar/CMakeLists.txt"
+  "sensors/world_lidar/package.xml"
+  "sensors/world_lidar/CMakeLists.txt"
   ".xgc2/scripts/package_debs.sh"
   ".xgc2/scripts/check_installed_packages.sh"
   ".xgc2/scripts/run_in_build_container.sh"
@@ -35,8 +35,8 @@ done
 
 grep -q '<name>cluttered_environment</name>' generators/cluttered_environment/package.xml
 grep -q '<name>mockamap</name>' generators/mockamap/package.xml
-grep -q '<name>xgc2_world_lidar</name>' sensors/xgc2_world_lidar/package.xml
-grep -q '^project(xgc2_world_lidar)' sensors/xgc2_world_lidar/CMakeLists.txt
+grep -q '<name>xgc2_world_lidar</name>' sensors/world_lidar/package.xml
+grep -q '^project(xgc2_world_lidar)' sensors/world_lidar/CMakeLists.txt
 grep -q 'xgc2_world_lidar' .xgc2/product.yml
 grep -Fq 'world_lidar_pkg="ros-noetic-xgc2-world-lidar"' .xgc2/scripts/package_debs.sh
 grep -q '^project(cluttered_environment)' generators/cluttered_environment/CMakeLists.txt

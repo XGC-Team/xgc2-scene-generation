@@ -165,7 +165,7 @@ catkin_make run_tests_xgc2_world_lidar      # core, both scene sources, topic co
   optional neighbor returns, self exclusion and unsensed neighbor bodies.
 
 With the local PR6 base object and the installed Noetic build image, run
-`sensors/xgc2_world_lidar/test/run_pr6_validation.sh [evidence-directory]` from the
+`sensors/world_lidar/test/run_pr6_validation.sh [evidence-directory]` from the
 repository. This uses read-only source mounts in offline containers (2 CPUs
 for compilation, 1 CPU for tests), keeps logs and XML results, compares the
 original and incremental cores byte for byte across all modes and scene edits,

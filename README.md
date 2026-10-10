@@ -8,7 +8,7 @@ a standalone physics simulator. Pure convex geometry algorithms belong to
 ## Source layout and responsibilities
 
 ```text
-runtime/xgc2_scene_runtime/       scene documents, assembly, editing and revisions
+runtime/scene_runtime/            scene documents, assembly, editing and revisions
   src/xgc2_scene_runtime/
     integrations/
       simulation_client.py       explicit simulation-v1 protocol client
@@ -16,7 +16,7 @@ runtime/xgc2_scene_runtime/       scene documents, assembly, editing and revisio
 generators/
   cluttered_environment/         convex obstacle scenarios and legacy ROS publisher
   mockamap/                      procedural point-cloud maps
-sensors/xgc2_world_lidar/         CPU/GPU sensing library and ROS entries
+sensors/world_lidar/              CPU/GPU sensing library and ROS entries
 ```
 
 Shared ROS messages are maintained in `ros1/common/ros1-msgs`. ROS package,

@@ -30,21 +30,21 @@ run_container 2 -s > "$work_dir/build.log" 2>&1 <<'BUILD'
 set -eo pipefail
 export PYTHONDONTWRITEBYTECODE=1
 for variant in base candidate; do
-  path=/source/sensors
+  package_path=/source/sensors/world_lidar
   extra=-DPR6_INCREMENTAL
-  if [ "$variant" = base ]; then path=/evidence/base; extra=; fi
-  cmake -S "$path/xgc2_world_lidar" -B "/evidence/core-$variant" \
+  if [ "$variant" = base ]; then package_path=/evidence/base/xgc2_world_lidar; extra=; fi
+  cmake -S "$package_path" -B "/evidence/core-$variant" \
     -DCMAKE_DISABLE_FIND_PACKAGE_catkin=ON -DCMAKE_BUILD_TYPE=Release
   cmake --build "/evidence/core-$variant" -j2
-  g++ -std=c++17 -O2 $extra -I"$path/xgc2_world_lidar/include" -I/usr/include/eigen3 \
-    /source/sensors/xgc2_world_lidar/test/dump_observation_regression.cpp \
+  g++ -std=c++17 -O2 $extra -I"$package_path/include" -I/usr/include/eigen3 \
+    /source/sensors/world_lidar/test/dump_observation_regression.cpp \
     "/evidence/core-$variant/libxgc2_world_lidar.a" -pthread -o "/evidence/dump-$variant"
 done
 source /opt/ros/noetic/setup.bash
 mkdir -p /evidence/ros/src
 ln -sfn /messages/xgc2_geometry_msgs /evidence/ros/src/xgc2_geometry_msgs
-ln -sfn /source/runtime/xgc2_scene_runtime /evidence/ros/src/xgc2_scene_runtime
-ln -sfn /source/sensors/xgc2_world_lidar /evidence/ros/src/xgc2_world_lidar
+ln -sfn /source/runtime/scene_runtime /evidence/ros/src/xgc2_scene_runtime
+ln -sfn /source/sensors/world_lidar /evidence/ros/src/xgc2_world_lidar
 cd /evidence/ros
 catkin_make -DCMAKE_INSTALL_PREFIX=/evidence/installed -j2 -l2 \
   -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCATKIN_ENABLE_TESTING=ON \
@@ -100,7 +100,7 @@ import rospy
 
 # Import test drivers only. Production package and executable discovery stays
 # in the installed prefix and system ROS, without a source/devel fallback.
-sys.path.insert(0, '/source/sensors/xgc2_world_lidar/test')
+sys.path.insert(0, '/source/sensors/world_lidar/test')
 from cache_lifecycle_test import CacheLifecycle
 
 with open('/evidence/installed-roscore.log', 'w') as log:

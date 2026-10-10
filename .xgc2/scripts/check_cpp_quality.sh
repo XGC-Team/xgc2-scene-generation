@@ -37,7 +37,7 @@ require_command clang-tidy
 require_command rsync
 
 mapfile -t cpp_files < <(
-  find "${REPO_ROOT}/generators/cluttered_environment" "${REPO_ROOT}/sensors/xgc2_world_lidar" \
+  find "${REPO_ROOT}/generators/cluttered_environment" "${REPO_ROOT}/sensors/world_lidar" \
     \( -path '*/build/*' -o -path '*/devel/*' -o -path '*/install/*' -o -path '*/vendored/*' \) -prune \
     -o -type f \( -name '*.cpp' -o -name '*.h' -o -name '*.hpp' -o -name '*.cc' -o -name '*.cxx' \) -print |
     sort
@@ -67,7 +67,7 @@ require_command catkin_make
 rm -rf "${WORK_DIR}/src" "${WORK_DIR}/build" "${WORK_DIR}/devel"
 mkdir -p "${WORK_DIR}/src"
 rsync -a --delete "${REPO_ROOT}/generators/cluttered_environment/" "${WORK_DIR}/src/cluttered_environment/"
-rsync -a --delete "${REPO_ROOT}/sensors/xgc2_world_lidar/" "${WORK_DIR}/src/xgc2_world_lidar/"
+rsync -a --delete "${REPO_ROOT}/sensors/world_lidar/" "${WORK_DIR}/src/xgc2_world_lidar/"
 cp "${REPO_ROOT}/.clang-tidy" "${WORK_DIR}/src/.clang-tidy"
 
 (
