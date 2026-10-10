@@ -1,11 +1,32 @@
-# XGC2 Scene Generation
+# XGC2 Scene
 
 Scene authoring, procedural geometry generators, and shared simulated sensing.
-This repository is not a standalone physics simulator. The local checkout name
-`convex_geometry` is historical; pure convex geometry algorithms belong to
+The canonical checkout is `products/ros1/common/scene`. This repository is not
+a standalone physics simulator. Pure convex geometry algorithms belong to
 `xgc2-math`.
 
-## Current responsibilities and consumers
+## Source layout and responsibilities
+
+```text
+runtime/xgc2_scene_runtime/       scene documents, assembly, editing and revisions
+  src/xgc2_scene_runtime/
+    integrations/
+      simulation_client.py       explicit simulation-v1 protocol client
+      gazebo/prepare.py          Gazebo SDF/assets and world materialization
+generators/
+  cluttered_environment/         convex obstacle scenarios and legacy ROS publisher
+  mockamap/                      procedural point-cloud maps
+sensors/xgc2_world_lidar/         CPU/GPU sensing library and ROS entries
+```
+
+Shared ROS messages are maintained in `ros1/common/ros1-msgs`. ROS package,
+Python domain, native CMake target and Debian package names remain stable.
+The integration Python imports are explicitly namespaced as
+`xgc2_scene_runtime.integrations.simulation_client` and
+`xgc2_scene_runtime.integrations.gazebo.prepare`; old import locations are removed.
+
+The product ID `xgc2-scene-generation` is retained for the existing release
+dependency graph; it does not describe a physics engine.
 
 | Component | Responsibility | Actual consumers |
 | --- | --- | --- |
@@ -13,7 +34,7 @@ This repository is not a standalone physics simulator. The local checkout name
 | `cluttered_environment` | Configurable convex obstacle scenarios and their legacy ROS scenario publisher | Scenario launches and obstacle-rich experiments; not the owner of simulator physics |
 | `mockamap` | Procedural point-cloud maps | GCOPTER and EGO planner demo launches |
 | `xgc2_world_lidar` | ROS-free CPU/GPU sensing implementations plus ROS fleet and per-robot entries | Native XSIM builds its sensor library directly from this owner; ROS fleet sensing consumes scene snapshots or Gazebo obstacle truth |
-| `xgc2_scene_runtime.prepare` / `simulation_client` | Currently colocated Gazebo asset preparation and simulation extension calls | Gazebo world preparation and scene apply/motion integration |
+| `integrations.simulation_client` / `integrations.gazebo.prepare` | Explicit simulation-v1 client; Gazebo SDF/assets preparation is separately namespaced | Gazebo world preparation and scene apply/motion integration |
 
 `xgc2_geometry_msgs` is maintained in
 [`XGC-Team/xgc2-ros-msgs`](https://github.com/XGC-Team/xgc2-ros-msgs/tree/noetic/xgc2_geometry_msgs).
@@ -34,14 +55,15 @@ A native simulator world can retain its own geometry authority. Therefore the
 whole repository cannot be treated as one map server already controlling every
 simulator. `xgc2_scene_runtime` is the shared scene service within this collection.
 
-Further separation should keep the scene domain together, expose procedural
-generators as scene/map producers, put reusable sensing under a sensor owner,
-and place Gazebo-specific preparation in its integration owner. These are
-responsibility boundaries, not completed source moves. In particular,
-`prepare.py` interprets Gazebo SDF/assets and `ros_node.py` still has explicit
-Gazebo integration. Moving this whole tree to `common/` would retain those
-couplings. Generator output, authored scene geometry and simulated sensor
-observations are distinct products.
+The source groups make these responsibilities explicit within the existing
+product. Generators produce scene geometry or point clouds; they do not own
+authoring persistence or physics. Sensing consumes geometry and robot poses to
+produce observations; it does not edit scene assets. Gazebo preparation
+interprets SDF/assets and remains separate from the scene document model.
+`ros_node.py` still wires the simulator integration when explicitly requested.
+Moving the checkout does not remove that dependency or establish a universal
+simulator implementation. Generator output, authored scene geometry and
+simulated sensor observations remain distinct products.
 
 ## Install
 

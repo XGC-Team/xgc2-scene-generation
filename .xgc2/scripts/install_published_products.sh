@@ -23,7 +23,10 @@ if [[ -n "${XGC2_APT_OVERLAY_URL:-}" ]]; then
     "${XGC2_APT_OVERLAY_URL%/}" "${suite}" > /etc/apt/sources.list.d/00-xgc2-release-train.list
 fi
 apt-get update
-apt-get install -y --no-install-recommends libxgc2-math-dev libxgc2-xrpc-dev "ros-noetic-xgc2-geometry-msgs>=1.2.0-13"
+apt-get install -y --no-install-recommends libxgc2-math-dev libxgc2-xrpc-dev ros-noetic-xgc2-geometry-msgs
+
+geometry_version="$(dpkg-query -W -f='${Version}' ros-noetic-xgc2-geometry-msgs)"
+dpkg --compare-versions "${geometry_version}" ge '1.2.0-13'
 
 # Install the exact first-party native SDK asset; third-party modules are image-owned.
 sdk_wheel=/tmp/xgc2_xrpc-0.1.0-py3-none-any.whl

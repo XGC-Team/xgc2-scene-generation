@@ -7,7 +7,7 @@ import unittest
 from xgc2_xrpc.http import Client, Fault, Host, TransportError
 from xgc2_xrpc.runtime import Runtime
 from xgc2_scene_runtime.document import SceneError
-from xgc2_scene_runtime.simulation_client import SimulationClient
+from xgc2_scene_runtime.integrations.simulation_client import SimulationClient
 from xgc2_scene_runtime.store import SceneStore
 from xgc2_scene_runtime.xrpc_service import SceneService
 

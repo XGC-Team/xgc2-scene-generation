@@ -10,15 +10,15 @@ cd "${REPO_ROOT}"
 
 required_files=(
   ".xgc2/product.yml"
-  "cluttered_environment/package.xml"
-  "cluttered_environment/CMakeLists.txt"
-  "xgc2_scene_runtime/package.xml"
-  "xgc2_scene_runtime/CMakeLists.txt"
-  "xgc2_scene_runtime/scripts/scene_node"
-  "mockamap/package.xml"
-  "mockamap/CMakeLists.txt"
-  "xgc2_world_lidar/package.xml"
-  "xgc2_world_lidar/CMakeLists.txt"
+  "generators/cluttered_environment/package.xml"
+  "generators/cluttered_environment/CMakeLists.txt"
+  "runtime/xgc2_scene_runtime/package.xml"
+  "runtime/xgc2_scene_runtime/CMakeLists.txt"
+  "runtime/xgc2_scene_runtime/scripts/scene_node"
+  "generators/mockamap/package.xml"
+  "generators/mockamap/CMakeLists.txt"
+  "sensors/xgc2_world_lidar/package.xml"
+  "sensors/xgc2_world_lidar/CMakeLists.txt"
   ".xgc2/scripts/package_debs.sh"
   ".xgc2/scripts/check_installed_packages.sh"
   ".xgc2/scripts/run_in_build_container.sh"
@@ -33,16 +33,16 @@ for file in "${required_files[@]}"; do
   }
 done
 
-grep -q '<name>cluttered_environment</name>' cluttered_environment/package.xml
-grep -q '<name>mockamap</name>' mockamap/package.xml
-grep -q '<name>xgc2_world_lidar</name>' xgc2_world_lidar/package.xml
-grep -q '^project(xgc2_world_lidar)' xgc2_world_lidar/CMakeLists.txt
+grep -q '<name>cluttered_environment</name>' generators/cluttered_environment/package.xml
+grep -q '<name>mockamap</name>' generators/mockamap/package.xml
+grep -q '<name>xgc2_world_lidar</name>' sensors/xgc2_world_lidar/package.xml
+grep -q '^project(xgc2_world_lidar)' sensors/xgc2_world_lidar/CMakeLists.txt
 grep -q 'xgc2_world_lidar' .xgc2/product.yml
 grep -Fq 'world_lidar_pkg="ros-noetic-xgc2-world-lidar"' .xgc2/scripts/package_debs.sh
-grep -q '^project(cluttered_environment)' cluttered_environment/CMakeLists.txt
-grep -q '^project(mockamap)' mockamap/CMakeLists.txt
-grep -q 'find_package(xgc2_math REQUIRED CONFIG)' cluttered_environment/CMakeLists.txt
-grep -q 'pcl_ros' mockamap/CMakeLists.txt
+grep -q '^project(cluttered_environment)' generators/cluttered_environment/CMakeLists.txt
+grep -q '^project(mockamap)' generators/mockamap/CMakeLists.txt
+grep -q 'find_package(xgc2_math REQUIRED CONFIG)' generators/cluttered_environment/CMakeLists.txt
+grep -q 'pcl_ros' generators/mockamap/CMakeLists.txt
 grep -q 'xgc2-scene-generation' .xgc2/product.yml
 grep -q 'distribution: focal' .xgc2/product.yml
 for workflow in .github/workflows/ci.yml .github/workflows/release.yml; do

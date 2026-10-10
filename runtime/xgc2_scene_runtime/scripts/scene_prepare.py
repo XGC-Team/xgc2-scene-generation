@@ -9,7 +9,7 @@ import sys
 
 from xgc2_scene_runtime.document import SceneError, fields
 from xgc2_scene_runtime.generation import resolve
-from xgc2_scene_runtime.prepare import DEFAULT_WORLD, attachment, checked_path, parameters, prepare, read
+from xgc2_scene_runtime.integrations.gazebo.prepare import DEFAULT_WORLD, attachment, checked_path, parameters, prepare, read
 from xgc2_scene_runtime.store import unique_object
 
 

@@ -8,9 +8,9 @@ from pathlib import Path
 import tempfile
 import xml.etree.ElementTree as ET
 
-from .document import SceneError, fields
-from .generation import resolve
-from .store import MAX_DOCUMENT_BYTES, dump_yaml, unique_object
+from ...document import SceneError, fields
+from ...generation import resolve
+from ...store import MAX_DOCUMENT_BYTES, dump_yaml, unique_object
 
 SCHEMA = 'xgc2.simulation.prepare.v1'
 DEFAULT_WORLD = Path('/opt/ros/noetic/share/gazebo_sim_worlds/worlds/scene_editable/scene_editable.world')

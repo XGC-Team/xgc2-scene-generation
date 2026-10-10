@@ -18,7 +18,7 @@ from .document import SceneError
 from .generation import resolve
 from .motion import rotate, state
 from .store import MAX_DOCUMENT_BYTES, EnvelopeJson, SceneStore, load, unique_object
-from .simulation_client import SimulationClient
+from .integrations.simulation_client import SimulationClient
 from .xrpc_service import SceneService
 
 

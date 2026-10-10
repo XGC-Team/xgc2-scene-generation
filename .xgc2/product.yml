@@ -1,10 +1,10 @@
 schema: xgc2.product.v1
 id: xgc2-scene-generation
-name: XGC2 Scene Generation
+name: XGC2 Scene
 version: 1.2.0-15
 kind: ros1-apt
-summary: ROS1 scene-generation tools for convex obstacle scenarios and procedural
-  point-cloud maps.
+summary: Shared scene authoring, procedural map generators and simulated sensing;
+  simulator integration is explicit and separate from scene domain logic.
 ros:
   distro: noetic
   packages:

@@ -21,13 +21,13 @@ done
   set -euo pipefail
   export SETUPTOOLS_USE_DISTUTILS=stdlib
   case "${ROS_DISTRO}" in
-    noetic) packages=(cluttered_environment mockamap xgc2_scene_runtime xgc2_world_lidar) ;;
+    noetic) packages=(generators/cluttered_environment generators/mockamap runtime/xgc2_scene_runtime sensors/xgc2_world_lidar) ;;
     *) echo "unsupported ROS_DISTRO: ${ROS_DISTRO}" >&2; exit 1 ;;
   esac
   rm -rf /workspace/work/src /workspace/work/build /workspace/work/devel /workspace/work/install-root
   mkdir -p /workspace/work/src
   for package in "${packages[@]}"; do
-    rsync -a --delete "/workspace/scene-generation/${package}/" "/workspace/work/src/${package}/"
+    rsync -a --delete "/workspace/scene-generation/${package}/" "/workspace/work/src/${package##*/}/"
   done
   cd /workspace/work
   set +u

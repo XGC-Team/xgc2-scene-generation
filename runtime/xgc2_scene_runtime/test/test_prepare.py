@@ -8,7 +8,7 @@ import xml.etree.ElementTree as ET
 import yaml
 
 from xgc2_scene_runtime.document import SceneError
-from xgc2_scene_runtime.prepare import prepare
+from xgc2_scene_runtime.integrations.gazebo.prepare import prepare
 
 WORLD = b'<sdf version="1.6"><world name="fixture"><physics type="ode" name="physics"><max_step_size>0.001</max_step_size></physics><model name="authored"><static>true</static><link name="body"><collision name="collision"><geometry><box><size>1 2 3</size></box></geometry></collision></link></model></world></sdf>'
 DOC = {'schema': 'xgc2.scene.v1', 'id': 'fixture', 'frame': 'world', 'obstacles': []}

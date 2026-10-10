@@ -49,8 +49,8 @@ command -v rsync >/dev/null 2>&1 || {
 rm -rf "${WORK_DIR}/src" "${WORK_DIR}/build" "${WORK_DIR}/devel"
 mkdir -p "${WORK_DIR}/src"
 [[ "${ROS_DISTRO}" == noetic ]] || { echo "unsupported ROS_DISTRO: ${ROS_DISTRO}" >&2; exit 1; }
-for package in cluttered_environment xgc2_scene_runtime mockamap xgc2_world_lidar; do
-  rsync -a --delete "${REPO_ROOT}/${package}/" "${WORK_DIR}/src/${package}/"
+for package in generators/cluttered_environment runtime/xgc2_scene_runtime generators/mockamap sensors/xgc2_world_lidar; do
+  rsync -a --delete "${REPO_ROOT}/${package}/" "${WORK_DIR}/src/${package##*/}/"
 done
 
 (

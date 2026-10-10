@@ -7,7 +7,7 @@ import uuid
 from xgc2_xrpc.http import Client, Fault, Limits, TransportError
 from xgc2_xrpc.reference import ServiceRef
 
-from .document import SceneError
+from ..document import SceneError
 
 
 class SimulationClient:
