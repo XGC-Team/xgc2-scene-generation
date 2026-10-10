@@ -165,7 +165,7 @@ catkin_make run_tests_xgc2_world_lidar      # core, both scene sources, topic co
   optional neighbor returns, self exclusion and unsensed neighbor bodies.
 
 With the local PR6 base object and the installed Noetic build image, run
-`xgc2_world_lidar/test/run_pr6_validation.sh [evidence-directory]` from the
+`sensors/xgc2_world_lidar/test/run_pr6_validation.sh [evidence-directory]` from the
 repository. This uses read-only source mounts in offline containers (2 CPUs
 for compilation, 1 CPU for tests), keeps logs and XML results, compares the
 original and incremental cores byte for byte across all modes and scene edits,
@@ -246,3 +246,7 @@ scans, rather than turning that member into observed-free space. The roster is
 replaced only with the owning world model lifecycle, never with sensor demand.
 `test/body_roster.test` exercises unsensed-body hits, wall occlusion, self IDs,
 provider stop, interrupted/resumed truth and unchanged penetrating baseline.
+
+The offline comparison uses the sibling `ros1-msgs` geometry definitions. Set
+`XGC2_ROS_MSGS_SOURCE_ROOT` when that checkout is elsewhere. Both source SHAs
+are recorded; the historical baseline archive retains its original layout.
