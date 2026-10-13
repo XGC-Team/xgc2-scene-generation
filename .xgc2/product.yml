@@ -1,7 +1,7 @@
 schema: xgc2.product.v1
 id: xgc2-scene-generation
 name: XGC2 Scene
-version: 1.2.0-15
+version: 1.3.0-1
 kind: ros1-apt
 summary: Shared scene authoring, procedural map generators and simulated sensing;
   simulator integration is explicit and separate from scene domain logic.
@@ -71,10 +71,12 @@ ownership:
   - /opt/ros/noetic/lib/mockamap
 release:
   requires:
+  - xsim
   - xgc2-xrpc
   apt_versions:
-    focal: 1.2.0-15
+    focal: 1.3.0-1
   dependency_policy:
+    xsim: rebuild
     libxgc2-math-dev: rebuild
     xgc2-xrpc: verify
     xgc2-ros-msgs: rebuild
