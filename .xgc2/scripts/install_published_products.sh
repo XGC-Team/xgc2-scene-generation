@@ -29,10 +29,10 @@ geometry_version="$(dpkg-query -W -f='${Version}' ros-noetic-xgc2-geometry-msgs)
 dpkg --compare-versions "${geometry_version}" ge '1.2.0-13'
 
 # Install the exact first-party native SDK asset; third-party modules are image-owned.
-sdk_wheel=/tmp/xgc2_xrpc-0.1.0-py3-none-any.whl
+sdk_wheel=/tmp/xgc2_xrpc-0.2.0-py3-none-any.whl
 curl -fsSL --retry 5 \
-  https://github.com/XGC-Team/xgc2-xrpc/releases/download/v0.1.0-1/xgc2_xrpc-0.1.0-py3-none-any.whl \
+  https://github.com/XGC-Team/xgc2-xrpc/releases/download/v0.2.0-1/xgc2_xrpc-0.2.0-py3-none-any.whl \
   -o "$sdk_wheel"
-echo "8e505ab2366eed198dcd4343e758fed5b7936990b2a72ba635d73d81b195187c  $sdk_wheel" | sha256sum -c -
+echo "fc81fe2ee5ef1abf2e7313ff4ae9401ce60f3dee14292b5228ea46e01f97c298  $sdk_wheel" | sha256sum -c -
 python3 -m pip install --no-index --no-deps "$sdk_wheel"
 rm "$sdk_wheel"

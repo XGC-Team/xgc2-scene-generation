@@ -21,7 +21,8 @@ void validateSensorMetadata(const SensorMetadata& m) {
         throw std::invalid_argument("invalid world-Z predicate");
 }
 void validateGpuSensorMetadata(const SensorMetadata& m) {
-    if ((m.observation_model != "lidar_scan" && m.observation_model != "crop_through") || m.backend != "gpu")
+    if ((m.observation_model != "lidar_scan" && m.observation_model != "crop_through") ||
+        m.backend != "gpu")
         throw std::invalid_argument("GPU requires explicit lidar_scan/gpu (spherical nearest)");
     // Validate the original native float parameter domain, not the demo values.
     const float near = static_cast<float>(m.min_range_m), far = static_cast<float>(m.range_m);
@@ -34,7 +35,8 @@ void validateGpuSensorMetadata(const SensorMetadata& m) {
         m.v_fov_deg > 180 || m.h_res > std::numeric_limits<int>::max() / m.v_res)
         throw std::invalid_argument(
             "finite positive GPU range/spacing/rate and spherical grid required");
-    if (m.observation_model == "crop_through") return;
+    if (m.observation_model == "crop_through")
+        return;
     const float h_step = static_cast<float>(m.h_fov_deg) / static_cast<float>(m.h_res);
     const float v_step = static_cast<float>(m.v_fov_deg) / static_cast<float>(m.v_res);
     if (!std::isfinite(h_step) || h_step <= 0 || !std::isfinite(v_step) || v_step <= 0 ||
