@@ -54,16 +54,18 @@ void SharedCloudGpu::load(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& cloud,
     impl_->points.points.reserve(cloud->size());
     impl_->bytes.reserve(cloud->size() * 16);
 }
-const pcl::PointCloud<pcl::PointXYZI>&
-SharedCloudGpu::scan(const Eigen::Vector3d& p, const Eigen::Quaterniond& q, double stamp) {
-    return scan(p, q, stamp, impl_->metadata);
+const pcl::PointCloud<pcl::PointXYZI>& SharedCloudGpu::scan(const Eigen::Vector3d& position,
+                                                            const Eigen::Quaterniond& orientation,
+                                                            double stamp) {
+    return scan(position, orientation, stamp, impl_->metadata);
 }
-const pcl::PointCloud<pcl::PointXYZI>& SharedCloudGpu::scan(const Eigen::Vector3d& p,
-                                                            const Eigen::Quaterniond& q,
+const pcl::PointCloud<pcl::PointXYZI>& SharedCloudGpu::scan(const Eigen::Vector3d& position,
+                                                            const Eigen::Quaterniond& orientation,
                                                             double stamp,
-                                                            const SensorMetadata& m) {
-    const auto config = projection(m);
-    const double pos[3] = {p.x(), p.y(), p.z()}, rot[4] = {q.w(), q.x(), q.y(), q.z()};
+                                                            const SensorMetadata& metadata) {
+    const auto config = projection(metadata);
+    const double pos[3] = {position.x(), position.y(), position.z()},
+                 rot[4] = {orientation.w(), orientation.x(), orientation.y(), orientation.z()};
     char error[512] = {};
     auto grow = [](void* context, size_t size) -> void* {
         auto& data = *static_cast<std::vector<unsigned char>*>(context);
