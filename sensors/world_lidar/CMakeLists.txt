@@ -32,17 +32,6 @@ if(TARGET Eigen3::Eigen)
 else()
   target_include_directories(${PROJECT_NAME} PUBLIC ${EIGEN3_INCLUDE_DIR})
 endif()
-# Shared point-cloud CPU crop uses this world owner's point source and one index.
-# Other observation models keep their existing implementation and sampling policy.
-add_library(${PROJECT_NAME}_cloud_cpu STATIC
-  src/sensor_metadata.cpp src/shared_cloud_cpu.cpp)
-target_include_directories(${PROJECT_NAME}_cloud_cpu PUBLIC include ${PCL_INCLUDE_DIRS})
-target_link_libraries(${PROJECT_NAME}_cloud_cpu PUBLIC ${PCL_LIBRARIES})
-if(TARGET Eigen3::Eigen)
-  target_link_libraries(${PROJECT_NAME}_cloud_cpu PUBLIC Eigen3::Eigen)
-else()
-  target_include_directories(${PROJECT_NAME}_cloud_cpu PUBLIC ${EIGEN3_INCLUDE_DIR})
-endif()
 
 enable_testing()
 foreach(suite world_lidar scene_sources observation_contract)
@@ -70,16 +59,6 @@ if(catkin_FOUND)
   install(DIRECTORY include/${PROJECT_NAME}/ DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION})
   install(DIRECTORY launch/ DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch)
   install(DIRECTORY config/ DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/config)
-  add_executable(shared_cloud_cpu_node src/shared_cloud_cpu_node.cpp)
-  add_dependencies(shared_cloud_cpu_node ${catkin_EXPORTED_TARGETS})
-  target_link_libraries(shared_cloud_cpu_node PRIVATE ${PROJECT_NAME}_cloud_cpu ${catkin_LIBRARIES})
-  install(TARGETS shared_cloud_cpu_node
-    RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION} COMPONENT cloud_cpu)
-  install(TARGETS ${PROJECT_NAME}_cloud_cpu
-    ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION} COMPONENT cloud_cpu)
-  install(FILES include/xgc2_world_lidar/sensor_metadata.hpp
-    include/xgc2_world_lidar/shared_cloud_cpu.hpp
-    DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION} COMPONENT cloud_cpu)
   if(CATKIN_ENABLE_TESTING)
     find_package(rostest REQUIRED)
     add_rostest(test/topic_contract.test)
@@ -94,5 +73,5 @@ if(catkin_FOUND)
   endif()
 endif()
 
-# Optional adapter on the existing shared entry; no new ROS executable or alias.
+# Shared native GPU library adapter.
 include(cmake/world_lidar_gpu.cmake)
