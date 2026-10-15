@@ -25,8 +25,12 @@ fi
 apt-get update
 apt-get install -y --no-install-recommends libxgc2-math-dev libxgc2-xrpc-dev libxgc2-sensing-dev ros-noetic-xgc2-geometry-msgs
 
+math_version="$(dpkg-query -W -f='${Version}' libxgc2-math-dev)"
+dpkg --compare-versions "${math_version}" ge '0.6.0-4~focal'
+test -f /usr/include/xgc2_math/scene/ellipse_ring.hpp
+
 geometry_version="$(dpkg-query -W -f='${Version}' ros-noetic-xgc2-geometry-msgs)"
-dpkg --compare-versions "${geometry_version}" ge '1.2.0-13'
+dpkg --compare-versions "${geometry_version}" ge '1.5.0-3'
 
 # Install the exact first-party native SDK asset; third-party modules are image-owned.
 sdk_wheel=/tmp/xgc2_xrpc-0.2.0-py3-none-any.whl

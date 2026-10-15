@@ -77,7 +77,6 @@ ObstacleBase::ObstacleBase(ros::NodeHandle& nh,
 
 void ObstacleBase::initialize() {
     generateGeometry();
-    refreshOccupiedBody();
 
     ROS_INFO("Obstacle [%s]: Geometry initialized (type: %s)",
              config_.name.c_str(),
@@ -120,7 +119,6 @@ geometry_msgs::TransformStamped ObstacleBase::buildTransformStamped() const {
 void ObstacleBase::velocityCallback(const geometry_msgs::Twist::ConstPtr& msg) {
     current_velocity_ = *msg;
     last_velocity_time_ = ros::Time::now();
-    occupied_body_.velocity = currentVelocityVector();
 }
 
 void ObstacleBase::updatePosition() {
@@ -132,12 +130,6 @@ void ObstacleBase::updatePosition() {
     current_pose_.position.x += current_velocity_.linear.x * dt;
     current_pose_.position.y += current_velocity_.linear.y * dt;
     current_pose_.position.z += current_velocity_.linear.z * dt;
-
-    refreshOccupiedBody();
-}
-
-void ObstacleBase::refreshOccupiedBody() {
-    occupied_body_ = buildOccupiedBody();
 }
 
 std::vector<visualization_msgs::Marker> ObstacleBase::getMarkers() {
@@ -149,34 +141,6 @@ std::vector<visualization_msgs::Marker> ObstacleBase::getMarkers() {
     }
 
     return markers;
-}
-
-xgc2_geometry_msgs::ConvexBodyInstance ObstacleBase::buildConvexBodyInstance(bool is_static) const {
-    xgc2_geometry_msgs::ConvexBodyInstance instance;
-    instance.id = occupied_body_.id;
-    instance.name = occupied_body_.name;
-    instance.geometry_type = occupied_body_.geometry_type;
-    instance.is_static = is_static;
-
-    instance.pose.position.x = occupied_body_.position.x();
-    instance.pose.position.y = occupied_body_.position.y();
-    instance.pose.position.z = occupied_body_.position.z();
-
-    const Eigen::Quaterniond orientation = occupied_body_.orientation.normalized();
-    instance.pose.orientation.x = orientation.x();
-    instance.pose.orientation.y = orientation.y();
-    instance.pose.orientation.z = orientation.z();
-    instance.pose.orientation.w = orientation.w();
-
-    instance.scale.x = occupied_body_.scale.x();
-    instance.scale.y = occupied_body_.scale.y();
-    instance.scale.z = occupied_body_.scale.z();
-
-    instance.velocity.linear.x = occupied_body_.velocity.x();
-    instance.velocity.linear.y = occupied_body_.velocity.y();
-    instance.velocity.linear.z = occupied_body_.velocity.z();
-
-    return instance;
 }
 
 Eigen::Vector3d ObstacleBase::currentPositionVector() const {

@@ -35,6 +35,8 @@
 // sensor-to-point direction (range noise). Scans draw from a generator seeded
 // by `seed` and the scan index, so a run is reproducible.
 
+#include <xgc2_math/scene/obstacle.hpp>
+
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 #include <atomic>
@@ -99,42 +101,7 @@ struct VehicleBody {
 // cylinder `height` is the full height along local z, capsule `height` is the
 // straight cylindrical part along local z, convex `vertices` are local-frame
 // points whose convex hull is the solid.
-struct Obstacle {
-    enum Type { kBox, kSphere, kCylinder, kCapsule, kConvex, kRing };
-    Type type = kBox;
-    Eigen::Vector3d position = Eigen::Vector3d::Zero();
-    Eigen::Quaterniond orientation = Eigen::Quaterniond::Identity();
-    Eigen::Vector3d size = Eigen::Vector3d::Zero();
-    double radius = 0.0;
-    double height = 0.0;
-    Eigen::Vector2d radii = Eigen::Vector2d::Zero();
-    double tubeRadius = 0.0;
-    std::vector<Eigen::Vector3d> vertices;
-
-    static Obstacle box(const Eigen::Vector3d& center,
-                        const Eigen::Vector3d& size,
-                        const Eigen::Quaterniond& orientation = Eigen::Quaterniond::Identity());
-    static Obstacle alignedBox(const Eigen::Vector3d& min_corner,
-                               const Eigen::Vector3d& max_corner);
-    static Obstacle sphere(const Eigen::Vector3d& center, double radius);
-    static Obstacle
-    cylinder(const Eigen::Vector3d& center,
-             double radius,
-             double height,
-             const Eigen::Quaterniond& orientation = Eigen::Quaterniond::Identity());
-    static Obstacle capsule(const Eigen::Vector3d& center,
-                            double radius,
-                            double height,
-                            const Eigen::Quaterniond& orientation = Eigen::Quaterniond::Identity());
-    static Obstacle ring(const Eigen::Vector3d& center, const Eigen::Vector2d& radii, double tubeRadius,
-                         const Eigen::Quaterniond& orientation = Eigen::Quaterniond::Identity());
-    // World-frame vertices (pose = identity).
-    static Obstacle convexHull(const std::vector<Eigen::Vector3d>& world_vertices);
-    // Local-frame vertices placed by a pose.
-    static Obstacle convexHull(const std::vector<Eigen::Vector3d>& local_vertices,
-                               const Eigen::Vector3d& position,
-                               const Eigen::Quaterniond& orientation);
-};
+using Obstacle = xgc2_math::scene::Obstacle;
 
 // Surface samples of one obstacle in the world frame, at roughly `spacing`
 // metres (faces, edges and caps included). Throws std::invalid_argument on a

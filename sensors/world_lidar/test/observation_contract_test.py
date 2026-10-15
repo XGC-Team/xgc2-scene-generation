@@ -6,6 +6,7 @@ import threading
 import time
 import unittest
 
+from xgc2_math.geometry import encode_geometry
 import rospy
 import rostest
 from geometry_msgs.msg import Point, Pose, PoseStamped, Quaternion, Vector3
@@ -34,7 +35,7 @@ class ObservationContract(unittest.TestCase):
         pose.header.frame_id = 'world'
         pose.pose = Pose(Point(0,0,1), Quaternion(0,0,0,1))
         part = ScenePart(id='p', pose=Pose(Point(), Quaternion(0,0,0,1)),
-                         geometry=SceneGeometry(type='box', size=Vector3(1,4,2)))
+                         geometry=SceneGeometry(*encode_geometry({'type': 'box', 'size': [1, 4, 2]})))
         obstacle = SceneObstacle(id='wall', name='wall', pose=Pose(Point(4,0,1), Quaternion(0,0,0,1)),
                                  parts=[part], dynamic=False, motion_type='static')
         snap = SceneSnapshot(scene_id='test', epoch='first', revision=1, obstacles=[obstacle])

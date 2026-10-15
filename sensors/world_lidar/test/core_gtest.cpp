@@ -4,7 +4,9 @@
 #include <string>
 #include <vector>
 
-#include "xgc2_world_lidar/convex_body_conversion.h"
+#include "xgc2_world_lidar/scene_conversion.h"
+#include <iostream>
+#include <stdexcept>
 
 #define main world_lidar_tests_main
 #include "test_world_lidar.cpp"

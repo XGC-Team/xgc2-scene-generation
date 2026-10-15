@@ -95,17 +95,19 @@ std::vector<SceneObstacleDescription> readParts(const std::string& path) {
         if (!s)
             continue;
         ScenePartDescription part;
-        part.type = type;
+        xgc2_math::geometry::Geometry geometry;
+        geometry.type = xgc2_math::geometry::geometryTypeFromName(type);
         part.pose.position = Eigen::Vector3d(pp[0], pp[1], pp[2]);
         part.pose.orientation = Eigen::Quaterniond(pq[3], pq[0], pq[1], pq[2]);
-        part.radius = radius;
-        part.height = height;
-        part.size = Eigen::Vector3d(size[0], size[1], size[2]);
+        geometry.radius = radius;
+        geometry.height = height;
+        geometry.size = {size[0], size[1], size[2]};
         for (int k = 0; k < vertices; ++k) {
             Eigen::Vector3d v;
             s >> v.x() >> v.y() >> v.z();
-            part.vertices.push_back(v);
+            geometry.vertices.push_back({v.x(), v.y(), v.z()});
         }
+        part.geometry = xgc2_math::geometry::encodeGeometry(geometry);
         SceneObstacleDescription obstacle;
         obstacle.id = "part" + std::to_string(scene.size());
         obstacle.pose.position = Eigen::Vector3d(op[0], op[1], op[2]);

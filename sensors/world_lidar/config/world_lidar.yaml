@@ -43,11 +43,8 @@ pose_topic_pattern: /uav{id}/mavros/local_position/pose
 output_topic_pattern: simple_lidar/points   # relative: <node namespace>/simple_lidar/points
 
 # Scene: snapshot (common scene document, <scene_namespace>/{snapshot,state})
-#        | gazebo (Gazebo obstacle truth, geometry_library + instances)
 scene_source: snapshot
 scene_namespace: /xgc/scene
-geometry_library_topic: /xgc2/simulation/obstacles/geometry_library
-instances_topic: /xgc2/simulation/obstacles/instances
 
 # Latched global map (penetrating, whole scene, no range/FOV filter)
 publish_global_map: false

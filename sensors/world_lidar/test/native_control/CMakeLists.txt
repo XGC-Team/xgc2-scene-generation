@@ -20,7 +20,7 @@ if(GEOMETRY_MESSAGES_INCLUDE)
   add_executable(world_lidar_native_fixture
     "${lidar_dir}/src/world_lidar_node.cpp" "${lidar_dir}/src/lidar_control.cpp"
     "${lidar_dir}/src/world_lidar.cpp" "${lidar_dir}/src/scene_conversion.cpp"
-    "${lidar_dir}/src/convex_body_conversion.cpp" "${lidar_dir}/src/scan_pool.cpp")
+    "${lidar_dir}/src/scan_pool.cpp")
   target_compile_features(world_lidar_native_fixture PRIVATE cxx_std_20)
   target_include_directories(world_lidar_native_fixture PRIVATE "${lidar_dir}/include")
   target_include_directories(world_lidar_native_fixture SYSTEM PRIVATE /opt/ros/noetic/include "${GEOMETRY_MESSAGES_INCLUDE}")

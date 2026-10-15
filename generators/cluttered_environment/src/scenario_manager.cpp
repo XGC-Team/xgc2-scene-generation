@@ -15,10 +15,6 @@
 #include <vector>
 
 #include "cluttered_environment/scene/obstacles/obstacle_factory.h"
-#include "xgc2_geometry_msgs/ConvexBodyArray.h"
-#include "xgc2_geometry_msgs/ConvexBodyInstance.h"
-#include "xgc2_geometry_msgs/GeometryLibrary.h"
-#include "xgc2_geometry_msgs/GeometryTemplate.h"
 
 namespace cluttered_environment {
 
@@ -130,8 +126,6 @@ bool ScenarioManager::loadAndInitialize() {
 
         ROS_INFO("Successfully loaded and instantiated %lu obstacles", obstacles_.size());
 
-        publishGeometryOnce();
-        initializeDynamicObstaclePublishing();
         return true;
 
     } catch (const std::exception& e) {
@@ -161,26 +155,6 @@ void ScenarioManager::initializeMarkerPublishing() {
     if (publish_rate_ > 0) {
         marker_timer_ = nh_.createTimer(
             ros::Duration(1.0 / publish_rate_), &ScenarioManager::publishMarkers, this);
-    }
-}
-
-void ScenarioManager::initializeDynamicObstaclePublishing() {
-    dynamic_body_instances_pub_ = nh_.advertise<xgc2_geometry_msgs::ConvexBodyArray>(
-        "/xgc2_geometry/dynamic_body_instances", 10, true);
-
-    const bool has_dynamic = countDynamicObstacles() > 0;
-
-    ros::Duration(0.5).sleep();
-    publishDynamicBodyInstances(ros::TimerEvent());
-    ROS_INFO("Published initial dynamic body instances (dynamic obstacle count: %d)",
-             has_dynamic ? countDynamicObstacles() : 0);
-
-    if (has_dynamic) {
-        dynamic_instance_timer_ = nh_.createTimer(
-            ros::Duration(1.0 / 50.0), &ScenarioManager::publishDynamicBodyInstances, this);
-        ROS_INFO("Dynamic body instance publisher started at 50 Hz");
-    } else {
-        ROS_INFO("No dynamic obstacles found, published empty array (latched)");
     }
 }
 
@@ -592,118 +566,6 @@ void ScenarioManager::parseInlineVertices(XmlRpc::XmlRpcValue& vertices_xml,
 
     config.geometry_params_vec["vertices_flat"] = vertices_flat;
     ROS_INFO("Parsed %d vertices for V-polytope", num_vertices);
-}
-
-int ScenarioManager::countDynamicObstacles() const {
-    int count = 0;
-    for (const auto& obs : obstacles_) {
-        if (obs->getConfig().motion_type == "dynamic") {
-            ++count;
-        }
-    }
-    return count;
-}
-
-xgc2_geometry_msgs::GeometryLibrary ScenarioManager::buildGeometryLibrary() {
-    xgc2_geometry_msgs::GeometryLibrary library;
-    library.header.stamp = ros::Time::now();
-    library.header.frame_id = world_frame_id_;
-
-    std::set<std::string> unique_types;
-    for (const auto& obstacle : obstacles_) {
-        const std::string geometry_type = obstacle->getType();
-        if (!unique_types.insert(geometry_type).second) {
-            continue;
-        }
-
-        xgc2_geometry_msgs::GeometryTemplate tmpl =
-            obstacle->buildGeometryTemplate(global_resolution_);
-        library.templates.push_back(tmpl);
-
-        ROS_INFO("Generated geometry template: type=%s, resolution=%d, support_points=%lu",
-                 geometry_type.c_str(),
-                 tmpl.resolution,
-                 tmpl.support_points.size());
-    }
-
-    ROS_INFO("Built geometry library with %lu templates", library.templates.size());
-    return library;
-}
-
-xgc2_geometry_msgs::ConvexBodyArray ScenarioManager::buildConvexBodyArray() {
-    xgc2_geometry_msgs::ConvexBodyArray array;
-    array.header.stamp = ros::Time::now();
-    array.header.frame_id = world_frame_id_;
-
-    for (const auto& obstacle : obstacles_) {
-        const auto& config = obstacle->getConfig();
-        if (config.motion_type == "dynamic") {
-            ROS_INFO("Skipping dynamic obstacle: id=%d, name=%s, motion_type=%s",
-                     config.id,
-                     config.name.c_str(),
-                     config.motion_type.c_str());
-            continue;
-        }
-
-        xgc2_geometry_msgs::ConvexBodyInstance instance = obstacle->buildConvexBodyInstance(true);
-        array.instances.push_back(instance);
-
-        ROS_INFO("Added static instance: id=%d, name=%s, type=%s, motion_type=%s, "
-                 "scale=[%.2f,%.2f,%.2f]",
-                 instance.id,
-                 instance.name.c_str(),
-                 instance.geometry_type.c_str(),
-                 config.motion_type.c_str(),
-                 instance.scale.x,
-                 instance.scale.y,
-                 instance.scale.z);
-    }
-
-    ROS_INFO("========== Static Obstacle Summary ==========");
-    ROS_INFO("Total obstacles processed: %lu", obstacles_.size());
-    ROS_INFO("Static obstacles in array: %lu", array.instances.size());
-    ROS_INFO("Dynamic obstacles skipped: %lu", obstacles_.size() - array.instances.size());
-    ROS_INFO("============================================");
-    return array;
-}
-
-void ScenarioManager::publishGeometryOnce() {
-    ROS_INFO("Publishing geometry library and static body instances...");
-
-    geometry_library_pub_ = nh_.advertise<xgc2_geometry_msgs::GeometryLibrary>(
-        "/xgc2_geometry/geometry_library", 1, true);
-
-    static_body_instances_pub_ = nh_.advertise<xgc2_geometry_msgs::ConvexBodyArray>(
-        "/xgc2_geometry/static_body_instances", 1, true);
-
-    ros::Duration(0.5).sleep();
-
-    xgc2_geometry_msgs::GeometryLibrary library = buildGeometryLibrary();
-    geometry_library_pub_.publish(library);
-
-    xgc2_geometry_msgs::ConvexBodyArray instances = buildConvexBodyArray();
-    static_body_instances_pub_.publish(instances);
-
-    ROS_INFO("Geometry information published successfully (latched)");
-    ROS_INFO("  - Geometry templates: %lu types", library.templates.size());
-    ROS_INFO("  - Static body instances: %lu obstacles", instances.instances.size());
-}
-
-void ScenarioManager::publishDynamicBodyInstances(const ros::TimerEvent&) {
-    xgc2_geometry_msgs::ConvexBodyArray array;
-    array.header.stamp = ros::Time::now();
-    array.header.frame_id = world_frame_id_;
-
-    for (const auto& obstacle : obstacles_) {
-        const auto& config = obstacle->getConfig();
-        if (config.motion_type != "dynamic") {
-            continue;
-        }
-
-        array.instances.push_back(obstacle->buildConvexBodyInstance(false));
-    }
-
-    dynamic_body_instances_pub_.publish(array);
 }
 
 } // namespace cluttered_environment

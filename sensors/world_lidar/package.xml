@@ -27,7 +27,7 @@
   <depend>libjsoncpp-dev</depend>
   <depend>xgc2_geometry_msgs</depend>
   <depend>eigen</depend>
-  <depend version_gte="0.6.0">libxgc2-math-dev</depend>
+  <depend version_gte="0.6.0-4~focal">libxgc2-math-dev</depend>
 
   <test_depend>rostest</test_depend>
   <test_depend>rospy</test_depend>

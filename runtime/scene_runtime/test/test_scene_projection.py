@@ -91,9 +91,9 @@ class ParametricRingProjectionTest(unittest.TestCase):
             body = ros_node.snapshot(node.store.document, 'epoch', 1).obstacles[0]
             self.assertEqual(len(body.parts), 1)
             part = body.parts[0]
-            self.assertEqual(part.geometry.type, 'ring')
-            self.assertEqual(part.geometry.radii, [3, 1])
-            self.assertEqual(part.geometry.tube_radius, .8)
+            self.assertEqual(part.geometry.type, 6)
+            decoded = ros_node.decode_geometry(part.geometry.type, part.geometry.parameters)
+            self.assertEqual(decoded, {'type': 'ring', 'radii': [3, 1], 'tubeRadius': .8})
             self.assertEqual([part.pose.orientation.x, part.pose.orientation.y,
                               part.pose.orientation.z, part.pose.orientation.w], [.5, -.5, .5, .5])
             markers = node.part_markers(body.id, part)
@@ -116,7 +116,7 @@ def command(node, **request):
 
 def reference_part_markers(node, oid, part):
     """part_markers as written before the cap markers were built directly."""
-    geometry = part.geometry
+    geometry = ros_node.decode_geometry(part.geometry.type, part.geometry.parameters)
     marker = ros_stubs.Marker()
     marker.header.frame_id = node.obstacle_frame(oid)
     marker.header.stamp = ros_stubs.Time(0)
@@ -127,33 +127,33 @@ def reference_part_markers(node, oid, part):
     marker.color = part.color
     marker.frame_locked = True
     marker.scale.x = marker.scale.y = marker.scale.z = 1.0
-    if geometry.type == 'box':
+    if geometry['type'] == 'box':
         marker.type = ros_stubs.Marker.CUBE
-        marker.scale = geometry.size
-    elif geometry.type == 'sphere':
+        marker.scale.x, marker.scale.y, marker.scale.z = geometry['size']
+    elif geometry['type'] == 'sphere':
         marker.type = ros_stubs.Marker.SPHERE
-        marker.scale.x = marker.scale.y = marker.scale.z = 2*geometry.radius
-    elif geometry.type in ('cylinder', 'capsule'):
+        marker.scale.x = marker.scale.y = marker.scale.z = 2*geometry['radius']
+    elif geometry['type'] in ('cylinder', 'capsule'):
         marker.type = ros_stubs.Marker.CYLINDER
-        marker.scale.x = marker.scale.y = 2*geometry.radius
-        marker.scale.z = geometry.height
-        if geometry.type == 'capsule':
-            result = [marker] if geometry.height > 0 else []
-            for index, direction in enumerate((-1, 1) if geometry.height else (1,)):
+        marker.scale.x = marker.scale.y = 2*geometry['radius']
+        marker.scale.z = geometry['height']
+        if geometry['type'] == 'capsule':
+            result = [marker] if geometry['height'] > 0 else []
+            for index, direction in enumerate((-1, 1) if geometry['height'] else (1,)):
                 cap = copy.deepcopy(marker)
                 cap.id = index+1
                 cap.type = ros_stubs.Marker.SPHERE
-                cap.scale.x = cap.scale.y = cap.scale.z = 2*geometry.radius
+                cap.scale.x = cap.scale.y = cap.scale.z = 2*geometry['radius']
                 q = marker.pose.orientation
-                delta = rotate([q.x, q.y, q.z, q.w], [0, 0, direction*geometry.height/2])
+                delta = rotate([q.x, q.y, q.z, q.w], [0, 0, direction*geometry['height']/2])
                 cap.pose.position.x += delta[0]
                 cap.pose.position.y += delta[1]
                 cap.pose.position.z += delta[2]
                 result.append(cap)
             return result
-    elif geometry.type == 'convex':
+    elif geometry['type'] == 'convex':
         marker.type = ros_stubs.Marker.TRIANGLE_LIST
-        marker.points = [geometry.vertices[i] for i in geometry.triangles]
+        marker.points = [ros_stubs.Point(*geometry['vertices'][i]) for i in geometry['triangles']]
     return [marker]
 
 
@@ -162,7 +162,11 @@ def reference_state(node):
     message = ros_stubs.SceneState()
     message.epoch, message.revision = node.store.epoch, node.store.revision
     message.playing, message.scene_time = node.store.playing, node.store.scene_time()
+    dynamic_ids = {item['id'] for item in node.store.document['obstacles']
+                   if item['motion']['type'] != 'hold'}
     for item in node.store.states():
+        if item['id'] not in dynamic_ids:
+            continue
         body = ros_stubs.Msg()
         body.id = item['id']
         ros_node.set_pose(body.pose, item['pose'])

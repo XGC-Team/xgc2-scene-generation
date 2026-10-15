@@ -5,6 +5,7 @@ import struct
 import time
 
 import rosgraph
+from xgc2_math.geometry import encode_geometry
 import rospy
 import rostest
 from geometry_msgs.msg import Point, Pose, PoseStamped, Quaternion, Vector3
@@ -61,7 +62,7 @@ class BodyRoster(NodeFixture):
         # Static wall blocks the true B hit; it is not a body sample crop.
         wall = SceneObstacle(id='wall', pose=Pose(Point(1.5, 0, 1), Quaternion(0, 0, 0, 1)),
                              parts=[ScenePart(id='p', pose=Pose(Point(), Quaternion(0, 0, 0, 1)),
-                                              geometry=SceneGeometry(type='box', size=Vector3(.2, 4, 3)))])
+                                              geometry=SceneGeometry(*encode_geometry({'type': 'box', 'size': [.2, 4, 3]})))])
         scene.revision += 1
         scene.obstacles = [wall]
         scene_pub.publish(scene)

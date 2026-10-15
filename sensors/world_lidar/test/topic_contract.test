@@ -1,8 +1,8 @@
 <launch>
   <!-- Three robots on one master: /uav1 enables the sensor on the scene runtime
-       snapshot, /ugv2 on the Gazebo obstacle truth, /ugv3 leaves it off; /uav4 is
+       snapshot, /ugv2 on the same snapshot, /ugv3 leaves it off; /uav4 is
        started the way the XGC2 process definition starts it (no roslaunch, preset).
-       The driver publishes one toy scene in both forms and identical poses. -->
+       The driver publishes one toy scene and identical poses. -->
   <node pkg="xgc2_world_lidar" type="lidar_test_node" name="world_lidar" ns="/uav1" required="true">
     <param name="scene_source" value="snapshot"/>
     <param name="pose_topic_pattern" value="/vrpn_client_node/uav1/pose"/>
@@ -14,7 +14,7 @@
     <param name="publish_beams" value="true"/>
   </node>
   <node pkg="xgc2_world_lidar" type="lidar_test_node" name="world_lidar" ns="/ugv2" required="true">
-    <param name="scene_source" value="gazebo"/>
+    <param name="scene_source" value="snapshot"/>
     <param name="pose_topic_pattern" value="/vrpn_client_node/ugv2/pose"/>
     <param name="output_topic_pattern" value="simple_lidar/points"/>
     <param name="beams_topic_pattern" value="simple_lidar/beams"/>

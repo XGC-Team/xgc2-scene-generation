@@ -83,8 +83,8 @@ Gazebo: one ROS-free core and a world-owned fleet node. Gazebo's native surface
 ray sensor remains a separate implementation of the simple-lidar topic contract.
 
 - **Core** (`include/xgc2_world_lidar/`, `src/world_lidar.cpp`,
-  `src/scene_conversion.cpp`, `src/convex_body_conversion.cpp`): C++17 and
-  Eigen only. BVH ray casting and surface sampling over closed convex solids.
+  `src/scene_conversion.cpp`): C++17 and
+  Eigen only. BVH ray casting and surface sampling over the shared numerical geometry.
 - **Node** (`src/world_lidar_node.cpp`, `launch/world_lidar.launch`): a thin
   ROS1 edge. XGC2 starts one fleet node for the opted-in robot slots and any
   explicitly declared scene reference layer. Standalone per-robot launch is
@@ -109,18 +109,7 @@ explicit `mode` or numeric argument wins over the preset.
 
 ## Scene sources
 
-| `simulator` launch arg | `~scene_source` | Geometry read |
-|---|---|---|
-| `lightweight` | `snapshot` | `/xgc/scene/snapshot` + `/xgc/scene/state` (`xgc2_geometry_msgs/SceneSnapshot`, `SceneState`): the scene document the scene runtime serves |
-| `gazebo` | `gazebo` | `/xgc2/simulation/obstacles/geometry_library` + `/xgc2/simulation/obstacles/instances` (`GeometryLibrary`, `ConvexBodyArray`): the collision geometry of every managed obstacle in the running Gazebo world, published by `xgc2_gazebo_scene` |
-
-Both sources become the same list of convex solids. Gazebo instances map as:
-`cube` → box with `scale` as full side lengths; `sphere` → radius `scale.x`;
-`cylinder` → radius `scale.x`, full height `scale.z`; any other type → the
-library template of that type, support points times `scale`, convex hull.
-Collision meshes arrive as such templates. Models that are not managed
-obstacles (ground plane, robots, unmanaged world models) are not in either
-source.
+All simulators consume `/xgc/scene/snapshot` and `/xgc/scene/state` (`SceneSnapshot`, `SceneState`). Definitions retain original numerical geometry and full part poses; state contains dynamic objects only. Static scenes still send an empty state heartbeat.
 
 ## Per-robot topics
 
@@ -137,10 +126,10 @@ A robot that does not enable the sensor has no node and no topic.
 
 ```bash
 roslaunch xgc2_world_lidar world_lidar.launch enable:=true namespace:=/uav1 \
-  simulator:=lightweight mode:=raycast rate_hz:=10
+  scene_source:=snapshot mode:=raycast rate_hz:=10
 ```
 
-Launch arguments: `enable` (default `false`), `namespace`, `simulator`,
+Launch arguments: `enable` (default `false`), `namespace`, `scene_source`,
 `pose_topic`, `preset`, `mode`, `rate_hz`, `range`, `h_fov_deg`, `v_fov_deg`,
 `h_res`, `v_res` (0 keeps the config / preset value), `publish_beams`,
 `start_enabled`. Every other parameter is documented in
@@ -149,17 +138,13 @@ Launch arguments: `enable` (default `false`), `namespace`, `simulator`,
 ## Tests
 
 ```bash
-catkin_make run_tests_xgc2_world_lidar      # core, both scene sources, topic contract
+catkin_make run_tests_xgc2_world_lidar      # core, shared geometry source, topic contract
 ```
 
 - `test_world_lidar`: occlusion, penetration, surfaces and range, BVH, FOV,
   frustum, beams, heading crop, vehicle bodies, reproducibility.
-- `test_scene_sources`: Gazebo instance conversion rules, and one toy scene
-  given as a scene document and as Gazebo obstacle truth yields identical
-  scans in every mode.
-- `test/topic_contract.test`: three robots on one master (lightweight source,
-  Gazebo source, sensor off) give the same topic contract and clouds for the
-  first two and no node or topic for the third.
+- `test_scene_sources`: shared binary geometry, composed poses, ring holes, ellipsoid rays, bounded halfspaces, temporary hulls and nonconvex mesh gaps.
+- `test/topic_contract.test`: robots using the shared definition produce the same topic contract and clouds; a disabled sensor produces neither.
 - `test/cache_lifecycle.test`: disabled reference invalidation and reenable,
   unsubscribed seeded scans, serial/pool byte equality, exact pose stamps,
   optional neighbor returns, self exclusion and unsensed neighbor bodies.

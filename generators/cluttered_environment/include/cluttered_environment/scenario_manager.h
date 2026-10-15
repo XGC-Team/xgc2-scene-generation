@@ -15,8 +15,6 @@
 #include <vector>
 
 #include "cluttered_environment/scene/obstacles/obstacle_base.h"
-#include "xgc2_geometry_msgs/ConvexBodyArray.h"
-#include "xgc2_geometry_msgs/GeometryLibrary.h"
 
 namespace cluttered_environment {
 
@@ -29,7 +27,6 @@ public:
 
 private:
     void initializeMarkerPublishing();
-    void initializeDynamicObstaclePublishing();
     void publishMarkers(const ros::TimerEvent&);
 
     bool loadGlobalConfig();
@@ -45,22 +42,10 @@ private:
     void expandVPolytopeTemplate(const std::string& template_name, ObstacleConfig& config);
     void parseInlineVertices(XmlRpc::XmlRpcValue& vertices_xml, ObstacleConfig& config);
 
-    int countDynamicObstacles() const;
-    xgc2_geometry_msgs::GeometryLibrary buildGeometryLibrary();
-    xgc2_geometry_msgs::ConvexBodyArray buildConvexBodyArray();
-    void publishGeometryOnce();
-    void publishDynamicBodyInstances(const ros::TimerEvent&);
-
     ros::NodeHandle nh_;
 
     ros::Publisher marker_array_pub_;
     ros::Timer marker_timer_;
-
-    ros::Publisher geometry_library_pub_;
-    ros::Publisher static_body_instances_pub_;
-
-    ros::Publisher dynamic_body_instances_pub_;
-    ros::Timer dynamic_instance_timer_;
 
     std::string world_frame_id_;
     double publish_rate_ = 0.0;

@@ -4,10 +4,11 @@ import copy
 import os
 import unittest
 
+from xgc2_math.geometry import encode_geometry
 import rospy
 import rostest
 from geometry_msgs.msg import Point, Pose, PoseStamped, Quaternion
-from xgc2_geometry_msgs.msg import SceneObstacleState, SceneSnapshot, SceneState
+from xgc2_geometry_msgs.msg import SceneGeometry, SceneObstacleState, SceneSnapshot, SceneState
 
 from cache_lifecycle_test import NodeFixture
 from topic_contract_test import snapshot
@@ -83,11 +84,11 @@ class OriginalComparison(NodeFixture):
             moving.obstacles[0].pose.position.x += 1.0
             compare()
             definition.revision += 1
-            definition.obstacles[0].parts[0].geometry.size.y = 3.0
+            definition.obstacles[0].parts[0].geometry = SceneGeometry(*encode_geometry({'type': 'box', 'size': [.4, 3, 2]}))
             compare()
             added = snapshot().obstacles[2]
             added.pose.position = Point(2, 0, 1)
-            added.parts[0].geometry.radius = 0.4
+            added.parts[0].geometry = SceneGeometry(*encode_geometry({'type': 'sphere', 'radius': .4}))
             definition.revision += 1
             definition.obstacles.append(added)
             compare()

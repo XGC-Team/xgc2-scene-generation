@@ -6,6 +6,7 @@ import threading
 
 import rospy
 import tf2_ros
+from xgc2_math.geometry import encode_geometry, decode_geometry
 from geometry_msgs.msg import Point, Pose, TransformStamped
 from std_msgs.msg import String
 from visualization_msgs.msg import Marker, MarkerArray
@@ -38,16 +39,7 @@ def obstacle_message(item):
         part = ScenePart()
         part.id = definition['id']
         set_pose(part.pose, definition['pose'])
-        geometry = definition['geometry']
-        part.geometry.type = geometry['type']
-        if geometry['type'] == 'ring':
-            part.geometry.radii = list(geometry['radii'])
-            part.geometry.tube_radius = geometry['tubeRadius']
-        part.geometry.size.x, part.geometry.size.y, part.geometry.size.z = geometry.get('size', [0, 0, 0])
-        part.geometry.radius = geometry.get('radius', 0)
-        part.geometry.height = geometry.get('height', 0)
-        part.geometry.vertices = [Point(*p) for p in geometry.get('vertices', [])]
-        part.geometry.triangles = geometry.get('triangles', [])
+        part.geometry.type, part.geometry.parameters = encode_geometry(definition['geometry'])
         part.color.r, part.color.g, part.color.b, part.color.a = definition['color']
         body.parts.append(part)
     return body
@@ -122,7 +114,7 @@ class SceneNode:
         # view changed; it is latched, so repeats carry no information.
         self._published_view = None
         # Per document: obstacle messages and markers of unchanged obstacles,
-        # the encoded document, and the constant state of hold obstacles.
+        # the encoded document, and the dynamic obstacle roster.
         self._obstacle_messages = ObstacleMessages()
         self._markers = {}
         self._json = EnvelopeJson()
@@ -284,7 +276,7 @@ class SceneNode:
         return cached[2]
 
     def part_markers(self, oid, part):
-        geometry = part.geometry
+        geometry = decode_geometry(part.geometry.type, part.geometry.parameters)
         marker = Marker()
         marker.header.frame_id = self.obstacle_frame(oid)
         marker.header.stamp = rospy.Time(0)
@@ -295,24 +287,24 @@ class SceneNode:
         marker.color = part.color
         marker.frame_locked = True
         marker.scale.x = marker.scale.y = marker.scale.z = 1.0
-        if geometry.type == 'box':
+        if geometry['type'] == 'box':
             marker.type = Marker.CUBE
-            marker.scale = geometry.size
-        elif geometry.type == 'sphere':
+            marker.scale.x, marker.scale.y, marker.scale.z = geometry['size']
+        elif geometry['type'] == 'sphere':
             marker.type = Marker.SPHERE
-            marker.scale.x = marker.scale.y = marker.scale.z = 2*geometry.radius
-        elif geometry.type in ('cylinder', 'capsule'):
+            marker.scale.x = marker.scale.y = marker.scale.z = 2*geometry['radius']
+        elif geometry['type'] in ('cylinder', 'capsule'):
             marker.type = Marker.CYLINDER
-            marker.scale.x = marker.scale.y = 2*geometry.radius
-            marker.scale.z = geometry.height
-            if geometry.type == 'capsule':
-                result = [marker] if geometry.height > 0 else []
-                for index, direction in enumerate((-1, 1) if geometry.height else (1,)):
+            marker.scale.x = marker.scale.y = 2*geometry['radius']
+            marker.scale.z = geometry['height']
+            if geometry['type'] == 'capsule':
+                result = [marker] if geometry['height'] > 0 else []
+                for index, direction in enumerate((-1, 1) if geometry['height'] else (1,)):
                     # The cylinder marker with another id, a sphere shape and its
                     # position moved to one end (built directly: a deep copy of a
                     # marker per cap made definitions of ring-heavy scenes slow).
                     q = marker.pose.orientation
-                    delta = rotate([q.x, q.y, q.z, q.w], [0, 0, direction*geometry.height/2])
+                    delta = rotate([q.x, q.y, q.z, q.w], [0, 0, direction*geometry['height']/2])
                     cap = Marker()
                     cap.header.frame_id = marker.header.frame_id
                     cap.header.stamp = marker.header.stamp
@@ -326,18 +318,23 @@ class SceneNode:
                     cap.pose.position.z = marker.pose.position.z + delta[2]
                     cap.pose.orientation.x, cap.pose.orientation.y = q.x, q.y
                     cap.pose.orientation.z, cap.pose.orientation.w = q.z, q.w
-                    cap.scale.x = cap.scale.y = cap.scale.z = 2*geometry.radius
+                    cap.scale.x = cap.scale.y = cap.scale.z = 2*geometry['radius']
                     cap.color = marker.color
                     cap.frame_locked = marker.frame_locked
                     result.append(cap)
                 return result
-        elif geometry.type == 'ring':
+        elif geometry['type'] == 'ring':
             marker.type = Marker.POINTS
             marker.scale.x = marker.scale.y = marker.scale.z = 0.02
-            marker.points = [Point(*p) for p in surface_points(geometry.radii, geometry.tube_radius)]
-        elif geometry.type == 'convex':
+            marker.points = [Point(*p) for p in surface_points(geometry['radii'], geometry['tubeRadius'])]
+        elif geometry['type'] in ('convex', 'mesh'):
             marker.type = Marker.TRIANGLE_LIST
-            marker.points = [geometry.vertices[i] for i in geometry.triangles]
+            marker.points = [Point(*geometry['vertices'][i]) for i in geometry['triangles']]
+        elif geometry['type'] == 'ellipsoid':
+            marker.type = Marker.SPHERE
+            marker.scale.x, marker.scale.y, marker.scale.z = [2*x for x in geometry['semiaxes']]
+        else:
+            raise SceneError('Marker geometry requires a finite surface representation')
         return [marker]
 
     def tick(self, _event):
@@ -350,10 +347,7 @@ class SceneNode:
             transforms = []
             entries = self.state_entries()
             elapsed = self.store.scene_time()
-            for item, constant in entries:
-                if constant is not None:
-                    message.obstacles.append(constant)
-                    continue
+            for item in entries:
                 value = state(item, elapsed, self.store.playing)
                 message.obstacles.append(state_message(value))
                 transforms.append(self.transform(value['id'], value['pose'], message.header.stamp))
@@ -362,17 +356,11 @@ class SceneNode:
             self.state_pub.publish(message)
 
     def state_entries(self):
-        """Per document: each obstacle with its state message when it holds.
-
-        A hold obstacle's state is its initial pose with zero twist whether or
-        not the scene plays, so that message is built once per document and
-        only moving obstacles are evaluated per tick.
-        """
+        """Cache the dynamic roster; static poses belong to the definition."""
         document, entries = self._states
         if document is not self.store.document:
             document = self.store.document
-            entries = [(item, state_message(state(item, 0.0, False)) if item['motion']['type'] == 'hold' else None)
-                       for item in document['obstacles']]
+            entries = [item for item in document['obstacles'] if item['motion']['type'] != 'hold']
             self._states = (document, entries)
         return entries
 

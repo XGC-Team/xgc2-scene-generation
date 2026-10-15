@@ -5,13 +5,13 @@ import math
 import struct
 import unittest
 
+from xgc2_math.geometry import encode_geometry
 import rospy
 import rosgraph
 import rostest
 from geometry_msgs.msg import Point, Pose, PoseStamped, Quaternion, Vector3
 from sensor_msgs.msg import PointCloud2
-from xgc2_geometry_msgs.msg import (ConvexBodyArray, ConvexBodyInstance, GeometryLibrary, GeometryTemplate,
-                                    SceneGeometry, SceneObstacle, ScenePart, SceneSnapshot)
+from xgc2_geometry_msgs.msg import SceneGeometry, SceneObstacle, ScenePart, SceneSnapshot
 
 
 def yaw_quaternion(yaw):
@@ -30,48 +30,28 @@ def snapshot():
     msg = SceneSnapshot(scene_id="toy", epoch="e1", revision=1)
     msg.header.frame_id = "world"
     for ident, kind, x, y, z, yaw, dims in TOY:
-        geometry = SceneGeometry(type=kind)
-        if kind == "box":
-            geometry.size = Vector3(*dims)
+        named = {'type': kind}
+        if kind == 'box':
+            named['size'] = list(dims)
         else:
-            geometry.radius, geometry.height = dims
+            named['radius'] = dims[0]
+            if kind != 'sphere':
+                named['height'] = dims[1]
+        geometry = SceneGeometry(*encode_geometry(named))
         part = ScenePart(id="p0", pose=Pose(Point(0, 0, 0), Quaternion(0, 0, 0, 1)), geometry=geometry)
         msg.obstacles.append(SceneObstacle(id=ident, name=ident, dynamic=False, motion_type="static",
                                            pose=Pose(Point(x, y, z), yaw_quaternion(yaw)), parts=[part]))
     return msg
 
 
-def gazebo_truth():
-    library = GeometryLibrary(templates=[GeometryTemplate(type="cube", resolution=0, support_points=[
-        Point(sx * 0.5, sy * 0.5, sz * 0.5) for sx in (-1, 1) for sy in (-1, 1) for sz in (-1, 1)])])
-    library.header.frame_id = "world"
-    bodies = ConvexBodyArray()
-    bodies.header.frame_id = "world"
-    for index, (ident, kind, x, y, z, yaw, dims) in enumerate(TOY):
-        scale = Vector3(*dims) if kind == "box" else Vector3(dims[0], dims[0], dims[1] if kind == "cylinder" else dims[0])
-        bodies.instances.append(ConvexBodyInstance(
-            id=index + 1, name=ident, geometry_type={"box": "cube"}.get(kind, kind),
-            pose=Pose(Point(x, y, z), yaw_quaternion(yaw)), scale=scale, is_static=True))
-    return library, bodies
-
-
-def xyz(cloud):
-    step = cloud.point_step
-    return [struct.unpack_from("<fff", cloud.data, i * step) for i in range(cloud.width * cloud.height)]
-
 
 class TopicContract(unittest.TestCase):
     def setUp(self):
         latched = dict(queue_size=1, latch=True)
         self.snapshot_pub = rospy.Publisher("/xgc/scene/snapshot", SceneSnapshot, **latched)
-        self.library_pub = rospy.Publisher("/xgc2/simulation/obstacles/geometry_library", GeometryLibrary, **latched)
-        self.instances_pub = rospy.Publisher("/xgc2/simulation/obstacles/instances", ConvexBodyArray, **latched)
         self.pose_pubs = [rospy.Publisher("/vrpn_client_node/%s/pose" % ns, PoseStamped, queue_size=1)
                           for ns in ("uav1", "ugv2", "ugv3", "uav4")]
         self.snapshot_pub.publish(snapshot())
-        library, bodies = gazebo_truth()
-        self.library_pub.publish(library)
-        self.instances_pub.publish(bodies)
         self.timer = rospy.Timer(rospy.Duration(0.05), self.publish_poses)
 
     def tearDown(self):

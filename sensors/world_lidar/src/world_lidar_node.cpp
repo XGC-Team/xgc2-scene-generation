@@ -9,42 +9,21 @@
  *   snapshot  <scene_namespace>/snapshot  xgc2_geometry_msgs/SceneSnapshot
  *             <scene_namespace>/state     xgc2_geometry_msgs/SceneState (dynamic obstacle poses)
  *             The common scene document, used with the lightweight simulator.
- *   gazebo    ~geometry_library_topic     xgc2_geometry_msgs/GeometryLibrary (latched)
- *             ~instances_topic            xgc2_geometry_msgs/ConvexBodyArray
- *             The obstacles Gazebo actually simulates, published by the
- *             xgc2_gazebo_scene system plugin.
- * Inputs
- *   pose_topic_pattern          geometry_msgs/PoseStamped per vehicle
- * Outputs
- *   output_topic_pattern        sensor_msgs/PointCloud2 per vehicle (default
- *                               <ns>/simple_lidar/points), frame "world",
- *                               x y z float32 (+ int32 vehicle_id when ~vehicle_bodies is on)
- *   beams_topic_pattern         raycast / depth_frustum only (~publish_beams; default
- *                               <ns>/simple_lidar/beams): one record per beam, frame "world",
- * float32 x y z (origin) dx dy dz (unit) range hit(1/0) (+ int32 vehicle_id) global_map_topic
- * sensor_msgs/PointCloud2, latched, penetrating full-scene cloud (~publish_global_map) Model ~mode,
- * ~preset and the sensor parameters; see prepareParameters(). Switches ~enabled initial state
- * (default true). While disabled the node scans nothing and publishes nothing (no empty clouds: an
- * empty cloud would read as observed-free space). The source-owned XRPC control
- * host applies enabled changes on this node's callback boundary. ~enabled_vehicles list of vehicle
- * ids that get a sensor; empty = all served vehicles. The others get no publisher.
  *
  * Snapshot rules: an older revision of the current epoch is ignored; a
  * snapshot with dynamic obstacles waits for a state of the same epoch and
- * revision; a state that lacks a dynamic obstacle is refused. Gazebo rules:
- * instances wait for the library; the scene is rebuilt only when an instance
- * changes. The sensor is rebuilt at most once per scan tick, from the installed
- * scene: only obstacles that changed are converted, sampled and indexed again.
+ * revision; a state that lacks a dynamic obstacle is refused. The sensor is rebuilt at most once
+ * per scan tick, from the installed scene: only obstacles that changed are converted, sampled and
+ * indexed again.
  */
 
 #include <geometry_msgs/PoseStamped.h>
 #include <ros/package.h>
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
-#include <xgc2_geometry_msgs/ConvexBodyArray.h>
-#include <xgc2_geometry_msgs/GeometryLibrary.h>
 #include <xgc2_geometry_msgs/SceneSnapshot.h>
 #include <xgc2_geometry_msgs/SceneState.h>
+#include <xgc2_math/geometry/se3.hpp>
 
 #include <boost/property_tree/json_parser.hpp>
 #include <boost/property_tree/ptree.hpp>
@@ -63,7 +42,6 @@
 #include <thread>
 #include <vector>
 
-#include "xgc2_world_lidar/convex_body_conversion.h"
 #include "xgc2_world_lidar/lidar_control.hpp"
 #include "xgc2_world_lidar/observation_contract.h"
 #include "xgc2_world_lidar/scan_pool.h"
@@ -608,21 +586,9 @@ public:
             state_sub_ =
                 nh_.subscribe(scene_ns + "/state", 1, &WorldLidarNode::stateCallback, this);
             ROS_INFO("world_lidar: scene from %s/{snapshot,state}", scene_ns.c_str());
-        } else if (scene_source == "gazebo") {
-            gazebo_source_ = true;
-            const std::string library_topic = pnh.param<std::string>(
-                "geometry_library_topic", "/xgc2/simulation/obstacles/geometry_library");
-            const std::string instances_topic =
-                pnh.param<std::string>("instances_topic", "/xgc2/simulation/obstacles/instances");
-            library_sub_ = nh_.subscribe(library_topic, 1, &WorldLidarNode::libraryCallback, this);
-            instances_sub_ =
-                nh_.subscribe(instances_topic, 1, &WorldLidarNode::instancesCallback, this);
-            ROS_INFO("world_lidar: scene from Gazebo obstacle truth %s + %s",
-                     library_topic.c_str(),
-                     instances_topic.c_str());
         } else {
-            throw std::invalid_argument("~scene_source must be snapshot or gazebo, got '" +
-                                        scene_source + "'");
+            throw std::invalid_argument("~scene_source must be snapshot, got '" + scene_source +
+                                        "'");
         }
         timer_ = nh_.createTimer(ros::Duration(1.0 / rate), &WorldLidarNode::tick, this);
         const SensorConfig& c = lidar_->config();
@@ -721,86 +687,8 @@ private:
         pending_ = pending_ || changed;
     }
 
-    void libraryCallback(const xgc2_geometry_msgs::GeometryLibrary::ConstPtr& msg) {
-        library_ = msg;
-        if (instances_)
-            pending_ = true;
-    }
-
-    // Gazebo republishes instances at a fixed rate; rebuild only on change.
-    void instancesCallback(const xgc2_geometry_msgs::ConvexBodyArray::ConstPtr& msg) {
-        const bool changed = !instances_ || !sameBodies(*instances_, *msg);
-        instances_ = msg;
-        if (changed && library_)
-            pending_ = true;
-    }
-
-    static bool sameBodies(const xgc2_geometry_msgs::ConvexBodyArray& a,
-                           const xgc2_geometry_msgs::ConvexBodyArray& b) {
-        if (a.instances.size() != b.instances.size())
-            return false;
-        for (std::size_t i = 0; i < a.instances.size(); ++i) {
-            const auto& x = a.instances[i];
-            const auto& y = b.instances[i];
-            if (x.name != y.name || x.geometry_type != y.geometry_type || x.pose != y.pose ||
-                x.scale != y.scale)
-                return false;
-        }
-        return true;
-    }
-
-    // Every converted entry is cached with what it was converted from, so an
-    // install converts and validates only entries that changed since the last
-    // one: a moving obstacle, not the static scene around it.
-    std::vector<Obstacle> gazeboObstacles(bool* has_dynamic) {
-        std::vector<GeometryTemplateDescription> library;
-        for (const auto& t : library_->templates) {
-            GeometryTemplateDescription d;
-            d.type = t.type;
-            for (const auto& p : t.support_points)
-                d.support_points.emplace_back(p.x, p.y, p.z);
-            library.push_back(std::move(d));
-        }
-        const auto& instances = instances_->instances;
-        if (converted_library_ != library_ || converted_.size() != instances.size()) {
-            converted_.assign(instances.size(), Converted{});
-            converted_library_ = library_;
-        }
-        std::vector<Obstacle> obstacles;
-        *has_dynamic = false;
-        for (std::size_t k = 0; k < instances.size(); ++k) {
-            const auto& i = instances[k];
-            *has_dynamic = *has_dynamic || !i.is_static;
-            Converted& c = converted_[k];
-            if (!c.valid || c.name != i.name || c.geometry_type != i.geometry_type ||
-                !samePose(c.pose, i.pose) || !sameVector(c.scale, i.scale)) {
-                ConvexBodyDescription d;
-                d.name = i.name;
-                d.geometry_type = i.geometry_type;
-                d.pose = poseOf(i.pose);
-                d.scale = Eigen::Vector3d(i.scale.x, i.scale.y, i.scale.z);
-                c.valid = false;
-                c.obstacles = fromConvexBodies(library, {d});
-                c.name = i.name;
-                c.geometry_type = i.geometry_type;
-                c.pose = i.pose;
-                c.scale = i.scale;
-                c.valid = true;
-            }
-            obstacles.insert(obstacles.end(), c.obstacles.begin(), c.obstacles.end());
-        }
-        return obstacles;
-    }
-
-    // Builds the obstacle list from the selected scene source and installs
-    // it into both sensors. Throws std::invalid_argument on a refused scene.
+    // Installs geometry from the single scene definition and matching dynamic state.
     void install(const ros::Time& now) {
-        if (gazebo_source_) {
-            bool has_dynamic = false;
-            const std::vector<Obstacle> obstacles = gazeboObstacles(&has_dynamic);
-            installObstacles(obstacles, has_dynamic, now);
-            return;
-        }
         std::map<std::string, const geometry_msgs::Pose*> state_pose;
         if (state_)
             for (const auto& s : state_->obstacles)
@@ -814,7 +702,7 @@ private:
             if (o.dynamic && it == state_pose.end())
                 throw std::invalid_argument("state lacks dynamic obstacle '" + o.id + "'");
             has_dynamic = has_dynamic || o.dynamic;
-            poses[k] = it != state_pose.end() ? it->second : &o.pose;
+            poses[k] = o.dynamic ? it->second : &o.pose;
         }
         if (converted_snapshot_ != snapshot_ || converted_.size() != items.size()) {
             converted_.assign(items.size(), Converted{});
@@ -824,28 +712,27 @@ private:
         for (std::size_t k = 0; k < items.size(); ++k) {
             const auto& o = items[k];
             Converted& c = converted_[k];
-            if (!c.valid || !samePose(c.pose, *poses[k])) {
-                SceneObstacleDescription d;
-                d.id = o.id;
-                d.pose = poseOf(*poses[k]);
+            if (!c.definition_compiled) {
+                SceneObstacleDescription local;
+                local.id = o.id;
                 for (const auto& p : o.parts) {
                     ScenePartDescription part;
-                    part.type = p.geometry.type;
+                    part.geometry = {p.geometry.type, p.geometry.parameters};
                     part.pose = poseOf(p.pose);
-                    part.size =
-                        Eigen::Vector3d(p.geometry.size.x, p.geometry.size.y, p.geometry.size.z);
-                    part.radius = p.geometry.radius;
-                    part.height = p.geometry.height;
-                    if (part.type == "ring") {
-                        part.radii = {p.geometry.radii[0], p.geometry.radii[1]};
-                        part.tubeRadius = p.geometry.tube_radius;
-                    }
-                    for (const auto& v : p.geometry.vertices)
-                        part.vertices.emplace_back(v.x, v.y, v.z);
-                    d.parts.push_back(std::move(part));
+                    local.parts.push_back(std::move(part));
                 }
+                c.local = toObstacles({local});
+                c.obstacles = c.local;
+                c.definition_compiled = true;
+            }
+            if (!c.valid || !samePose(c.pose, *poses[k])) {
+                const auto parent = poseOf(*poses[k]);
+                const auto q = xgc2_math::normalizedQuaternion(parent.orientation);
                 c.valid = false;
-                c.obstacles = toObstacles({d});
+                for (std::size_t i = 0; i < c.local.size(); ++i) {
+                    c.obstacles[i].position = parent.position + q * c.local[i].position;
+                    c.obstacles[i].orientation = q * c.local[i].orientation;
+                }
                 c.pose = *poses[k];
                 c.valid = true;
             }
@@ -952,7 +839,7 @@ private:
             ROS_WARN_THROTTLE(5.0, "world_lidar: no scene installed yet; not publishing");
             return;
         }
-        if (map_has_dynamic_ && !gazebo_source_ &&
+        if (map_has_dynamic_ &&
             (!state_ ||
              !freshObservationTime(state_->header.stamp.toSec(), now.toSec(), pose_timeout_))) {
             ROS_WARN_THROTTLE(
@@ -1056,21 +943,15 @@ private:
     ros::Publisher map_pub_;
     ros::Subscriber snapshot_sub_;
     ros::Subscriber state_sub_;
-    ros::Subscriber library_sub_;
-    ros::Subscriber instances_sub_;
-    xgc2_geometry_msgs::GeometryLibrary::ConstPtr library_;
-    xgc2_geometry_msgs::ConvexBodyArray::ConstPtr instances_;
     // One snapshot obstacle or Gazebo instance as last converted.
     struct Converted {
-        bool valid = false;
+        bool valid = false, definition_compiled = false;
+        std::vector<Obstacle> local;
         geometry_msgs::Pose pose;
-        geometry_msgs::Vector3 scale;
-        std::string name, geometry_type;
         std::vector<Obstacle> obstacles;
     };
     // The message the cache belongs to is held, so its address is not reused.
     xgc2_geometry_msgs::SceneSnapshot::ConstPtr converted_snapshot_;
-    xgc2_geometry_msgs::GeometryLibrary::ConstPtr converted_library_;
     std::vector<Converted> converted_;
     // The installed scene of each sampling policy (spacing, buried samples).
     using ScenePolicy = std::pair<double, bool>;
@@ -1094,7 +975,6 @@ private:
     bool map_dirty_ = false;
     bool map_clear_pending_ = false;
     bool enabled_ = true;
-    bool gazebo_source_ = false;
     bool pending_ = false;
     bool scene_ready_ = false;
     // Stop the host and remove dispatched callbacks before source fields die.

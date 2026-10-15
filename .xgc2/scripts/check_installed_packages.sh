@@ -9,19 +9,19 @@ set -u
 
 dpkg -s "ros-${ROS_DISTRO}-xgc2-geometry-msgs" >/dev/null
 test "$(rospack find xgc2_geometry_msgs)" = "/opt/ros/${ROS_DISTRO}/share/xgc2_geometry_msgs"
-test -f "/opt/ros/${ROS_DISTRO}/include/xgc2_geometry_msgs/ConvexBodyArray.h"
-rosmsg show xgc2_geometry_msgs/GeometryLibrary >/dev/null
-rosmsg show xgc2_geometry_msgs/ConvexBodyArray >/dev/null
+test -f "/opt/ros/${ROS_DISTRO}/include/xgc2_geometry_msgs/SceneGeometry.h"
 rosmsg show xgc2_geometry_msgs/SceneSnapshot >/dev/null
 [[ "${ROS_DISTRO}" == noetic ]] || { echo "unsupported ROS_DISTRO: ${ROS_DISTRO}" >&2; exit 1; }
-python3 -c "from xgc2_geometry_msgs.msg import GeometryLibrary, ConvexBodyArray, SceneSnapshot"
+python3 -c "from xgc2_geometry_msgs.msg import SceneSnapshot, SceneGeometry; assert SceneGeometry.__slots__ == ['type', 'parameters']; assert SceneGeometry._slot_types == ['uint32', 'uint8[]']"
 geometry_version="$(dpkg-query -W -f='${Version}' ros-noetic-xgc2-geometry-msgs)"
-dpkg --compare-versions "${geometry_version}" ge '1.2.0-13'
+dpkg --compare-versions "${geometry_version}" ge '1.5.0-3'
 
 dpkg -s ros-noetic-xgc2-scene-generation >/dev/null
 dpkg -s ros-noetic-xgc2-scene-runtime >/dev/null
 test -x "/opt/ros/noetic/lib/xgc2_scene_runtime/scene_node"
 python3 - <<'PY_CHECK'
+from xgc2_math.geometry import encode_geometry, decode_geometry
+assert decode_geometry(*encode_geometry({"type": "ring", "radii": [3, 1], "tubeRadius": .8})) == {"type": "ring", "radii": [3, 1], "tubeRadius": .8}
 from xgc2_scene_runtime.store import SceneStore
 from xgc2_scene_runtime.integrations.gazebo.prepare import prepare
 from xgc2_scene_runtime.integrations.simulation_client import SimulationClient
@@ -43,12 +43,12 @@ if ldd "/opt/ros/${ROS_DISTRO}/lib/xgc2_world_lidar/world_lidar_node" | grep -q 
 fi
 dpkg -s libxgc2-math-dev >/dev/null
 math_version="$(dpkg-query -W -f='${Version}' libxgc2-math-dev)"
-dpkg --compare-versions "${math_version}" ge '0.5.6-6~focal'
+dpkg --compare-versions "${math_version}" ge '0.6.0-4~focal'
 
 test "$(rospack find xgc2_geometry_msgs)" = "/opt/ros/${ROS_DISTRO}/share/xgc2_geometry_msgs"
 test "$(rospack find cluttered_environment)" = "/opt/ros/${ROS_DISTRO}/share/cluttered_environment"
 test "$(rospack find mockamap)" = "/opt/ros/${ROS_DISTRO}/share/mockamap"
-test -f "/opt/ros/${ROS_DISTRO}/include/xgc2_geometry_msgs/ConvexBodyArray.h"
+test -f "/opt/ros/${ROS_DISTRO}/include/xgc2_geometry_msgs/SceneSnapshot.h"
 test -f "/usr/include/xgc2_math/geometry/math_helpers.h"
 test -f "/usr/include/xgc2_math/geometry/collision/distance_gjk_query.h"
 test -x "/opt/ros/${ROS_DISTRO}/lib/cluttered_environment/cluttered_environment_node"

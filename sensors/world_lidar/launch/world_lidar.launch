@@ -9,8 +9,7 @@
   <arg name="namespace"/>
   <arg name="xrpc_socket"/>
   <arg name="target_id"/>
-  <!-- snapshot: the scene runtime's document (/xgc/scene/{snapshot,state}), on every simulator;
-       gazebo: Gazebo obstacle truth (/xgc2/simulation/obstacles/{geometry_library,instances}). -->
+  <!-- Scene definitions and dynamic state on /xgc/scene/{snapshot,state}. -->
   <arg name="scene_source" default="snapshot"/>
   <!-- geometry_msgs/PoseStamped of the robot body in the world frame. -->
   <arg name="pose_topic" default="/vrpn_client_node$(arg namespace)/pose"/>

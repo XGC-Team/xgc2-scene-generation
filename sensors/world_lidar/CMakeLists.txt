@@ -25,7 +25,7 @@ if(catkin_FOUND)
 endif()
 include_directories(include ${EIGEN3_INCLUDE_DIR})
 add_library(${PROJECT_NAME} STATIC
-  src/world_lidar.cpp src/scene_conversion.cpp src/convex_body_conversion.cpp
+  src/world_lidar.cpp src/scene_conversion.cpp
   src/scan_pool.cpp)
 target_link_libraries(${PROJECT_NAME} PUBLIC Threads::Threads xgc2_math::scene)
 if(TARGET Eigen3::Eigen)

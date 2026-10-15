@@ -21,47 +21,6 @@ namespace {
 constexpr std::size_t kMinQuickHullVertices = 4;
 constexpr int kHMatrixCols = 4;
 
-geometry_msgs::Point toGeometryPoint(const Eigen::Vector3d& point) {
-    geometry_msgs::Point ros_point;
-    ros_point.x = point.x();
-    ros_point.y = point.y();
-    ros_point.z = point.z();
-    return ros_point;
-}
-
-std::vector<Eigen::Vector3d> makeRotatedOffsets(const std::vector<Eigen::Vector3d>& local_points,
-                                                const Eigen::Vector3d& scale,
-                                                const Eigen::Quaterniond& orientation) {
-    std::vector<Eigen::Vector3d> offsets;
-    offsets.reserve(local_points.size());
-
-    const Eigen::Quaterniond unit_orientation = orientation.normalized();
-    for (const auto& local_point : local_points) {
-        const Eigen::Vector3d scaled_point(
-            local_point.x() * scale.x(), local_point.y() * scale.y(), local_point.z() * scale.z());
-        offsets.push_back(unit_orientation * scaled_point);
-    }
-
-    return offsets;
-}
-
-xgc2_math::ConvexBody makeBodyMetadata(const ObstacleConfig& config,
-                                       const std::string& geometry_type,
-                                       const Eigen::Vector3d& position,
-                                       const Eigen::Quaterniond& orientation,
-                                       const Eigen::Vector3d& scale,
-                                       const Eigen::Vector3d& velocity) {
-    xgc2_math::ConvexBody body;
-    body.id = config.id;
-    body.name = config.name;
-    body.geometry_type = geometry_type;
-    body.position = position;
-    body.orientation = orientation.normalized();
-    body.scale = scale;
-    body.velocity = velocity;
-    return body;
-}
-
 Eigen::Index toEigenIndex(std::size_t value) {
     if (value > static_cast<std::size_t>(std::numeric_limits<Eigen::Index>::max())) {
         throw std::runtime_error("point count exceeds Eigen::Index range");
@@ -199,29 +158,6 @@ void HPolytopeObstacle::computeVerticesFromHMatrix() {
     }
 }
 
-xgc2_geometry_msgs::GeometryTemplate
-HPolytopeObstacle::buildGeometryTemplate(int /*resolution*/) const {
-    xgc2_geometry_msgs::GeometryTemplate tmpl;
-    tmpl.type = getType();
-    tmpl.resolution = 0;
-    for (const auto& vertex : support_vertices_unit_) {
-        tmpl.support_points.push_back(toGeometryPoint(vertex));
-    }
-    return tmpl;
-}
-
-xgc2_math::ConvexBody HPolytopeObstacle::buildOccupiedBody() const {
-    xgc2_math::ConvexBody body = makeBodyMetadata(config_,
-                                                  getType(),
-                                                  currentPositionVector(),
-                                                  currentOrientationQuaternion(),
-                                                  config_.scale,
-                                                  currentVelocityVector());
-    body.shape = std::make_shared<xgc2_math::SupportPointSet>(
-        body.position, makeRotatedOffsets(support_vertices_unit_, body.scale, body.orientation));
-    return body;
-}
-
 visualization_msgs::Marker HPolytopeObstacle::createMarkerMessage() {
     visualization_msgs::Marker marker;
 
@@ -350,29 +286,6 @@ void VPolytopeObstacle::generateGeometry() {
             bbox_max_local_ = bbox_max_local_.cwiseMax(v);
         }
     }
-}
-
-xgc2_geometry_msgs::GeometryTemplate
-VPolytopeObstacle::buildGeometryTemplate(int /*resolution*/) const {
-    xgc2_geometry_msgs::GeometryTemplate tmpl;
-    tmpl.type = getType();
-    tmpl.resolution = 0;
-    for (const auto& vertex : vertices_original_) {
-        tmpl.support_points.push_back(toGeometryPoint(vertex));
-    }
-    return tmpl;
-}
-
-xgc2_math::ConvexBody VPolytopeObstacle::buildOccupiedBody() const {
-    xgc2_math::ConvexBody body = makeBodyMetadata(config_,
-                                                  getType(),
-                                                  currentPositionVector(),
-                                                  currentOrientationQuaternion(),
-                                                  config_.scale,
-                                                  currentVelocityVector());
-    body.shape = std::make_shared<xgc2_math::SupportPointSet>(
-        body.position, makeRotatedOffsets(vertices_original_, body.scale, body.orientation));
-    return body;
 }
 
 void VPolytopeObstacle::generateConvexHull() {

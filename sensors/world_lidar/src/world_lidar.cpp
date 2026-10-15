@@ -1,5 +1,6 @@
 #include "xgc2_world_lidar/world_lidar.h"
 #include "xgc2_math/scene/ellipse_ring.hpp"
+#include "xgc2_math/scene/shape_table.hpp"
 
 #include <algorithm>
 #include <array>
@@ -212,6 +213,7 @@ struct Plane {
 };
 
 struct Shape {
+    std::shared_ptr<const xgc2_math::scene::detail::ShapeTable> numerical;
     Obstacle::Type type = Obstacle::kBox;
     Eigen::Matrix3d rotation = Eigen::Matrix3d::Identity(); // local -> world
     Eigen::Vector3d position = Eigen::Vector3d::Zero();
@@ -234,9 +236,14 @@ struct Shape {
     // Interval of the world line o + t d (d unit) inside the solid.
     bool
     intersect(const Eigen::Vector3d& o, const Eigen::Vector3d& d, double* t0, double* t1) const {
+        if (numerical)
+            return numerical->intersect(0, o, d, t0, t1);
         const Eigen::Vector3d ol = toLocal(o);
         const Eigen::Vector3d dl = rotation.transpose() * d;
         switch (type) {
+        case Obstacle::kEllipsoid:
+        case Obstacle::kMesh:
+            throw std::logic_error("numerical shape was not compiled");
         case Obstacle::kRing:
             throw std::invalid_argument("ring is nonconvex; use closestSurface");
         case Obstacle::kSphere:
@@ -294,18 +301,28 @@ struct Shape {
         return false;
     }
 
-    double closestSurface(const Eigen::Vector3d& o, const Eigen::Vector3d& d, double maxRange) const {
+    double
+    closestSurface(const Eigen::Vector3d& o, const Eigen::Vector3d& d, double maxRange) const {
+        if (numerical)
+            return numerical->closestSurface(0, o, d, maxRange);
         if (type == Obstacle::kRing)
-            return xgc2_math::scene::ellipticRingRayClosest(toLocal(o), rotation.transpose() * d, radii, tubeRadius, maxRange);
+            return xgc2_math::scene::ellipticRingRayClosest(
+                toLocal(o), rotation.transpose() * d, radii, tubeRadius, maxRange);
         double lo, hi;
-        if (!intersect(o, d, &lo, &hi)) return kInf;
+        if (!intersect(o, d, &lo, &hi))
+            return kInf;
         const double t = lo >= 0 ? lo : hi;
         return t >= 0 && t <= maxRange ? t : kInf;
     }
 
     double residual(const Eigen::Vector3d& world) const {
+        if (numerical)
+            return numerical->residual(0, world);
         const Eigen::Vector3d q = toLocal(world);
         switch (type) {
+        case Obstacle::kEllipsoid:
+        case Obstacle::kMesh:
+            throw std::logic_error("numerical shape was not compiled");
         case Obstacle::kRing:
             return xgc2_math::scene::ellipticRingResidual(q, radii, tubeRadius);
         case Obstacle::kSphere:
@@ -438,6 +455,16 @@ Shape compile(const Obstacle& o) {
             throw std::invalid_argument(std::string("invalid ") + what);
     };
     std::vector<Eigen::Vector3d> hull_points; // local points whose hull bounds the solid
+    if (o.type == Obstacle::kEllipsoid || o.type == Obstacle::kMesh) {
+        auto table = std::make_shared<xgc2_math::scene::detail::ShapeTable>();
+        table->append(o);
+        s.bounds.lo = table->bounds(0).lo;
+        s.bounds.hi = table->bounds(0).hi;
+        s.center = .5 * (s.bounds.lo + s.bounds.hi);
+        s.bound_radius = .5 * (s.bounds.hi - s.bounds.lo).norm();
+        s.numerical = std::move(table);
+        return s;
+    }
     switch (o.type) {
     case Obstacle::kBox: {
         positive(o.size.x(), "box size");
@@ -486,7 +513,9 @@ Shape compile(const Obstacle& o) {
         Eigen::Vector3d ext;
         if (o.type == Obstacle::kRing) {
             for (int i = 0; i < 3; ++i)
-                ext[i] = std::hypot(s.radii.x() * s.rotation(i, 0), s.radii.y() * s.rotation(i, 1)) + s.tubeRadius;
+                ext[i] =
+                    std::hypot(s.radii.x() * s.rotation(i, 0), s.radii.y() * s.rotation(i, 1)) +
+                    s.tubeRadius;
         } else if (o.type == Obstacle::kSphere) {
             ext.setConstant(s.radius);
         } else {
@@ -511,7 +540,15 @@ std::vector<Eigen::Vector3d> sampleShape(const Shape& s, double spacing) {
     if (!std::isfinite(spacing) || spacing <= 0.0)
         throw std::invalid_argument("invalid surface spacing");
     std::vector<Eigen::Vector3d> local;
+    if (s.numerical) {
+        std::vector<Eigen::Vector2d> scratch;
+        s.numerical->appendSamples(0, spacing, &local, &scratch);
+        return local;
+    }
     switch (s.type) {
+    case Obstacle::kEllipsoid:
+    case Obstacle::kMesh:
+        throw std::logic_error("numerical shape was not compiled");
     case Obstacle::kRing:
         local = xgc2_math::scene::sampleEllipticRingSurface(s.radii, s.tubeRadius, spacing);
         break;
@@ -908,7 +945,7 @@ bool samePoints(const std::vector<Eigen::Vector3d>& a, const Eigen::Vector3d* b)
 
 // Bitwise equal definitions compile and sample to bitwise equal shapes.
 bool sameObstacle(const Obstacle& a, const Obstacle& b) {
-    if (a.type != b.type || a.vertices.size() != b.vertices.size() ||
+    if (a.type != b.type || a.triangles != b.triangles || a.vertices.size() != b.vertices.size() ||
         !sameBits(a.position.data(), b.position.data(), 3) ||
         !sameBits(a.orientation.coeffs().data(), b.orientation.coeffs().data(), 4) ||
         !sameBits(a.size.data(), b.size.data(), 3) || !sameBits(&a.radius, &b.radius, 1) ||
@@ -1028,78 +1065,6 @@ void buildScene(Scene& s,
 } // namespace detail
 
 // ---------------------------------------------------------------------------
-Obstacle Obstacle::box(const Eigen::Vector3d& center,
-                       const Eigen::Vector3d& size,
-                       const Eigen::Quaterniond& orientation) {
-    Obstacle o;
-    o.type = kBox;
-    o.position = center;
-    o.orientation = orientation;
-    o.size = size;
-    return o;
-}
-
-Obstacle Obstacle::alignedBox(const Eigen::Vector3d& min_corner,
-                              const Eigen::Vector3d& max_corner) {
-    return box(0.5 * (min_corner + max_corner), max_corner - min_corner);
-}
-
-Obstacle Obstacle::sphere(const Eigen::Vector3d& center, double radius) {
-    Obstacle o;
-    o.type = kSphere;
-    o.position = center;
-    o.radius = radius;
-    return o;
-}
-
-Obstacle Obstacle::cylinder(const Eigen::Vector3d& center,
-                            double radius,
-                            double height,
-                            const Eigen::Quaterniond& orientation) {
-    Obstacle o;
-    o.type = kCylinder;
-    o.position = center;
-    o.orientation = orientation;
-    o.radius = radius;
-    o.height = height;
-    return o;
-}
-
-Obstacle Obstacle::capsule(const Eigen::Vector3d& center,
-                           double radius,
-                           double height,
-                           const Eigen::Quaterniond& orientation) {
-    Obstacle o = cylinder(center, radius, height, orientation);
-    o.type = kCapsule;
-    return o;
-}
-
-Obstacle Obstacle::ring(const Eigen::Vector3d& center, const Eigen::Vector2d& radii, double tubeRadius,
-                        const Eigen::Quaterniond& orientation) {
-    Obstacle o;
-    o.type = kRing;
-    o.position = center;
-    o.orientation = orientation;
-    o.radii = radii;
-    o.tubeRadius = tubeRadius;
-    return o;
-}
-
-Obstacle Obstacle::convexHull(const std::vector<Eigen::Vector3d>& world_vertices) {
-    return convexHull(world_vertices, Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
-}
-
-Obstacle Obstacle::convexHull(const std::vector<Eigen::Vector3d>& local_vertices,
-                              const Eigen::Vector3d& position,
-                              const Eigen::Quaterniond& orientation) {
-    Obstacle o;
-    o.type = kConvex;
-    o.position = position;
-    o.orientation = orientation;
-    o.vertices = local_vertices;
-    return o;
-}
-
 std::vector<Eigen::Vector3d> sampleSurface(const Obstacle& obstacle, double spacing) {
     return detail::sampleShape(detail::compile(obstacle), spacing);
 }

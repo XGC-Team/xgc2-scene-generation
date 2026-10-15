@@ -28,7 +28,7 @@ class PackageDebsTest(unittest.TestCase):
                 continue
             files = {
                 "share/{}/package.xml".format(package): "<package/>",
-                "include/{}/ConvexBodyArray.h".format(package): "// fixture\n",
+                "include/{}/SceneSnapshot.h".format(package): "// fixture\n",
                 "lib/pkgconfig/{}.pc".format(package): "Name: {}\n".format(package),
                 "lib/{}/dist-packages/{}/__init__.py".format(python_dir, package): "# fixture\n",
             }
@@ -70,7 +70,7 @@ class PackageDebsTest(unittest.TestCase):
         for package in ("scene-runtime", "world-lidar"):
             deb = next(output.glob("ros-noetic-xgc2-{}_*.deb".format(package)))
             depends = subprocess.check_output(["dpkg-deb", "-f", str(deb), "Depends"], universal_newlines=True)
-            self.assertIn("ros-noetic-xgc2-geometry-msgs (>= 1.2.0-13)", depends)
+            self.assertIn("ros-noetic-xgc2-geometry-msgs (>= 1.5.0-3)", depends)
             self.assertNotIn("ros-noetic-xgc2-geometry-msgs (=", depends)
 
     def test_missing_implementation_install_fails_instead_of_empty_deb(self):

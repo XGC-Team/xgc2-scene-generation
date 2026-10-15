@@ -1,5 +1,7 @@
 """Canonical scene geometry. Validation does not depend on a simulator or ROS."""
 
+from xgc2_math.geometry import REGISTRY, encode_geometry, decode_geometry
+
 import math
 import re
 
@@ -136,9 +138,16 @@ def geometry(value):
         if tube >= min(radii):
             raise SceneError('Ring tube radius must be smaller than both radii')
         return {'type': kind, 'radii': radii, 'tubeRadius': tube}
-    if kind == 'convex':
+    if kind == 'convex' and 'triangles' in value and (not isinstance(value['triangles'], list) or value['triangles']):
         fields(value, ('type', 'vertices', 'triangles'), ('vertices', 'triangles'))
         return convex(value)
+    if isinstance(kind, str) and kind in REGISTRY:
+        allowed = ('type',) + tuple(field.split('[')[0] for field in REGISTRY[kind]['fields'])
+        fields(value, allowed, ('type',))
+        try:
+            return decode_geometry(*encode_geometry(value))
+        except (KeyError, TypeError, ValueError) as error:
+            raise SceneError(str(error)) from error
     raise SceneError('Unsupported geometry {!r}; no shape substitution is performed'.format(kind))
 
 

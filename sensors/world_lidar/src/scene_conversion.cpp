@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <stdexcept>
+#include <xgc2_math/scene/scene_conversion.hpp>
 
 namespace xgc2_world_lidar {
 
@@ -17,19 +18,7 @@ Eigen::Quaterniond normalized(const Eigen::Quaterniond& q) {
 Obstacle toObstacle(const ScenePartDescription& part,
                     const Eigen::Vector3d& position,
                     const Eigen::Quaterniond& orientation) {
-    if (part.type == "box")
-        return Obstacle::box(position, part.size, orientation);
-    if (part.type == "sphere")
-        return Obstacle::sphere(position, part.radius);
-    if (part.type == "cylinder")
-        return Obstacle::cylinder(position, part.radius, part.height, orientation);
-    if (part.type == "capsule")
-        return Obstacle::capsule(position, part.radius, part.height, orientation);
-    if (part.type == "ring")
-        return Obstacle::ring(position, part.radii, part.tubeRadius, orientation);
-    if (part.type == "convex")
-        return Obstacle::convexHull(part.vertices, position, orientation);
-    throw std::invalid_argument("unknown geometry type '" + part.type + "'");
+    return xgc2_math::scene::obstacleFromGeometry(part.geometry, position, orientation);
 }
 
 } // namespace
@@ -45,7 +34,7 @@ std::vector<Obstacle> toObstacles(const std::vector<SceneObstacleDescription>& s
                     obstacle.pose.position + parent * part.pose.position;
                 const Eigen::Quaterniond orientation = parent * normalized(part.pose.orientation);
                 Obstacle o = toObstacle(part, position, orientation);
-                sampleSurface(o, 1e9); // validates geometry (one sample per face)
+                xgc2_world_lidar::sampleSurface(o, 1e9); // validates geometry (one sample per face)
                 out.push_back(std::move(o));
             } catch (const std::invalid_argument& e) {
                 throw std::invalid_argument("obstacle '" + obstacle.id + "' part " +

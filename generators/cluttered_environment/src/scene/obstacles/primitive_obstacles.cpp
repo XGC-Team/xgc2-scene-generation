@@ -5,44 +5,12 @@
 
 #include "cluttered_environment/scene/obstacles/primitive_obstacles.h"
 
-#include "xgc2_math/geometry/occupied_sets/box_set.h"
-#include "xgc2_math/geometry/occupied_sets/capsule_set.h"
-#include "xgc2_math/geometry/occupied_sets/cylinder_set.h"
-#include "xgc2_math/geometry/occupied_sets/sphere_set.h"
-
 #include <algorithm>
 #include <cmath>
 
 namespace cluttered_environment {
 
-namespace {
-
-geometry_msgs::Point toGeometryPoint(const Eigen::Vector3d& point) {
-    geometry_msgs::Point ros_point;
-    ros_point.x = point.x();
-    ros_point.y = point.y();
-    ros_point.z = point.z();
-    return ros_point;
-}
-
-xgc2_math::ConvexBody makeBodyMetadata(const ObstacleConfig& config,
-                                       const std::string& geometry_type,
-                                       const Eigen::Vector3d& position,
-                                       const Eigen::Quaterniond& orientation,
-                                       const Eigen::Vector3d& scale,
-                                       const Eigen::Vector3d& velocity) {
-    xgc2_math::ConvexBody body;
-    body.id = config.id;
-    body.name = config.name;
-    body.geometry_type = geometry_type;
-    body.position = position;
-    body.orientation = orientation.normalized();
-    body.scale = scale;
-    body.velocity = velocity;
-    return body;
-}
-
-} // namespace
+namespace {} // namespace
 
 SphereObstacle::SphereObstacle(ros::NodeHandle& nh,
                                const ObstacleConfig& config,
@@ -58,25 +26,6 @@ void SphereObstacle::generateGeometry() {
         -radius_ * config_.scale.x(), -radius_ * config_.scale.y(), -radius_ * config_.scale.z());
     bbox_max_local_ = Eigen::Vector3d(
         radius_ * config_.scale.x(), radius_ * config_.scale.y(), radius_ * config_.scale.z());
-}
-
-xgc2_geometry_msgs::GeometryTemplate
-SphereObstacle::buildGeometryTemplate(int /*resolution*/) const {
-    xgc2_geometry_msgs::GeometryTemplate tmpl;
-    tmpl.type = getType();
-    tmpl.resolution = 0;
-    return tmpl;
-}
-
-xgc2_math::ConvexBody SphereObstacle::buildOccupiedBody() const {
-    xgc2_math::ConvexBody body = makeBodyMetadata(config_,
-                                                  getType(),
-                                                  currentPositionVector(),
-                                                  currentOrientationQuaternion(),
-                                                  config_.scale,
-                                                  currentVelocityVector());
-    body.shape = std::make_shared<xgc2_math::SphereSet>(body.position, body.scale.x());
-    return body;
 }
 
 visualization_msgs::Marker SphereObstacle::createMarkerMessage() {
@@ -121,38 +70,6 @@ void CylinderObstacle::generateGeometry() {
         radius_ * config_.scale.x(), radius_ * config_.scale.y(), half_height * config_.scale.z());
 }
 
-xgc2_geometry_msgs::GeometryTemplate CylinderObstacle::buildGeometryTemplate(int resolution) const {
-    xgc2_geometry_msgs::GeometryTemplate tmpl;
-    tmpl.type = getType();
-    tmpl.resolution = std::max(0, resolution);
-
-    if (tmpl.resolution == 0) {
-        return tmpl;
-    }
-
-    for (int i = 0; i < tmpl.resolution; ++i) {
-        const double angle = 2.0 * M_PI * i / tmpl.resolution;
-        tmpl.support_points.push_back(
-            toGeometryPoint(Eigen::Vector3d(std::cos(angle), std::sin(angle), -0.5)));
-        tmpl.support_points.push_back(
-            toGeometryPoint(Eigen::Vector3d(std::cos(angle), std::sin(angle), 0.5)));
-    }
-
-    return tmpl;
-}
-
-xgc2_math::ConvexBody CylinderObstacle::buildOccupiedBody() const {
-    xgc2_math::ConvexBody body = makeBodyMetadata(config_,
-                                                  getType(),
-                                                  currentPositionVector(),
-                                                  currentOrientationQuaternion(),
-                                                  config_.scale,
-                                                  currentVelocityVector());
-    body.shape = std::make_shared<xgc2_math::CylinderSet>(
-        body.position, body.scale.x(), body.scale.z(), body.orientation);
-    return body;
-}
-
 visualization_msgs::Marker CylinderObstacle::createMarkerMessage() {
     visualization_msgs::Marker marker;
 
@@ -192,26 +109,6 @@ void CapsuleObstacle::generateGeometry() {
 
     bbox_min_local_ = Eigen::Vector3d(-radius, -radius, -half_length);
     bbox_max_local_ = Eigen::Vector3d(radius, radius, half_length);
-}
-
-xgc2_geometry_msgs::GeometryTemplate
-CapsuleObstacle::buildGeometryTemplate(int /*resolution*/) const {
-    xgc2_geometry_msgs::GeometryTemplate tmpl;
-    tmpl.type = getType();
-    tmpl.resolution = 0;
-    return tmpl;
-}
-
-xgc2_math::ConvexBody CapsuleObstacle::buildOccupiedBody() const {
-    xgc2_math::ConvexBody body = makeBodyMetadata(config_,
-                                                  getType(),
-                                                  currentPositionVector(),
-                                                  currentOrientationQuaternion(),
-                                                  config_.scale,
-                                                  currentVelocityVector());
-    body.shape = std::make_shared<xgc2_math::CapsuleSet>(
-        body.position, body.scale.x(), body.scale.z(), body.orientation);
-    return body;
 }
 
 visualization_msgs::Marker CapsuleObstacle::createMarkerMessage() {
@@ -309,38 +206,6 @@ void CubeObstacle::generateGeometry() {
 
     bbox_min_local_ = -hs;
     bbox_max_local_ = hs;
-}
-
-xgc2_geometry_msgs::GeometryTemplate CubeObstacle::buildGeometryTemplate(int /*resolution*/) const {
-    xgc2_geometry_msgs::GeometryTemplate tmpl;
-    tmpl.type = getType();
-    tmpl.resolution = 0;
-
-    const std::vector<Eigen::Vector3d> corners = {Eigen::Vector3d(-0.5, -0.5, -0.5),
-                                                  Eigen::Vector3d(0.5, -0.5, -0.5),
-                                                  Eigen::Vector3d(0.5, 0.5, -0.5),
-                                                  Eigen::Vector3d(-0.5, 0.5, -0.5),
-                                                  Eigen::Vector3d(-0.5, -0.5, 0.5),
-                                                  Eigen::Vector3d(0.5, -0.5, 0.5),
-                                                  Eigen::Vector3d(0.5, 0.5, 0.5),
-                                                  Eigen::Vector3d(-0.5, 0.5, 0.5)};
-
-    for (const auto& corner : corners) {
-        tmpl.support_points.push_back(toGeometryPoint(corner));
-    }
-
-    return tmpl;
-}
-
-xgc2_math::ConvexBody CubeObstacle::buildOccupiedBody() const {
-    xgc2_math::ConvexBody body = makeBodyMetadata(config_,
-                                                  getType(),
-                                                  currentPositionVector(),
-                                                  currentOrientationQuaternion(),
-                                                  config_.scale,
-                                                  currentVelocityVector());
-    body.shape = std::make_shared<xgc2_math::BoxSet>(body.position, body.scale, body.orientation);
-    return body;
 }
 
 visualization_msgs::Marker CubeObstacle::createMarkerMessage() {
