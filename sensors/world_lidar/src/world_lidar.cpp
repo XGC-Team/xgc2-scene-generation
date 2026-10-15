@@ -312,7 +312,9 @@ struct Shape {
         if (!intersect(o, d, &lo, &hi))
             return kInf;
         const double t = lo >= 0 ? lo : hi;
-        return t >= 0 && t <= maxRange ? t : kInf;
+        if (t >= 0 && t <= maxRange)
+            return t;
+        return kInf;
     }
 
     double residual(const Eigen::Vector3d& world) const {

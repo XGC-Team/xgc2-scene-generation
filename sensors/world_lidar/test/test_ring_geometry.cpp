@@ -7,7 +7,7 @@ void near(double a, double b) {
     if (!std::isfinite(a) || std::abs(a - b) > 1e-10)
         throw std::runtime_error("ring query mismatch");
 }
-int main() {
+int main() try {
     SceneObstacleDescription o;
     o.id = "ring";
     o.pose.position = {3, 4, 5};
@@ -54,4 +54,8 @@ int main() {
     }
     std::cout
         << "PASS original world_lidar named mapping/composed poses/hole/query/all3 cache params\n";
+    return 0;
+} catch (const std::exception& error) {
+    std::cerr << error.what() << '\n';
+    return 1;
 }
