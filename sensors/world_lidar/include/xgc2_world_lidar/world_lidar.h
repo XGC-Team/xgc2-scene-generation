@@ -110,7 +110,6 @@ std::vector<Eigen::Vector3d> sampleSurface(const Obstacle& obstacle, double spac
 
 namespace detail {
 struct Shape;
-struct Bvh;
 struct Scene;
 } // namespace detail
 

@@ -44,6 +44,10 @@ def snapshot():
     return msg
 
 
+def xyz(cloud):
+    step = cloud.point_step
+    return [struct.unpack_from("<fff", cloud.data, i * step) for i in range(cloud.width * cloud.height)]
+
 
 class TopicContract(unittest.TestCase):
     def setUp(self):
