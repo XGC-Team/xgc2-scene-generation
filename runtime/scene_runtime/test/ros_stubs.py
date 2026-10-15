@@ -60,7 +60,7 @@ class Duration:
 class Marker(Msg):
     _lists = ('points',)
     ADD, DELETEALL = 0, 3
-    CUBE, SPHERE, CYLINDER, TRIANGLE_LIST = 1, 2, 3, 11
+    CUBE, SPHERE, CYLINDER, POINTS, TRIANGLE_LIST = 1, 2, 3, 8, 11
 
 
 class MarkerArray(Msg):

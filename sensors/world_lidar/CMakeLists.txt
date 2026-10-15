@@ -10,6 +10,7 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 find_package(Eigen3 REQUIRED)
+find_package(xgc2_math CONFIG REQUIRED)
 find_package(Threads REQUIRED)
 find_package(PCL REQUIRED COMPONENTS common filters search kdtree)
 find_package(catkin QUIET COMPONENTS
@@ -26,7 +27,7 @@ include_directories(include ${EIGEN3_INCLUDE_DIR})
 add_library(${PROJECT_NAME} STATIC
   src/world_lidar.cpp src/scene_conversion.cpp src/convex_body_conversion.cpp
   src/scan_pool.cpp)
-target_link_libraries(${PROJECT_NAME} PUBLIC Threads::Threads)
+target_link_libraries(${PROJECT_NAME} PUBLIC Threads::Threads xgc2_math::scene)
 if(TARGET Eigen3::Eigen)
   target_link_libraries(${PROJECT_NAME} PUBLIC Eigen3::Eigen)
 else()
@@ -34,7 +35,7 @@ else()
 endif()
 
 enable_testing()
-foreach(suite world_lidar scene_sources observation_contract)
+foreach(suite world_lidar scene_sources observation_contract ring_geometry)
   add_executable(test_${suite} test/test_${suite}.cpp)
   target_link_libraries(test_${suite} PRIVATE ${PROJECT_NAME})
   add_test(NAME test_${suite} COMMAND test_${suite})

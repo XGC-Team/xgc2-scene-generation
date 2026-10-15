@@ -25,6 +25,8 @@ Obstacle toObstacle(const ScenePartDescription& part,
         return Obstacle::cylinder(position, part.radius, part.height, orientation);
     if (part.type == "capsule")
         return Obstacle::capsule(position, part.radius, part.height, orientation);
+    if (part.type == "ring")
+        return Obstacle::ring(position, part.radii, part.tubeRadius, orientation);
     if (part.type == "convex")
         return Obstacle::convexHull(part.vertices, position, orientation);
     throw std::invalid_argument("unknown geometry type '" + part.type + "'");

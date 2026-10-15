@@ -83,6 +83,29 @@ def build_node(directory, document):
     return ros_node.SceneNode()
 
 
+class ParametricRingProjectionTest(unittest.TestCase):
+    def test_one_part_named_ros_dimensions_and_surface_points_marker(self):
+        from test_parametric_ring import ring_scene
+        with tempfile.TemporaryDirectory() as directory:
+            node = build_node(directory, ring_scene())
+            body = ros_node.snapshot(node.store.document, 'epoch', 1).obstacles[0]
+            self.assertEqual(len(body.parts), 1)
+            part = body.parts[0]
+            self.assertEqual(part.geometry.type, 'ring')
+            self.assertEqual(part.geometry.radii, [3, 1])
+            self.assertEqual(part.geometry.tube_radius, .8)
+            self.assertEqual([part.pose.orientation.x, part.pose.orientation.y,
+                              part.pose.orientation.z, part.pose.orientation.w], [.5, -.5, .5, .5])
+            markers = node.part_markers(body.id, part)
+            self.assertEqual(len(markers), 1)
+            marker = markers[0]
+            self.assertEqual(marker.type, ros_stubs.Marker.POINTS)
+            self.assertIs(marker.pose, part.pose)
+            self.assertGreater(len(marker.points), 100)
+            self.assertAlmostEqual(max(p.z for p in marker.points), .8)
+            self.assertTrue(all(math.hypot(p.x, p.y) > .19 for p in marker.points))
+
+
 def command(node, **request):
     request.setdefault('requestId', 'r{}'.format(random.random()))
     request.update(expectedEpoch=node.store.epoch, expectedRevision=node.store.revision)

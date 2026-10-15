@@ -4,7 +4,7 @@
 // World-frame LiDAR / point-cloud sensor, without ROS.
 //
 // One scene, one sensor model and one output frame for every simulated robot
-// that enables it, on every simulator. The scene is a set of closed convex
+// that enables it, on every simulator. The scene is a set of closed
 // solids; a scan returns WORLD-frame points.
 //
 //   kRaycast      first return per beam (non-penetrating). Beam pattern:
@@ -93,20 +93,22 @@ struct VehicleBody {
     double radius = 0.3;
 };
 
-// A closed convex solid. Every shape is defined in its local frame and placed
+// A closed solid (ring is nonconvex). Every shape is defined in its local frame and placed
 // by (position, orientation), local -> world. Conventions follow
 // xgc2_geometry_msgs/SceneGeometry: box `size` is the full side length,
 // cylinder `height` is the full height along local z, capsule `height` is the
 // straight cylindrical part along local z, convex `vertices` are local-frame
 // points whose convex hull is the solid.
 struct Obstacle {
-    enum Type { kBox, kSphere, kCylinder, kCapsule, kConvex };
+    enum Type { kBox, kSphere, kCylinder, kCapsule, kConvex, kRing };
     Type type = kBox;
     Eigen::Vector3d position = Eigen::Vector3d::Zero();
     Eigen::Quaterniond orientation = Eigen::Quaterniond::Identity();
     Eigen::Vector3d size = Eigen::Vector3d::Zero();
     double radius = 0.0;
     double height = 0.0;
+    Eigen::Vector2d radii = Eigen::Vector2d::Zero();
+    double tubeRadius = 0.0;
     std::vector<Eigen::Vector3d> vertices;
 
     static Obstacle box(const Eigen::Vector3d& center,
@@ -124,6 +126,8 @@ struct Obstacle {
                             double radius,
                             double height,
                             const Eigen::Quaterniond& orientation = Eigen::Quaterniond::Identity());
+    static Obstacle ring(const Eigen::Vector3d& center, const Eigen::Vector2d& radii, double tubeRadius,
+                         const Eigen::Quaterniond& orientation = Eigen::Quaterniond::Identity());
     // World-frame vertices (pose = identity).
     static Obstacle convexHull(const std::vector<Eigen::Vector3d>& world_vertices);
     // Local-frame vertices placed by a pose.

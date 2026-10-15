@@ -836,6 +836,10 @@ private:
                         Eigen::Vector3d(p.geometry.size.x, p.geometry.size.y, p.geometry.size.z);
                     part.radius = p.geometry.radius;
                     part.height = p.geometry.height;
+                    if (part.type == "ring") {
+                        part.radii = {p.geometry.radii[0], p.geometry.radii[1]};
+                        part.tubeRadius = p.geometry.tube_radius;
+                    }
                     for (const auto& v : p.geometry.vertices)
                         part.vertices.emplace_back(v.x, v.y, v.z);
                     d.parts.push_back(std::move(part));

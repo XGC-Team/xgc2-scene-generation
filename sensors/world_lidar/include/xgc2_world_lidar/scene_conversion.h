@@ -24,11 +24,13 @@ struct Pose {
 };
 
 struct ScenePartDescription {
-    std::string type; // box | sphere | cylinder | capsule | convex
+    std::string type; // box | sphere | cylinder | capsule | convex | ring
     Pose pose;        // part frame in the obstacle frame
     Eigen::Vector3d size = Eigen::Vector3d::Zero();
     double radius = 0.0;
     double height = 0.0;
+    Eigen::Vector2d radii = Eigen::Vector2d::Zero();
+    double tubeRadius = 0.0;
     std::vector<Eigen::Vector3d> vertices;
 };
 

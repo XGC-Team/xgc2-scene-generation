@@ -17,6 +17,7 @@ from xgc2_xrpc.runtime import Runtime
 from .document import SceneError
 from .generation import resolve
 from .motion import rotate, state
+from .ring import surface_points
 from .store import MAX_DOCUMENT_BYTES, EnvelopeJson, SceneStore, load, unique_object
 from .integrations.simulation_client import SimulationClient
 from .xrpc_service import SceneService
@@ -39,6 +40,9 @@ def obstacle_message(item):
         set_pose(part.pose, definition['pose'])
         geometry = definition['geometry']
         part.geometry.type = geometry['type']
+        if geometry['type'] == 'ring':
+            part.geometry.radii = list(geometry['radii'])
+            part.geometry.tube_radius = geometry['tubeRadius']
         part.geometry.size.x, part.geometry.size.y, part.geometry.size.z = geometry.get('size', [0, 0, 0])
         part.geometry.radius = geometry.get('radius', 0)
         part.geometry.height = geometry.get('height', 0)
@@ -327,6 +331,10 @@ class SceneNode:
                     cap.frame_locked = marker.frame_locked
                     result.append(cap)
                 return result
+        elif geometry.type == 'ring':
+            marker.type = Marker.POINTS
+            marker.scale.x = marker.scale.y = marker.scale.z = 0.02
+            marker.points = [Point(*p) for p in surface_points(geometry.radii, geometry.tube_radius)]
         elif geometry.type == 'convex':
             marker.type = Marker.TRIANGLE_LIST
             marker.points = [geometry.vertices[i] for i in geometry.triangles]

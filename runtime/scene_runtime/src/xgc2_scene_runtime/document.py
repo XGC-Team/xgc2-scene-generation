@@ -128,6 +128,14 @@ def geometry(value):
         if kind != 'sphere':
             result['height'] = number(value['height'], 'height', 0 if kind == 'capsule' else 1e-6, 1e4)
         return result
+    if kind == 'ring':
+        fields(value, ('type', 'radii', 'tubeRadius'), ('radii', 'tubeRadius'))
+        radii = vector(value['radii'], 'ring radii', 2)
+        radii = [number(x, 'ring radii', 1e-6, 1e4) for x in radii]
+        tube = number(value['tubeRadius'], 'ring tube radius', 1e-6, 1e4)
+        if tube >= min(radii):
+            raise SceneError('Ring tube radius must be smaller than both radii')
+        return {'type': kind, 'radii': radii, 'tubeRadius': tube}
     if kind == 'convex':
         fields(value, ('type', 'vertices', 'triangles'), ('vertices', 'triangles'))
         return convex(value)
