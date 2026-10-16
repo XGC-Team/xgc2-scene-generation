@@ -3,8 +3,8 @@ id: xgc2-scene-generation
 name: XGC2 Scene
 version: 1.3.0-3
 kind: ros1-apt
-summary: Shared scene authoring, procedural map generators and simulated sensing;
-  simulator integration is explicit and separate from scene domain logic.
+summary: Pure scene authoring and golden references, procedural map generators, and
+  numerical sensing libraries. Live Scene publication belongs to the C++ adapter.
 ros:
   distro: noetic
   packages:
@@ -64,6 +64,7 @@ ownership:
   - /opt/ros/noetic/lib/pkgconfig/xgc2_scene_runtime.pc
   - /opt/ros/noetic/share/xgc2_world_lidar
   - /opt/ros/noetic/include/xgc2_world_lidar
+  - /opt/ros/noetic/lib/libxgc2_world_lidar.a
   - /opt/ros/noetic/lib/xgc2_world_lidar
   - /opt/ros/noetic/lib/pkgconfig/xgc2_world_lidar.pc
   - /opt/ros/noetic/share/mockamap

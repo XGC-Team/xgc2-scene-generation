@@ -320,7 +320,7 @@ class SceneStore:
                 if not indices:
                     raise SceneError('Obstacle no longer exists')
                 obstacles[indices[0]] = replacement
-            candidate = dict(self.document, obstacles=check_obstacle_set(obstacles))
+            candidate = dict(self.document, obstacles=check_obstacle_set(obstacles, self.document.get('models', {})))
         elif operation == 'delete':
             oid = identifier(request.get('id'), 'Obstacle ID')
             remaining = [item for item in obstacles if item['id'] != oid]

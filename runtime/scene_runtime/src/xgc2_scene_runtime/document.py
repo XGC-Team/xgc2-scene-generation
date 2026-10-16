@@ -151,6 +151,12 @@ def geometry(value):
     raise SceneError('Unsupported geometry {!r}; no shape substitution is performed'.format(kind))
 
 
+def flag(value, label):
+    if type(value) is not bool:
+        raise SceneError('{} must be a boolean'.format(label))
+    return value
+
+
 def motion(value):
     if not isinstance(value, dict):
         raise SceneError('Motion must be an object')
@@ -174,18 +180,25 @@ def motion(value):
                 'radius': number(value['radius'], 'circle radius', 1e-6, 1e4),
                 'angular_speed': number(value['angular_speed'], 'angular speed', -1000, 1000),
                 'phase': number(value.get('phase', 0), 'phase')}
+    if kind == 'waypoints':
+        # obstaclePathPlugin fields. Compiled shorthand is not a source alias.
+        fields(value, ('type', 'velocity', 'orientation', 'angular_velocity', 'loop', 'sin', 'waypoints'), ('waypoints',))
+        points = value['waypoints']
+        if not isinstance(points, list) or not 2 <= len(points) <= 4096:
+            raise SceneError('Waypoints require 2 to 4096 positions')
+        return {'type': kind,
+                'velocity': number(value.get('velocity', 1.0), 'velocity', 1e-6, 1000),
+                'orientation': flag(value['orientation'], 'orientation') if 'orientation' in value else True,
+                'angular_velocity': number(value.get('angular_velocity', 0.8), 'angular velocity', 1e-6, 1000),
+                'loop': flag(value['loop'], 'loop') if 'loop' in value else False,
+                'sin': flag(value['sin'], 'sin') if 'sin' in value else False,
+                'waypoints': [vector(point, 'waypoint') for point in points]}
     raise SceneError('Unsupported motion {!r}'.format(kind))
 
 
-def obstacle(value):
-    fields(value, ('id', 'name', 'pose', 'parts', 'motion'), ('id', 'parts'))
-    oid = identifier(value['id'], 'Obstacle ID')
-    name = value.get('name', oid)
-    if not isinstance(name, str) or not name.strip() or len(name) > 256:
-        raise SceneError('Obstacle name must have 1 to 256 characters')
-    parts = value['parts']
+def analytic_parts(parts, label):
     if not isinstance(parts, list) or not 1 <= len(parts) <= 128:
-        raise SceneError('Obstacle requires 1 to 128 parts')
+        raise SceneError('{} requires 1 to 128 parts'.format(label))
     normalized = []
     ids = set()
     for part in parts:
@@ -201,6 +214,71 @@ def obstacle(value):
         normalized.append({'id': pid, 'pose': pose(part.get('pose', {})),
                            'geometry': geometry(part['geometry']),
                            'color': list(OBSTACLE_VISUAL_COLOR)})
+    return normalized
+
+
+RESOURCE_FORMATS = ('sdformat-model', 'gltf', 'mesh')
+
+
+def resource(value):
+    fields(value, ('format', 'file'), ('format', 'file'))
+    if value['format'] not in RESOURCE_FORMATS:
+        raise SceneError('Unsupported model resource format')
+    path = value['file']
+    if not isinstance(path, str) or not path or len(path) > 512 or '\x00' in path or '\\' in path or path.startswith('/'):
+        raise SceneError('Model resource file must be an asset-relative path')
+    if any(part in ('', '.', '..') for part in path.split('/')):
+        raise SceneError('Model resource file must be an asset-relative path')
+    return {'format': value['format'], 'file': path}
+
+
+def models(value):
+    if not isinstance(value, dict) or len(value) > 512:
+        raise SceneError('Scene supports at most 512 models')
+    normalized = {}
+    for key, item in value.items():
+        identifier(key, 'Model ID')
+        if not isinstance(item, dict) or ('parts' in item) == ('resource' in item):
+            raise SceneError('Model uses either analytic parts or a resource')
+        if 'parts' in item:
+            fields(item, ('parts',), ('parts',))
+            normalized[key] = {'parts': analytic_parts(item['parts'], 'Model')}
+        else:
+            fields(item, ('resource',), ('resource',))
+            normalized[key] = {'resource': resource(item['resource'])}
+    return normalized
+
+
+def ground(value, defined):
+    if not isinstance(value, dict) or 'mode' not in value:
+        raise SceneError('Ground requires a mode')
+    mode = value['mode']
+    if mode == 'default_plane':
+        fields(value, ('mode', 'z'), ('mode',))
+        return {'mode': mode, 'z': number(value.get('z', 0.0), 'ground z')}
+    if mode == 'none':
+        fields(value, ('mode',), ('mode',))
+        return {'mode': mode}
+    if mode == 'model':
+        fields(value, ('mode', 'model', 'pose'), ('mode', 'model', 'pose'))
+        model_id = identifier(value['model'], 'Ground model')
+        if model_id not in defined:
+            raise SceneError('Ground model is not defined')
+        return {'mode': mode, 'model': model_id, 'pose': pose(value['pose'])}
+    raise SceneError('Unsupported ground mode {!r}'.format(mode))
+
+
+def obstacle(value):
+    if not isinstance(value, dict) or ('parts' in value) == ('model' in value):
+        raise SceneError('Obstacle uses either inline parts or a model reference')
+    if 'parts' in value:
+        fields(value, ('id', 'name', 'pose', 'parts', 'motion'), ('id', 'parts'))
+    else:
+        fields(value, ('id', 'name', 'pose', 'model', 'motion'), ('id', 'model'))
+    oid = identifier(value['id'], 'Obstacle ID')
+    name = value.get('name', oid)
+    if not isinstance(name, str) or not name.strip() or len(name) > 256:
+        raise SceneError('Obstacle name must have 1 to 256 characters')
     initial = pose(value.get('pose', {}))
     movement = motion(value.get('motion', {'type': 'hold'}))
     start = initial['position']
@@ -211,29 +289,57 @@ def obstacle(value):
         start = [center[0]+radius*math.cos(phase), center[1]+radius*math.sin(phase), center[2]]
     if any(abs(a-b) > 1e-6 for a, b in zip(start, initial['position'])):
         raise SceneError('Initial obstacle position must match its motion path start')
-    return {'id': oid, 'name': name, 'pose': initial, 'parts': normalized, 'motion': movement}
+    result = {'id': oid, 'name': name, 'pose': initial}
+    if 'parts' in value:
+        result['parts'] = analytic_parts(value['parts'], 'Obstacle')
+    else:
+        result['model'] = identifier(value['model'], 'Model ID')
+    result['motion'] = movement
+    return result
 
 
-def check_obstacle_set(obstacles):
+def obstacle_part_count(item, models):
+    """Analytic parts introduced by one obstacle. A model reference counts that model's parts."""
+    if 'model' in item:
+        if item['model'] not in models:
+            raise SceneError('Obstacle model is not defined')
+        model = models[item['model']]
+        if 'parts' in model:
+            return len(model['parts'])
+        return 0
+    return len(item['parts'])
+
+
+def check_obstacle_set(obstacles, models=None):
     """Scene-wide limits for a list of already normalized obstacles."""
+    if models is None:
+        models = {}
     if len(obstacles) > 512:
         raise SceneError('Scene supports at most 512 obstacles')
     if len({item['id'] for item in obstacles}) != len(obstacles):
         raise SceneError('Duplicate obstacle ID')
-    if sum(len(item['parts']) for item in obstacles) > 4096:
+    if sum(obstacle_part_count(item, models) for item in obstacles) > 4096:
         raise SceneError('Scene supports at most 4096 convex parts')
     return obstacles
 
 
 def document(value):
-    fields(value, ('schema', 'id', 'frame', 'obstacles'), ('schema', 'id', 'frame', 'obstacles'))
+    fields(value, ('schema', 'id', 'frame', 'obstacles', 'models', 'ground'), ('schema', 'id', 'frame', 'obstacles'))
     if value['schema'] != SCHEMA:
         raise SceneError('Unsupported scene schema')
     identifier(value['id'], 'Scene ID')
     frame = value['frame']
     if not isinstance(frame, str) or len(frame) > 160 or not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*(/[A-Za-z_][A-Za-z0-9_]*)*', frame):
         raise SceneError('Scene frame must be explicit and have no leading slash')
+    defined = models(value['models']) if 'models' in value else None
+    owned = ground(value['ground'], defined or {}) if 'ground' in value else None
     if not isinstance(value['obstacles'], list) or len(value['obstacles']) > 512:
         raise SceneError('Scene supports at most 512 obstacles')
-    obstacles = check_obstacle_set([obstacle(item) for item in value['obstacles']])
-    return {'schema': SCHEMA, 'id': value['id'], 'frame': frame, 'obstacles': obstacles}
+    obstacles = check_obstacle_set([obstacle(item) for item in value['obstacles']], defined or {})
+    result = {'schema': SCHEMA, 'id': value['id'], 'frame': frame}
+    if defined is not None:
+        result['models'] = defined
+    if owned is not None:
+        result['ground'] = owned
+    result['obstacles'] = obstacles
+    return result

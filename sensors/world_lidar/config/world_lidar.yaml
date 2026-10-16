@@ -1,5 +1,5 @@
-# world_lidar_node parameters (loaded into the node's private namespace).
-# launch/world_lidar.launch sets the per-robot topics and the scene source.
+# Retained numerical/reference parameters; these do not start a ROS node.
+# Live sensing configuration is owned by the C++ Scene adapter.
 # Sensor
 mode: raycast            # raycast (S1, first return) | penetrating (S0-like, see-through)
                          # | depth_frustum (S2, pinhole first return)

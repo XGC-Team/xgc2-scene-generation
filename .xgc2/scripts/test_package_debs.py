@@ -30,6 +30,7 @@ class PackageDebsTest(unittest.TestCase):
                 "share/{}/package.xml".format(package): "<package/>",
                 "include/{}/SceneSnapshot.h".format(package): "// fixture\n",
                 "lib/pkgconfig/{}.pc".format(package): "Name: {}\n".format(package),
+                "lib/lib{}.a".format(package): "archive fixture\n",
                 "lib/{}/dist-packages/{}/__init__.py".format(python_dir, package): "# fixture\n",
             }
             for name, content in files.items():
@@ -63,15 +64,19 @@ class PackageDebsTest(unittest.TestCase):
             payload = root / deb.stem
             subprocess.check_call(["dpkg-deb", "-x", str(deb), str(payload)])
             self.assertFalse(any("xgc2_geometry_msgs" in str(path) for path in payload.rglob("*")))
+            if deb.name.startswith("ros-noetic-xgc2-world-lidar_"):
+                self.assertTrue((payload / "opt/ros/noetic/lib/libxgc2_world_lidar.a").is_file())
+                self.assertFalse((payload / "opt/ros/noetic/lib/xgc2_world_lidar/world_lidar_node").exists())
 
-    def test_runtime_message_dependency_has_an_independent_version(self):
+    def test_reference_and_numerical_packages_do_not_keep_retired_ros_dependencies(self):
         _, output, result = self.assemble("noetic")
         self.assertEqual(result.returncode, 0, result.stderr)
         for package in ("scene-runtime", "world-lidar"):
             deb = next(output.glob("ros-noetic-xgc2-{}_*.deb".format(package)))
             depends = subprocess.check_output(["dpkg-deb", "-f", str(deb), "Depends"], universal_newlines=True)
-            self.assertIn("ros-noetic-xgc2-geometry-msgs (>= 1.5.0-3)", depends)
-            self.assertNotIn("ros-noetic-xgc2-geometry-msgs (=", depends)
+            self.assertIn("libxgc2-math-dev (>= 0.6.0-4~focal)", depends)
+            for retired in ("ros-noetic-rospy", "ros-noetic-geometry-msgs", "ros-noetic-xgc2-geometry-msgs", "libxgc2-xrpc2", "libjsoncpp1"):
+                self.assertNotIn(retired, depends)
 
     def test_missing_implementation_install_fails_instead_of_empty_deb(self):
         _, _, result = self.assemble("noetic", missing_package="cluttered_environment")

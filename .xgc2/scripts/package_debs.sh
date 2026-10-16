@@ -95,6 +95,7 @@ copy_ros_package_paths() {
   copy_path "${PREFIX_ROOT}/share/${ros_pkg}" "${dst_root}"
   copy_path "${PREFIX_ROOT}/include/${ros_pkg}" "${dst_root}"
   copy_path "${PREFIX_ROOT}/lib/${ros_pkg}" "${dst_root}"
+  copy_path "${PREFIX_ROOT}/lib/lib${ros_pkg}.a" "${dst_root}"
   copy_path "${PREFIX_ROOT}/lib/pkgconfig/${ros_pkg}.pc" "${dst_root}"
   copy_path "${PREFIX_ROOT}/lib/python2.7/dist-packages/${ros_pkg}" "${dst_root}"
   copy_path "${PREFIX_ROOT}/lib/python3/dist-packages/${ros_pkg}" "${dst_root}"
@@ -143,14 +144,14 @@ build_ros_package_deb \
 build_ros_package_deb \
   "${scene_pkg}" \
   "xgc2_scene_runtime" \
-  "libxgc2-math-dev (>= 0.6.0-4~focal), ${msgs_pkg} (>= 1.5.0-3), ros-noetic-rospy, ros-noetic-geometry-msgs, ros-noetic-std-msgs, ros-noetic-visualization-msgs, ros-noetic-tf2-ros, python3-yaml" \
-  "XGC2 independent obstacle scene runtime and YAML authoring"
+  "libxgc2-math-dev (>= 0.6.0-4~focal), python3-yaml" \
+  "XGC2 pure Python scene authoring and golden-reference tools"
 
 build_ros_package_deb \
   "${world_lidar_pkg}" \
   "xgc2_world_lidar" \
-  "${msgs_pkg} (>= 1.5.0-3), libxgc2-xrpc2 (>= 0.2.0-1~focal), libjsoncpp1, ros-noetic-roscpp, ros-noetic-roslib, ros-noetic-geometry-msgs, ros-noetic-sensor-msgs, ros-noetic-std-srvs" \
-  "XGC2 optional world-frame simple lidar for simulated robots"
+  "libxgc2-math-dev (>= 0.6.0-4~focal)" \
+  "XGC2 numerical world-frame lidar and surface-sampling library"
 
 meta_root="${BUILD_DIR}/${meta_pkg}"
 rm -rf "${meta_root}"

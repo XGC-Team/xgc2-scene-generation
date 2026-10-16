@@ -18,29 +18,23 @@ dpkg --compare-versions "${geometry_version}" ge '1.5.0-3'
 
 dpkg -s ros-noetic-xgc2-scene-generation >/dev/null
 dpkg -s ros-noetic-xgc2-scene-runtime >/dev/null
-test -x "/opt/ros/noetic/lib/xgc2_scene_runtime/scene_node"
+test ! -e "/opt/ros/noetic/lib/xgc2_scene_runtime/scene_node"
+test ! -e "/opt/ros/noetic/lib/xgc2_scene_runtime/scene_prepare.py"
+test ! -e "/opt/ros/noetic/share/xgc2_scene_runtime/launch/scene.launch"
 python3 - <<'PY_CHECK'
 from xgc2_math.geometry import encode_geometry, decode_geometry
 assert decode_geometry(*encode_geometry({"type": "ring", "radii": [3, 1], "tubeRadius": .8})) == {"type": "ring", "radii": [3, 1], "tubeRadius": .8}
 from xgc2_scene_runtime.store import SceneStore
-from xgc2_scene_runtime.integrations.gazebo.prepare import prepare
-from xgc2_scene_runtime.integrations.simulation_client import SimulationClient
-from xgc2_scene_runtime.prepare import prepare as public_prepare
-from xgc2_scene_runtime.simulation_client import SimulationClient as public_client
-assert prepare is public_prepare
-assert SimulationClient is public_client
 PY_CHECK
 dpkg -s ros-noetic-xgc2-cluttered-environment >/dev/null
 dpkg -s ros-noetic-xgc2-geometry-msgs >/dev/null
 dpkg -s ros-noetic-xgc2-mockamap >/dev/null
 dpkg -s ros-noetic-xgc2-world-lidar >/dev/null
 test "$(rospack find xgc2_world_lidar)" = "/opt/ros/${ROS_DISTRO}/share/xgc2_world_lidar"
-test -x "/opt/ros/${ROS_DISTRO}/lib/xgc2_world_lidar/world_lidar_node"
-test -f "/opt/ros/${ROS_DISTRO}/share/xgc2_world_lidar/config/presets/zju_cpu_crop.yaml"
-if ldd "/opt/ros/${ROS_DISTRO}/lib/xgc2_world_lidar/world_lidar_node" | grep -q 'not found'; then
-  echo "missing shared library dependency in world_lidar_node" >&2
-  exit 1
-fi
+test ! -e "/opt/ros/${ROS_DISTRO}/lib/xgc2_world_lidar/world_lidar_node"
+test ! -e "/opt/ros/${ROS_DISTRO}/share/xgc2_world_lidar/launch/world_lidar.launch"
+test -f "/opt/ros/${ROS_DISTRO}/lib/libxgc2_world_lidar.a"
+test -f "/opt/ros/${ROS_DISTRO}/include/xgc2_world_lidar/world_lidar.h"
 dpkg -s libxgc2-math-dev >/dev/null
 math_version="$(dpkg-query -W -f='${Version}' libxgc2-math-dev)"
 dpkg --compare-versions "${math_version}" ge '0.6.0-4~focal'

@@ -1,7 +1,7 @@
 """Scene-time motion independent of algorithm execution."""
 
 import math
-from .document import dot
+from .document import SceneError, dot
 
 
 def multiply(a, b):
@@ -47,6 +47,8 @@ def state(obstacle, elapsed, playing):
         radius, speed = spec['radius'], spec['angular_speed']
         position = [spec['center'][0]+radius*math.cos(phase), spec['center'][1]+radius*math.sin(phase), spec['center'][2]]
         linear = [-radius*speed*math.sin(phase), radius*speed*math.cos(phase), 0.0]
+    elif kind == 'waypoints':
+        raise SceneError('waypoints motion is unsupported by the Python scene runtime')
     if not playing:
         linear, angular = [0.0]*3, [0.0]*3
     return {'id': obstacle['id'], 'pose': {'position': position, 'orientation': orientation},

@@ -325,12 +325,12 @@ void testSceneConversionAndValidation() {
     o.pose.orientation = Eigen::Quaterniond(Eigen::AngleAxisd(M_PI / 2, Eigen::Vector3d::UnitZ()));
     ScenePartDescription part;
     part.geometry =
-        xgc2_math::geometry::encodeGeometry(xgc2_math::geometry::Geometry::box({1, 2, 2}));
+        xgc2_world_lidar::prepareGeometry(xgc2_math::geometry::encodeGeometry(xgc2_math::geometry::Geometry::box({1, 2, 2})));
     part.pose.position = Eigen::Vector3d(4, 0, 0); // -> world (0, 4, 1)
     o.parts.push_back(part);
     ScenePartDescription rock;
     rock.pose.position = Eigen::Vector3d(0, 0, 5);
-    rock.geometry = xgc2_math::geometry::encodeGeometry(
+    rock.geometry = xgc2_world_lidar::prepareGeometry(xgc2_math::geometry::encodeGeometry(
         xgc2_math::geometry::Geometry::convex({{-0.45, -0.40, -0.50},
                                                {0.50, -0.35, -0.50},
                                                {0.45, 0.48, -0.50},
@@ -339,7 +339,7 @@ void testSceneConversionAndValidation() {
                                                {0.30, -0.20, 0.75},
                                                {0.28, 0.25, 0.85},
                                                {-0.22, 0.30, 0.70},
-                                               {0.0, 0.0, 0.0}})); // an interior point is ignored
+                                               {0.0, 0.0, 0.0}}))); // an interior point is ignored
     o.parts.push_back(rock);
     const auto obstacles = toObstacles({o});
     CHECK(obstacles.size() == 2);
@@ -364,15 +364,16 @@ void testSceneConversionAndValidation() {
     };
     SceneObstacleDescription bad = o;
     bad.parts = {part};
-    bad.parts[0].geometry.type = 0xffff;
-    CHECK(throws({bad}));
-    bad.parts[0].geometry = part.geometry;
-    bad.parts[0].geometry.parameters.clear();
-    CHECK(throws({bad}));
-    bad.parts[0] = rock;
-    bad.parts[0].geometry =
-        xgc2_math::geometry::encodeGeometry(xgc2_math::geometry::Geometry::convex(
-            {{0, 0, 0}, {1, 0, 0}, {0, 1, 0}, {1, 1, 0}})); // flat
+    const auto refused = [](const xgc2_math::geometry::GeometryPayload& payload) {
+        try { xgc2_world_lidar::prepareGeometry(payload); }
+        catch (const std::invalid_argument&) { return true; }
+        return false;
+    };
+    CHECK(refused({0xffff, {}}));
+    CHECK(refused({1, {}}));
+    CHECK(refused(xgc2_math::geometry::encodeGeometry(
+        xgc2_math::geometry::Geometry::convex({{0, 0, 0}, {1, 0, 0}, {0, 1, 0}, {1, 1, 0}}))));
+    bad.parts[0].geometry.reset();
     CHECK(throws({bad}));
     bool config_refused = false;
     try {

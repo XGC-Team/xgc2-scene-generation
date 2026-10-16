@@ -18,10 +18,20 @@ Eigen::Quaterniond normalized(const Eigen::Quaterniond& q) {
 Obstacle toObstacle(const ScenePartDescription& part,
                     const Eigen::Vector3d& position,
                     const Eigen::Quaterniond& orientation) {
-    return xgc2_math::scene::obstacleFromGeometry(part.geometry, position, orientation);
+    if (!part.geometry) throw std::invalid_argument("missing geometry definition");
+    Obstacle result = *part.geometry;
+    result.position = position;
+    result.orientation = orientation;
+    return result;
 }
 
 } // namespace
+
+std::shared_ptr<const Obstacle> prepareGeometry(const xgc2_math::geometry::GeometryPayload& geometry) {
+    auto result = xgc2_math::scene::obstacleFromGeometry(geometry);
+    xgc2_world_lidar::sampleSurface(result, 1e9); // validates once, never per state
+    return std::make_shared<const Obstacle>(std::move(result));
+}
 
 std::vector<Obstacle> toObstacles(const std::vector<SceneObstacleDescription>& scene) {
     std::vector<Obstacle> out;
@@ -34,7 +44,6 @@ std::vector<Obstacle> toObstacles(const std::vector<SceneObstacleDescription>& s
                     obstacle.pose.position + parent * part.pose.position;
                 const Eigen::Quaterniond orientation = parent * normalized(part.pose.orientation);
                 Obstacle o = toObstacle(part, position, orientation);
-                xgc2_world_lidar::sampleSurface(o, 1e9); // validates geometry (one sample per face)
                 out.push_back(std::move(o));
             } catch (const std::invalid_argument& e) {
                 throw std::invalid_argument("obstacle '" + obstacle.id + "' part " +

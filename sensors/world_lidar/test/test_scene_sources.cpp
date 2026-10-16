@@ -18,7 +18,7 @@ void check(bool value, const char* message) {
 }
 ScenePartDescription part(const Geometry& geometry) {
     ScenePartDescription result;
-    result.geometry = encodeGeometry(geometry);
+    result.geometry = xgc2_world_lidar::prepareGeometry(encodeGeometry(geometry));
     return result;
 }
 std::vector<Obstacle> convert(const Geometry& geometry) {
@@ -104,7 +104,30 @@ int main() {
               "mesh gap must not become whole-body hull");
         check(std::abs(sensor.castRay({-2, 0, -3}, Eigen::Vector3d::UnitZ(), 10) - 2.5) < 1e-12,
               "mesh surface ray");
-        item.parts[0].geometry.parameters.clear();
+        const auto meshPayload = encodeGeometry(disconnectedMesh());
+        const auto savedBytes = meshPayload.parameters;
+        const auto sharedMesh = prepareGeometry(meshPayload);
+        std::vector<SceneObstacleDescription> instances(100);
+        for (std::size_t i = 0; i < instances.size(); ++i) {
+            instances[i].id = "mesh-" + std::to_string(i);
+            ScenePartDescription binding;
+            binding.geometry = sharedMesh;
+            instances[i].parts.push_back(binding);
+            instances[i].pose.position.x() = static_cast<double>(i);
+        }
+        const auto initial = toObstacles(instances);
+        for (auto& instance : instances)
+            instance.pose.position.y() += 2;
+        const auto moved = toObstacles(instances);
+        for (std::size_t i = 0; i < instances.size(); ++i) {
+            check(initial[i].meshData == sharedMesh->meshData &&
+                      moved[i].meshData == sharedMesh->meshData,
+                  "instances and state updates share one immutable prepared mesh");
+            check(moved[i].position.y() == initial[i].position.y() + 2,
+                  "pose updates still apply to shared geometry");
+        }
+        check(meshPayload.parameters == savedBytes, "source payload is not modified");
+        item.parts[0].geometry.reset();
         bool rejected = false;
         try {
             toObstacles({item});

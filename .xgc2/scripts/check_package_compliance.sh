@@ -14,7 +14,6 @@ required_files=(
   "generators/cluttered_environment/CMakeLists.txt"
   "runtime/scene_runtime/package.xml"
   "runtime/scene_runtime/CMakeLists.txt"
-  "runtime/scene_runtime/scripts/scene_node"
   "generators/mockamap/package.xml"
   "generators/mockamap/CMakeLists.txt"
   "sensors/world_lidar/package.xml"

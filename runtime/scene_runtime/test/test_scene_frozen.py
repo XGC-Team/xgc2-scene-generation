@@ -2,13 +2,10 @@ import copy
 from pathlib import Path
 import tempfile
 import unittest
-import xml.etree.ElementTree as ET
 
 import yaml
 
 from xgc2_scene_runtime.store import FROZEN_ERROR, FROZEN_REJECTED, SceneStore, load
-
-LAUNCH = Path(__file__).resolve().parents[1]/'launch'/'scene.launch'
 
 
 def box(oid='box'):
@@ -94,17 +91,6 @@ class FrozenSceneStoreTest(unittest.TestCase):
             source.write_text(yaml.safe_dump(scene(box('agent'))))
             self.assertTrue(command(store, 'reload')['success'])
             self.assertEqual(store.document['obstacles'][0]['id'], 'agent')
-
-
-class FrozenLaunchContractTest(unittest.TestCase):
-    def test_scene_launch_forwards_the_frozen_argument_as_a_param(self):
-        root = ET.parse(str(LAUNCH)).getroot()
-        args = {item.get('name'): item.get('default') for item in root.iter('arg')}
-        self.assertEqual(args.get('frozen'), 'false')
-        params = {item.get('name'): item.get('value') for item in root.iter('param')}
-        self.assertEqual(params.get('frozen'), '$(arg frozen)')
-        self.assertEqual(args.get('working_file'), '')
-        self.assertEqual(params.get('working_file'), '$(arg working_file)')
 
 
 if __name__ == '__main__':

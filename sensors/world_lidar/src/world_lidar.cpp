@@ -947,7 +947,7 @@ bool samePoints(const std::vector<Eigen::Vector3d>& a, const Eigen::Vector3d* b)
 
 // Bitwise equal definitions compile and sample to bitwise equal shapes.
 bool sameObstacle(const Obstacle& a, const Obstacle& b) {
-    if (a.type != b.type || a.triangles != b.triangles || a.vertices.size() != b.vertices.size() ||
+    if (a.type != b.type || a.vertices.size() != b.vertices.size() ||
         !sameBits(a.position.data(), b.position.data(), 3) ||
         !sameBits(a.orientation.coeffs().data(), b.orientation.coeffs().data(), 4) ||
         !sameBits(a.size.data(), b.size.data(), 3) || !sameBits(&a.radius, &b.radius, 1) ||
@@ -957,6 +957,14 @@ bool sameObstacle(const Obstacle& a, const Obstacle& b) {
     for (std::size_t i = 0; i < a.vertices.size(); ++i)
         if (!sameBits(a.vertices[i].data(), b.vertices[i].data(), 3))
             return false;
+    if (a.meshData != b.meshData) {
+        if (!a.meshData || !b.meshData ||
+            a.meshData->triangleIndices() != b.meshData->triangleIndices() ||
+            a.meshData->vertices().size() != b.meshData->vertices().size()) return false;
+        for (std::size_t i = 0; i < a.meshData->vertices().size(); ++i)
+            if (!sameBits(a.meshData->vertices()[i].data(), b.meshData->vertices()[i].data(), 3))
+                return false;
+    }
     return true;
 }
 

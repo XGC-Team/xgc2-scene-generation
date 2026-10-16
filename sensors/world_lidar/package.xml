@@ -2,33 +2,18 @@
 <package format="2">
   <name>xgc2_world_lidar</name>
   <version>0.1.0</version>
-  <description>
-    Optional world-frame LiDAR / point-cloud sensor for simulated robots: a
-    ROS-free core (BVH ray casting and surface sampling over convex solids)
-    and one fleet ROS1 node that shares sampled scene geometry and indices
-    and publishes world-frame clouds.
-  </description>
+  <description>ROS-free world-frame lidar and surface-sampling numerical libraries.
+    Live Scene sensing is owned by the C++ Scene adapter.</description>
   <maintainer email="lxk@todo.todo">lxk</maintainer>
   <license>MIT</license>
   <license>GPL-2.0-only</license> <!-- optional original-core GPU linkage -->
 
   <buildtool_depend>catkin</buildtool_depend>
 
-  <depend>roscpp</depend>
-  <depend>roslib</depend>
-  <depend>geometry_msgs</depend>
-  <depend>nav_msgs</depend>
-  <depend>pcl_conversions</depend>
   <build_depend>libpcl-all-dev</build_depend>
   <build_export_depend>libpcl-all-dev</build_export_depend>
   <exec_depend>libpcl-all</exec_depend>
-  <depend>sensor_msgs</depend>
-  <depend>xgc2-xrpc</depend>
-  <depend>libjsoncpp-dev</depend>
-  <depend>xgc2_geometry_msgs</depend>
   <depend>eigen</depend>
   <depend version_gte="0.6.0-4~focal">libxgc2-math-dev</depend>
 
-  <test_depend>rostest</test_depend>
-  <test_depend>rospy</test_depend>
 </package>

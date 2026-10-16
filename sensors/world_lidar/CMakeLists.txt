@@ -13,15 +13,9 @@ find_package(Eigen3 REQUIRED)
 find_package(xgc2_math CONFIG REQUIRED)
 find_package(Threads REQUIRED)
 find_package(PCL REQUIRED COMPONENTS common filters search kdtree)
-find_package(catkin QUIET COMPONENTS
-  roscpp roslib geometry_msgs nav_msgs sensor_msgs pcl_conversions xgc2_geometry_msgs
-)
+find_package(catkin QUIET)
 if(catkin_FOUND)
-  catkin_package(INCLUDE_DIRS include
-    CATKIN_DEPENDS roscpp roslib geometry_msgs nav_msgs sensor_msgs pcl_conversions xgc2_geometry_msgs
-    DEPENDS PCL)
-  catkin_install_python(PROGRAMS scripts/prepare_fleet.py
-    DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
+  catkin_package(INCLUDE_DIRS include LIBRARIES ${PROJECT_NAME} DEPENDS PCL)
 endif()
 include_directories(include ${EIGEN3_INCLUDE_DIR})
 add_library(${PROJECT_NAME} STATIC
@@ -45,28 +39,10 @@ add_executable(bench_world_lidar test/bench_world_lidar.cpp)
 target_link_libraries(bench_world_lidar PRIVATE ${PROJECT_NAME})
 
 if(catkin_FOUND)
-  find_package(XgcXrpc CONFIG REQUIRED)
-  find_package(PkgConfig REQUIRED)
-  pkg_check_modules(JSONCPP REQUIRED IMPORTED_TARGET jsoncpp)
-  include_directories(${catkin_INCLUDE_DIRS})
-  add_executable(world_lidar_node src/world_lidar_node.cpp src/lidar_control.cpp)
-  target_compile_features(world_lidar_node PRIVATE cxx_std_20)
-  add_dependencies(world_lidar_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-  target_link_libraries(world_lidar_node PRIVATE ${PROJECT_NAME} XgcXrpc::http PkgConfig::JSONCPP ${catkin_LIBRARIES})
-  install(TARGETS world_lidar_node
-    ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-    LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-    RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
+  install(TARGETS ${PROJECT_NAME} ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION})
   install(DIRECTORY include/${PROJECT_NAME}/ DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION})
-  install(DIRECTORY launch/ DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch)
   install(DIRECTORY config/ DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/config)
   if(CATKIN_ENABLE_TESTING)
-    find_package(rostest REQUIRED)
-    add_rostest(test/topic_contract.test)
-    add_rostest(test/observation_contract.test)
-    add_rostest(test/fleet_contract.test)
-    add_rostest(test/cache_lifecycle.test)
-    add_rostest(test/body_roster.test)
     catkin_add_gtest(${PROJECT_NAME}_core_test test/core_gtest.cpp)
     if(TARGET ${PROJECT_NAME}_core_test)
       target_link_libraries(${PROJECT_NAME}_core_test ${PROJECT_NAME})
