@@ -14,8 +14,8 @@ int main() try {
     o.pose.orientation =
         Eigen::Quaterniond(Eigen::AngleAxisd(.7, Eigen::Vector3d(1, 2, 3).normalized()));
     ScenePartDescription p;
-    p.geometry =
-        xgc2_world_lidar::prepareGeometry(xgc2_math::geometry::encodeGeometry(xgc2_math::geometry::Geometry::ring({1, 1.2}, .05)));
+    p.geometry = xgc2_world_lidar::prepareGeometry(
+        xgc2_math::geometry::encodeGeometry(xgc2_math::geometry::Geometry::ring({1, 1.2}, .05)));
     p.pose.position = {.1, .2, .3};
     p.pose.orientation = Eigen::Quaterniond(Eigen::AngleAxisd(.4, Eigen::Vector3d::UnitY()));
     o.parts.push_back(p);

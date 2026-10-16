@@ -107,7 +107,8 @@ std::vector<SceneObstacleDescription> readParts(const std::string& path) {
             s >> v.x() >> v.y() >> v.z();
             geometry.vertices.push_back({v.x(), v.y(), v.z()});
         }
-        part.geometry = xgc2_world_lidar::prepareGeometry(xgc2_math::geometry::encodeGeometry(geometry));
+        part.geometry =
+            xgc2_world_lidar::prepareGeometry(xgc2_math::geometry::encodeGeometry(geometry));
         SceneObstacleDescription obstacle;
         obstacle.id = "part" + std::to_string(scene.size());
         obstacle.pose.position = Eigen::Vector3d(op[0], op[1], op[2]);

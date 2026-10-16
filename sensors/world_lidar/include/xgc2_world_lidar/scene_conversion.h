@@ -13,8 +13,8 @@
 
 #include <xgc2_math/geometry/geometry_payload.hpp>
 
-#include <string>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "xgc2_world_lidar/world_lidar.h"
@@ -28,7 +28,7 @@ struct Pose {
 
 struct ScenePartDescription {
     std::shared_ptr<const Obstacle> geometry; // one immutable prepared definition
-    Pose pose; // part frame in the obstacle frame
+    Pose pose;                                // part frame in the obstacle frame
 };
 
 struct SceneObstacleDescription {
@@ -38,7 +38,8 @@ struct SceneObstacleDescription {
 };
 
 // Decode/prepare once per definition at the accepted snapshot boundary.
-std::shared_ptr<const Obstacle> prepareGeometry(const xgc2_math::geometry::GeometryPayload& geometry);
+std::shared_ptr<const Obstacle>
+prepareGeometry(const xgc2_math::geometry::GeometryPayload& geometry);
 
 // Throws std::invalid_argument naming the obstacle and part on an unknown type
 // or invalid geometry.

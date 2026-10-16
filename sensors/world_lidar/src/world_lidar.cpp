@@ -960,7 +960,8 @@ bool sameObstacle(const Obstacle& a, const Obstacle& b) {
     if (a.meshData != b.meshData) {
         if (!a.meshData || !b.meshData ||
             a.meshData->triangleIndices() != b.meshData->triangleIndices() ||
-            a.meshData->vertices().size() != b.meshData->vertices().size()) return false;
+            a.meshData->vertices().size() != b.meshData->vertices().size())
+            return false;
         for (std::size_t i = 0; i < a.meshData->vertices().size(); ++i)
             if (!sameBits(a.meshData->vertices()[i].data(), b.meshData->vertices()[i].data(), 3))
                 return false;

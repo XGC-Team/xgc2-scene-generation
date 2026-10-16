@@ -324,8 +324,8 @@ void testSceneConversionAndValidation() {
     o.pose.position = Eigen::Vector3d(0, 0, 1);
     o.pose.orientation = Eigen::Quaterniond(Eigen::AngleAxisd(M_PI / 2, Eigen::Vector3d::UnitZ()));
     ScenePartDescription part;
-    part.geometry =
-        xgc2_world_lidar::prepareGeometry(xgc2_math::geometry::encodeGeometry(xgc2_math::geometry::Geometry::box({1, 2, 2})));
+    part.geometry = xgc2_world_lidar::prepareGeometry(
+        xgc2_math::geometry::encodeGeometry(xgc2_math::geometry::Geometry::box({1, 2, 2})));
     part.pose.position = Eigen::Vector3d(4, 0, 0); // -> world (0, 4, 1)
     o.parts.push_back(part);
     ScenePartDescription rock;
@@ -365,8 +365,11 @@ void testSceneConversionAndValidation() {
     SceneObstacleDescription bad = o;
     bad.parts = {part};
     const auto refused = [](const xgc2_math::geometry::GeometryPayload& payload) {
-        try { xgc2_world_lidar::prepareGeometry(payload); }
-        catch (const std::invalid_argument&) { return true; }
+        try {
+            xgc2_world_lidar::prepareGeometry(payload);
+        } catch (const std::invalid_argument&) {
+            return true;
+        }
         return false;
     };
     CHECK(refused({0xffff, {}}));

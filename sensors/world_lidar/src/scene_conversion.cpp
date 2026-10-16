@@ -18,7 +18,8 @@ Eigen::Quaterniond normalized(const Eigen::Quaterniond& q) {
 Obstacle toObstacle(const ScenePartDescription& part,
                     const Eigen::Vector3d& position,
                     const Eigen::Quaterniond& orientation) {
-    if (!part.geometry) throw std::invalid_argument("missing geometry definition");
+    if (!part.geometry)
+        throw std::invalid_argument("missing geometry definition");
     Obstacle result = *part.geometry;
     result.position = position;
     result.orientation = orientation;
@@ -27,7 +28,8 @@ Obstacle toObstacle(const ScenePartDescription& part,
 
 } // namespace
 
-std::shared_ptr<const Obstacle> prepareGeometry(const xgc2_math::geometry::GeometryPayload& geometry) {
+std::shared_ptr<const Obstacle>
+prepareGeometry(const xgc2_math::geometry::GeometryPayload& geometry) {
     auto result = xgc2_math::scene::obstacleFromGeometry(geometry);
     xgc2_world_lidar::sampleSurface(result, 1e9); // validates once, never per state
     return std::make_shared<const Obstacle>(std::move(result));
