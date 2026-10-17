@@ -132,7 +132,7 @@ meta_pkg="ros-noetic-xgc2-scene-generation"
 build_ros_package_deb \
   "${env_pkg}" \
   "cluttered_environment" \
-  "libxgc2-math-dev (>= 0.6.0-4~focal), ${msgs_pkg} (>= 1.5.0-3), ros-noetic-roscpp, ros-noetic-rospy, ros-noetic-geometry-msgs, ros-noetic-std-msgs, ros-noetic-visualization-msgs, ros-noetic-tf2, ros-noetic-tf2-geometry-msgs, ros-noetic-tf2-ros, python3-yaml" \
+  "libxgc2-math-dev (>= 0.6.0-6~focal), ${msgs_pkg} (>= 1.5.0-4), ros-noetic-roscpp, ros-noetic-rospy, ros-noetic-geometry-msgs, ros-noetic-std-msgs, ros-noetic-visualization-msgs, ros-noetic-tf2, ros-noetic-tf2-geometry-msgs, ros-noetic-tf2-ros, python3-yaml" \
   "XGC2 cluttered simulation environment manager"
 
 build_ros_package_deb \
@@ -144,13 +144,13 @@ build_ros_package_deb \
 build_ros_package_deb \
   "${scene_pkg}" \
   "xgc2_scene_runtime" \
-  "libxgc2-math-dev (>= 0.6.0-4~focal), python3-yaml" \
+  "libxgc2-math-dev (>= 0.6.0-6~focal), python3-yaml" \
   "XGC2 pure Python scene authoring and golden-reference tools"
 
 build_ros_package_deb \
   "${world_lidar_pkg}" \
   "xgc2_world_lidar" \
-  "libxgc2-math-dev (>= 0.6.0-4~focal)" \
+  "libxgc2-math-dev (>= 0.6.0-6~focal)" \
   "XGC2 numerical world-frame lidar and surface-sampling library"
 
 meta_root="${BUILD_DIR}/${meta_pkg}"
@@ -159,7 +159,7 @@ mkdir -p "${meta_root}"
 write_control \
   "${meta_root}" \
   "${meta_pkg}" \
-  "${scene_pkg} (= ${VERSION}), ${world_lidar_pkg} (= ${VERSION}), ${msgs_pkg} (>= 1.5.0-3), ${env_pkg} (>= 1.1.4-12), ${mockamap_pkg} (>= 1.1.4-12)" \
+  "${scene_pkg} (= ${VERSION}), ${world_lidar_pkg} (= ${VERSION}), ${msgs_pkg} (>= 1.5.0-4), ${env_pkg} (>= 1.1.4-12), ${mockamap_pkg} (>= 1.1.4-12)" \
   "XGC2 scene generation package set"
 fakeroot dpkg-deb --build "${meta_root}" "${OUTPUT_DIR}/${meta_pkg}_${VERSION}_${ARCH}.deb" >/dev/null
 

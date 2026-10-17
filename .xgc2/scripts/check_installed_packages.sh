@@ -14,7 +14,7 @@ rosmsg show xgc2_geometry_msgs/SceneSnapshot >/dev/null
 [[ "${ROS_DISTRO}" == noetic ]] || { echo "unsupported ROS_DISTRO: ${ROS_DISTRO}" >&2; exit 1; }
 python3 -c "from xgc2_geometry_msgs.msg import SceneSnapshot, SceneGeometry; assert SceneGeometry.__slots__ == ['type', 'parameters']; assert SceneGeometry._slot_types == ['uint32', 'uint8[]']"
 geometry_version="$(dpkg-query -W -f='${Version}' ros-noetic-xgc2-geometry-msgs)"
-dpkg --compare-versions "${geometry_version}" ge '1.5.0-3'
+dpkg --compare-versions "${geometry_version}" ge '1.5.0-4'
 
 dpkg -s ros-noetic-xgc2-scene-generation >/dev/null
 dpkg -s ros-noetic-xgc2-scene-runtime >/dev/null
@@ -37,7 +37,7 @@ test -f "/opt/ros/${ROS_DISTRO}/lib/libxgc2_world_lidar.a"
 test -f "/opt/ros/${ROS_DISTRO}/include/xgc2_world_lidar/world_lidar.h"
 dpkg -s libxgc2-math-dev >/dev/null
 math_version="$(dpkg-query -W -f='${Version}' libxgc2-math-dev)"
-dpkg --compare-versions "${math_version}" ge '0.6.0-4~focal'
+dpkg --compare-versions "${math_version}" ge '0.6.0-6~focal'
 
 test "$(rospack find xgc2_geometry_msgs)" = "/opt/ros/${ROS_DISTRO}/share/xgc2_geometry_msgs"
 test "$(rospack find cluttered_environment)" = "/opt/ros/${ROS_DISTRO}/share/cluttered_environment"

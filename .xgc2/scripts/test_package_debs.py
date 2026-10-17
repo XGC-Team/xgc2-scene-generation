@@ -74,7 +74,7 @@ class PackageDebsTest(unittest.TestCase):
         for package in ("scene-runtime", "world-lidar"):
             deb = next(output.glob("ros-noetic-xgc2-{}_*.deb".format(package)))
             depends = subprocess.check_output(["dpkg-deb", "-f", str(deb), "Depends"], universal_newlines=True)
-            self.assertIn("libxgc2-math-dev (>= 0.6.0-4~focal)", depends)
+            self.assertIn("libxgc2-math-dev (>= 0.6.0-6~focal)", depends)
             for retired in ("ros-noetic-rospy", "ros-noetic-geometry-msgs", "ros-noetic-xgc2-geometry-msgs", "libxgc2-xrpc2", "libjsoncpp1"):
                 self.assertNotIn(retired, depends)
 

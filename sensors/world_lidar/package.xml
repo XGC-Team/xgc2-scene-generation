@@ -14,6 +14,6 @@
   <build_export_depend>libpcl-all-dev</build_export_depend>
   <exec_depend>libpcl-all</exec_depend>
   <depend>eigen</depend>
-  <depend version_gte="0.6.0-4~focal">libxgc2-math-dev</depend>
+  <depend version_gte="0.6.0-6~focal">libxgc2-math-dev</depend>
 
 </package>
