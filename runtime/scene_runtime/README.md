@@ -35,6 +35,16 @@ references used by the golden recorder; they are not installed Scene launch
 entries. `scene_command.py` and `simulation_ready.py` remain finite clients of
 an explicitly selected service, not publishers.
 
+`scene_generate.py` is a finite offline producer for the same scene asset
+contract. `--describe` prints the installed source catalog and parameter
+definitions. Otherwise it reads a JSON request containing `name`, `source`,
+`parameters`, and optional uploaded `input` or `treeModels` entries (`file` and
+base64 bytes). It returns an ordinary Scene create request; the Scene asset
+writer seals the result. It does not write the asset archive or start another
+program. Sources include parameterized columns/rings, reusable branching tree
+models, and PCD/PLY/XYZ imports. Imported clouds retain their original bytes
+and require an explicit resolution and surface/occupied interpretation.
+
 Pure store, frozen, generation, source, assembly, motion and geometry tests
 remain in this package. Native projection/publication and application receipt
 contracts belong to the C++ Adapter's `scene_node_test`,

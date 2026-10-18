@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Exercise real Deb payload assembly using isolated, synthetic install trees."""
 
+import json
 import os
 from pathlib import Path
+import runpy
 import subprocess
 import tempfile
 import unittest
@@ -33,10 +35,17 @@ class PackageDebsTest(unittest.TestCase):
                 "lib/lib{}.a".format(package): "archive fixture\n",
                 "lib/{}/dist-packages/{}/__init__.py".format(python_dir, package): "# fixture\n",
             }
+            if package == "xgc2_scene_runtime":
+                runtime = ROOT / "runtime/scene_runtime"
+                files["lib/{}/scene_generate.py".format(package)] = (runtime / "scripts/scene_generate.py").read_text()
+                files["lib/{}/dist-packages/{}/scene_sources.py".format(python_dir, package)] = (
+                    runtime / "src/xgc2_scene_runtime/scene_sources.py").read_text()
             for name, content in files.items():
                 path = prefix / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(content)
+                if path.name == "scene_generate.py":
+                    path.chmod(0o755)
         environment = os.environ.copy()
         environment.update(ROS_DISTRO=distro, PACKAGE_VERSION="1.2.0-15")
         result = subprocess.run(
@@ -67,6 +76,18 @@ class PackageDebsTest(unittest.TestCase):
             if deb.name.startswith("ros-noetic-xgc2-world-lidar_"):
                 self.assertTrue((payload / "opt/ros/noetic/lib/libxgc2_world_lidar.a").is_file())
                 self.assertFalse((payload / "opt/ros/noetic/lib/xgc2_world_lidar/world_lidar_node").exists())
+            if deb.name.startswith("ros-noetic-xgc2-scene-runtime_"):
+                cli = payload / "opt/ros/noetic/lib/xgc2_scene_runtime/scene_generate.py"
+                python = payload / "opt/ros/noetic/lib/python3/dist-packages"
+                module = python / "xgc2_scene_runtime/scene_sources.py"
+                runtime = ROOT / "runtime/scene_runtime"
+                self.assertTrue(os.access(cli, os.X_OK))
+                self.assertEqual(cli.read_bytes(), (runtime / "scripts/scene_generate.py").read_bytes())
+                self.assertEqual(module.read_bytes(), (runtime / "src/xgc2_scene_runtime/scene_sources.py").read_bytes())
+                environment = dict(os.environ, PYTHONPATH=str(python), PYTHONDONTWRITEBYTECODE="1")
+                catalog = json.loads(subprocess.check_output([str(cli), "--describe"], env=environment))
+                authority = runpy.run_path(str(runtime / "src/xgc2_scene_runtime/scene_sources.py"))["SOURCE_CATALOG"]
+                self.assertEqual(catalog, authority)
 
     def test_reference_and_numerical_packages_do_not_keep_retired_ros_dependencies(self):
         _, output, result = self.assemble("noetic")

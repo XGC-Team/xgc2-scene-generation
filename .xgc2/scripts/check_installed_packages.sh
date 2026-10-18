@@ -18,6 +18,15 @@ dpkg --compare-versions "${geometry_version}" ge '1.5.0-4'
 
 dpkg -s ros-noetic-xgc2-scene-generation >/dev/null
 dpkg -s ros-noetic-xgc2-scene-runtime >/dev/null
+scene_generator="/opt/ros/${ROS_DISTRO}/lib/xgc2_scene_runtime/scene_generate.py"
+test -x "${scene_generator}"
+python3 - "${scene_generator}" <<'PY_SCENE_SOURCES'
+import json
+import subprocess
+import sys
+from xgc2_scene_runtime.scene_sources import SOURCE_CATALOG
+assert json.loads(subprocess.check_output([sys.argv[1], "--describe"])) == SOURCE_CATALOG
+PY_SCENE_SOURCES
 test ! -e "/opt/ros/noetic/lib/xgc2_scene_runtime/scene_node"
 test ! -e "/opt/ros/noetic/lib/xgc2_scene_runtime/scene_prepare.py"
 test ! -e "/opt/ros/noetic/share/xgc2_scene_runtime/launch/scene.launch"
